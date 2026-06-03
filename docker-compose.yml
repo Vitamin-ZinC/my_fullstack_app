@@ -1,0 +1,60 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: levelup
+      POSTGRES_USER: levelup
+      POSTGRES_PASSWORD: dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  backend:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://levelup:dev_password@postgres:5432/levelup
+      REDIS_URL: redis://redis:6379
+      PORT: 3001
+      APP_ORIGIN: http://localhost:3000
+    depends_on:
+      - postgres
+      - redis
+    ports:
+      - "3001:3001"
+
+  worker:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+    command: npm --workspace apps/backend run worker
+    environment:
+      DATABASE_URL: postgresql://levelup:dev_password@postgres:5432/levelup
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      - postgres
+      - redis
+      - backend
+
+  frontend:
+    build:
+      context: .
+      dockerfile: apps/frontend/Dockerfile
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:3001
+    depends_on:
+      - backend
+    ports:
+      - "3000:3000"
+
+volumes:
+  pg_data:

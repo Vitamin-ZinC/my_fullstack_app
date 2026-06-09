@@ -32,12 +32,12 @@ const zones = {
 
 type ZoneId = keyof typeof zones;
 
-export function IkigaiPremiumMap({ allActive = false }: { allActive?: boolean }) {
+export function IkigaiPremiumMap({ allActive = false, landingMode = false }: { allActive?: boolean; landingMode?: boolean }) {
   const [active, setActive] = useState<ZoneId>("ikigai");
   const activeZone = zones[active];
 
   return (
-    <div className="card stack">
+    <div className={landingMode ? "ikigai-premium-map landing-mode" : "card stack"}>
       <svg viewBox="0 0 620 560" role="img" aria-label="Ikigai Premium Map" style={{ width: "100%", filter: "drop-shadow(0 0 18px rgba(0, 212, 255, .28))" }}>
         <defs>
           <radialGradient id="cyanGlow"><stop offset="0%" stopColor="#00D4FF" stopOpacity=".48" /><stop offset="100%" stopColor="#00D4FF" stopOpacity=".12" /></radialGradient>

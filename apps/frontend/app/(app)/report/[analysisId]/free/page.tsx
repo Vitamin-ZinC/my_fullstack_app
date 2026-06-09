@@ -1,20 +1,41 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect, useState } from "react";
+import type { ReportFree } from "@levelup/contracts";
 import { IkigaiPremiumMap } from "@/components/IkigaiPremiumMap";
+import { api } from "@/lib/api";
 
 export default function FreeReportPage({ params }: { params: { analysisId: string } }) {
+  const [report, setReport] = useState<ReportFree | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    api.getFreeReport(params.analysisId)
+      .then((result) => setReport(result.reportFree))
+      .catch((reason) => setError(reason instanceof Error ? reason.message : "Не удалось загрузить отчёт"));
+  }, [params.analysisId]);
+
   return (
-    <article className="stack">
+    <article className="stack" data-testid="free-report-page">
       <div>
-        <div className="eyebrow">Free report</div>
-        <h1>Ваша базовая роль: Продуктовый стратег</h1>
-        <p className="muted">Открыта только зона профессии. Полный отчёт показывает 5 ролей, психотип, риски и дорожную карту.</p>
+        <div className="eyebrow">Бесплатный отчёт</div>
+        <h1 className="ub">{report ? `Базовая роль: ${report.profession}` : "Загружаем отчёт..."}</h1>
+        <p className="muted">{report?.summary ?? "Отчёт появится после завершения анализа."}</p>
       </div>
+      {error && <div className="card" style={{ borderColor: "var(--danger)" }}>{error}</div>}
       <IkigaiPremiumMap />
-      <div className="grid grid-2">
-        <div className="card"><h3>Free</h3><p className="muted">1 роль, короткое резюме, подсветка зоны профессии.</p></div>
-        <div className="card"><h3>Premium</h3><p className="muted">5 ролей, анализ голоса и лица, психотип, roadmap развития.</p></div>
-      </div>
-      <Link className="button" href={`/pay/${params.analysisId}`}>Открыть PRO-отчёт</Link>
+      {report && (
+        <div className="grid grid-2">
+          {Object.entries(report.ikigai_scores).map(([key, value]) => (
+            <div className="card" key={key}>
+              <div className="eyebrow">{key}</div>
+              <h2>{value}%</h2>
+            </div>
+          ))}
+        </div>
+      )}
+      <Link className="button" data-testid="open-pro-report-link" href={`/pay/${params.analysisId}`}>Открыть PRO-отчёт</Link>
     </article>
   );
 }

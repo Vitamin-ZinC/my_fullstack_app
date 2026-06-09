@@ -8,45 +8,61 @@ datasource db {
 }
 
 model User {
-  id        String     @id @default(cuid())
-  email     String     @unique
-  createdAt DateTime   @default(now())
-  sessions  Session[]
-  analyses  Analysis[]
-  payments  Payment[]
+  id          String          @id @default(cuid())
+  email       String          @unique
+  role        UserRole        @default(USER)
+  locale      String          @default("ru")
+  status      UserStatus      @default(ACTIVE)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  sessions    Session[]
+  analyses    Analysis[]
+  payments    Payment[]
+  events      AnalyticsEvent[]
+  adminEvents AdminAuditLog[] @relation("AdminAuditActor")
 }
 
 model Session {
-  id         String     @id @default(cuid())
+  id         String           @id @default(cuid())
   userId     String?
-  user       User?      @relation(fields: [userId], references: [id])
-  guestToken String     @unique
-  createdAt  DateTime   @default(now())
+  user       User?            @relation(fields: [userId], references: [id])
+  guestToken String           @unique
+  locale     String           @default("ru")
+  userAgent  String?
+  ipAddress  String?
+  createdAt  DateTime         @default(now())
   expiresAt  DateTime
   analyses   Analysis[]
+  events     AnalyticsEvent[]
 }
 
 model Analysis {
-  id            String         @id @default(cuid())
+  id            String          @id @default(cuid())
   sessionId     String
-  session       Session        @relation(fields: [sessionId], references: [id])
+  session       Session         @relation(fields: [sessionId], references: [id])
   userId        String?
-  user          User?          @relation(fields: [userId], references: [id])
+  user          User?           @relation(fields: [userId], references: [id])
+  locale        String          @default("ru")
   audioKey      String?
   photoKey      String?
   audioUrl      String?
   photoUrl      String?
   ikigaiAnswers Json?
   jobId         String?
-  status        AnalysisStatus @default(PENDING)
+  status        AnalysisStatus  @default(PENDING)
   errorMessage  String?
-  retryCount    Int            @default(0)
+  retryCount    Int             @default(0)
   reportFree    Json?
   reportFull    Json?
-  reportVersion Int            @default(1)
-  createdAt     DateTime       @default(now())
+  reportVersion Int             @default(1)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
   completedAt   DateTime?
   payment       Payment?
+  mediaAssets   MediaAsset[]
+  reports       Report[]
+  jobEvents     JobEvent[]
+  events        AnalyticsEvent[]
 }
 
 model Payment {
@@ -55,13 +71,138 @@ model Payment {
   analysis              Analysis      @relation(fields: [analysisId], references: [id])
   userId                String?
   user                  User?         @relation(fields: [userId], references: [id])
+  promoCodeId           String?
+  promoCode             PromoCode?    @relation(fields: [promoCodeId], references: [id])
   stripePaymentIntentId String        @unique
+  stripeCheckoutSessionId String?     @unique
   stripeCustomerId      String?
+  originalAmount        Int?
+  discountAmount        Int           @default(0)
   amount                Int
   currency              String        @default("usd")
   status                PaymentStatus @default(PENDING)
   createdAt             DateTime      @default(now())
   paidAt                DateTime?
+}
+
+model PromoCode {
+  id             String            @id @default(cuid())
+  code           String            @unique
+  description    String?
+  discountType   PromoDiscountType
+  percentOff     Int?
+  amountOff      Int?
+  currency       String?
+  active         Boolean           @default(true)
+  maxRedemptions Int?
+  redemptions    Int               @default(0)
+  startsAt       DateTime?
+  expiresAt      DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  payments       Payment[]
+
+  @@index([active, expiresAt])
+}
+
+model MediaAsset {
+  id         String           @id @default(cuid())
+  analysisId String
+  analysis   Analysis         @relation(fields: [analysisId], references: [id])
+  type       MediaAssetType
+  key        String           @unique
+  mimeType   String
+  size       Int?
+  checksum   String?
+  status     MediaAssetStatus @default(CREATED)
+  createdAt  DateTime         @default(now())
+  uploadedAt DateTime?
+  verifiedAt DateTime?
+}
+
+model Report {
+  id            String     @id @default(cuid())
+  analysisId    String
+  analysis      Analysis   @relation(fields: [analysisId], references: [id])
+  tier          ReportTier
+  language      String     @default("ru")
+  promptVersion Int        @default(1)
+  model         String?
+  output        Json
+  createdAt     DateTime   @default(now())
+
+  @@unique([analysisId, tier, language])
+}
+
+model PromptTemplate {
+  id          String       @id @default(cuid())
+  key         String
+  locale      String       @default("ru")
+  version     Int          @default(1)
+  status      PromptStatus @default(DRAFT)
+  title       String
+  content     String
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  publishedAt DateTime?
+
+  @@unique([key, locale, version])
+}
+
+model AppSetting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt
+}
+
+model FeatureFlag {
+  key       String   @id
+  enabled   Boolean  @default(false)
+  payload   Json?
+  updatedAt DateTime @updatedAt
+}
+
+model AnalyticsEvent {
+  id         String    @id @default(cuid())
+  name       String
+  locale     String    @default("ru")
+  properties Json?
+  sessionId  String?
+  session    Session?  @relation(fields: [sessionId], references: [id])
+  userId     String?
+  user       User?     @relation(fields: [userId], references: [id])
+  analysisId String?
+  analysis   Analysis? @relation(fields: [analysisId], references: [id])
+  createdAt  DateTime  @default(now())
+
+  @@index([name, createdAt])
+  @@index([analysisId])
+}
+
+model JobEvent {
+  id         String   @id @default(cuid())
+  analysisId String
+  analysis   Analysis @relation(fields: [analysisId], references: [id])
+  status     String?
+  progress   Int
+  stage      String?
+  log        String?
+  createdAt  DateTime @default(now())
+
+  @@index([analysisId, createdAt])
+}
+
+model AdminAuditLog {
+  id         String   @id @default(cuid())
+  adminId    String?
+  admin      User?    @relation("AdminAuditActor", fields: [adminId], references: [id])
+  action     String
+  targetType String
+  targetId   String?
+  payload    Json?
+  createdAt  DateTime @default(now())
+
+  @@index([action, createdAt])
 }
 
 enum AnalysisStatus {
@@ -77,4 +218,42 @@ enum PaymentStatus {
   SUCCEEDED
   FAILED
   REFUNDED
+}
+
+enum PromoDiscountType {
+  PERCENT
+  FIXED_AMOUNT
+}
+
+enum UserRole {
+  USER
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum MediaAssetType {
+  AUDIO
+  PHOTO
+}
+
+enum MediaAssetStatus {
+  CREATED
+  UPLOADED
+  VERIFIED
+  REJECTED
+}
+
+enum ReportTier {
+  FREE
+  FULL
+}
+
+enum PromptStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
 }

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "LevelUP.AI Ikigai",
+  title: "Икигай — LevelUP.AI",
   description: "AI диагностика Икигай по голосу, лицу и карьерным сигналам"
 };
 

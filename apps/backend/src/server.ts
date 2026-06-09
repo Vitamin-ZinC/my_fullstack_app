@@ -6,13 +6,15 @@ import rateLimit from "@fastify/rate-limit";
 import sensible from "@fastify/sensible";
 import rawBody from "fastify-raw-body";
 import { env } from "./env.js";
+import { adminRoutes } from "./routes/admin.js";
 import { authRoutes } from "./routes/auth.js";
 import { analysisRoutes } from "./routes/analyses.js";
+import { eventRoutes } from "./routes/events.js";
 import { paymentRoutes } from "./routes/payments.js";
 
 const app = Fastify({
   logger: true,
-  bodyLimit: 1024 * 1024,
+  bodyLimit: 10 * 1024 * 1024,
 });
 
 await app.register(cors, {
@@ -30,9 +32,18 @@ await app.register(rawBody, {
 await app.register(sensible);
 await app.register(rateLimit, { max: 120, timeWindow: "1 minute" });
 
+app.addContentTypeParser(["audio/webm", "image/jpeg", "application/octet-stream"], {
+  parseAs: "buffer",
+  bodyLimit: 10 * 1024 * 1024
+}, (_request, body, done) => {
+  done(null, body);
+});
+
 await app.register(authRoutes);
 await app.register(analysisRoutes);
 await app.register(paymentRoutes);
+await app.register(eventRoutes);
+await app.register(adminRoutes);
 
 app.get("/health", async () => ({ ok: true }));
 

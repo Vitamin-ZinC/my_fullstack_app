@@ -26,6 +26,14 @@ services:
       REDIS_URL: redis://redis:6379
       PORT: 3001
       APP_ORIGIN: http://localhost:3000
+      PUBLIC_API_URL: http://localhost:3001
+      ADMIN_API_TOKEN: dev_admin_token
+      ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:-}
+      ADMIN_SESSION_SECRET: ${ADMIN_SESSION_SECRET:-dev_admin_session_secret}
+      DEV_TOOLS_ENABLED: "true"
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      OPENAI_TRANSCRIPTION_MODEL: ${OPENAI_TRANSCRIPTION_MODEL:-whisper-1}
     depends_on:
       - postgres
       - redis
@@ -40,6 +48,11 @@ services:
     environment:
       DATABASE_URL: postgresql://levelup:dev_password@postgres:5432/levelup
       REDIS_URL: redis://redis:6379
+      PUBLIC_API_URL: http://localhost:3001
+      DEV_TOOLS_ENABLED: "true"
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
+      OPENAI_TRANSCRIPTION_MODEL: ${OPENAI_TRANSCRIPTION_MODEL:-whisper-1}
     depends_on:
       - postgres
       - redis
@@ -51,6 +64,7 @@ services:
       dockerfile: apps/frontend/Dockerfile
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:3001
+      NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: ""
     depends_on:
       - backend
     ports:

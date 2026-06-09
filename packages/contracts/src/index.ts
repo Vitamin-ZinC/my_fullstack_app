@@ -1,5 +1,12 @@
 export type AnalysisStatus = "PENDING" | "QUEUED" | "PROCESSING" | "DONE" | "FAILED";
 export type PaymentStatus = "PENDING" | "SUCCEEDED" | "FAILED" | "REFUNDED";
+export type PromoDiscountType = "PERCENT" | "FIXED_AMOUNT";
+export type UserRole = "USER" | "ADMIN";
+export type MediaAssetType = "AUDIO" | "PHOTO";
+export type MediaAssetStatus = "CREATED" | "UPLOADED" | "VERIFIED" | "REJECTED";
+export type ReportTier = "FREE" | "FULL";
+export type PromptStatus = "DRAFT" | "ACTIVE" | "ARCHIVED";
+export type SupportedLocale = "ru" | "en";
 
 export type IkigaiAnswers = {
   love: string[];
@@ -80,4 +87,76 @@ export type AnalysisProgressEvent = {
   progress: number;
   stage?: string;
   log?: string;
+};
+
+export type AdminStats = {
+  analysesTotal: number;
+  analysesByStatus: Array<{ status: AnalysisStatus; count: number }>;
+  paymentsSucceeded: number;
+  revenueSucceeded: number;
+  eventsLast24h: number;
+  failedAnalyses: number;
+};
+
+export type AppSettingValue = string | number | boolean | null | AppSettingValue[] | { [key: string]: AppSettingValue };
+
+export type AppSetting = {
+  key: string;
+  value: AppSettingValue;
+  updatedAt: string;
+};
+
+export type FeatureFlag = {
+  key: string;
+  enabled: boolean;
+  payload?: AppSettingValue;
+  updatedAt: string;
+};
+
+export type PromptTemplate = {
+  id: string;
+  key: string;
+  locale: string;
+  version: number;
+  status: PromptStatus;
+  title: string;
+  content: string;
+};
+
+export type PromoCode = {
+  id: string;
+  code: string;
+  description?: string | null;
+  discountType: PromoDiscountType;
+  percentOff?: number | null;
+  amountOff?: number | null;
+  currency?: string | null;
+  active: boolean;
+  maxRedemptions?: number | null;
+  redemptions: number;
+  startsAt?: string | null;
+  expiresAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PaymentIntentResponse = {
+  clientSecret: string | null;
+  paymentIntentId: string;
+  status: PaymentStatus;
+  amount: number;
+  originalAmount: number;
+  discountAmount: number;
+  currency: string;
+  promoCode?: string | null;
+};
+
+export type CheckoutSessionResponse = {
+  url: string;
+  sessionId: string;
+  amount: number;
+  originalAmount: number;
+  discountAmount: number;
+  currency: string;
+  promoCode?: string | null;
 };

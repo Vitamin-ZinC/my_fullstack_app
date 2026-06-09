@@ -128,10 +128,14 @@ function getRank(state) {
 }
 
 function trialDaysLeft(state) {
-  if (state.entryMode !== 'diagnosis') return null;
-  const started = new Date(state.joinDate || new Date()).getTime();
-  const used = Math.floor((Date.now() - started) / 86400000);
-  return Math.max(0, (state.trialDays || 14) - used);
+  if (!state.onboarded) return null; // not onboarded yet
+  // Always 30 days from joinDate, regardless of stored trialDays value
+  const join = new Date(state.joinDate || new Date());
+  const now = new Date();
+  const daysPassed = Math.floor((now - join) / 86400000);
+  const daysLeft = Math.max(0, 30 - daysPassed);
+  // Safety cap: never show more than 30 (fixes old stored states)
+  return Math.min(30, daysLeft);
 }
 
 /* ==================== DATA ==================== */
@@ -206,8 +210,17 @@ const CYCLES = [
 ];
 
 /* ==================== GLOBAL STORE ==================== */
-const todayStr = () => new Date().toDateString();
-const yesterdayStr = () => new Date(Date.now() - 86400000).toDateString();
+// Product day resets at 4:00 AM — buffer for late-night check-ins
+const todayStr = () => {
+  const now = new Date();
+  if (now.getHours() < 4) now.setDate(now.getDate() - 1); // before 4am = still "yesterday"
+  return now.toISOString().slice(0,10); // YYYY-MM-DD
+};
+const yesterdayStr = () => {
+  const now = new Date();
+  if (now.getHours() < 4) now.setDate(now.getDate() - 2); else now.setDate(now.getDate() - 1);
+  return now.toISOString().slice(0,10);
+};
 
 const DEFAULT = {
   onboarded: false, name: '', ikigaiWeakZone: 'passion',
@@ -217,7 +230,7 @@ const DEFAULT = {
   joinDate: null, habits: {}, activeScreen: 'dashboard',
   reminderTime: '09:00', reminderEnabled: true, geminiApiKey: '',
   lastMetricsUpdate: null,
-  entryMode: 'direct', trialDays: 0, subscriptionPrice: '$8',
+  entryMode: 'direct', trialDays: 30, weeklyFreezes: 1, subscriptionPrice: '$8',
   diagnosticProfile: null, personalHabit: null,
   avatarDataUrl: '', paymentMethodStatus: 'not_added', lastMetricsAwardDate: null,
 };
@@ -246,7 +259,7 @@ function getDiagnosticProfile() {
     strengths: stored.strengths || ['стратегическое мышление','структурирование сложных задач','спокойная убедительность'],
     faceInsight: stored.faceInsight || 'Визуальный анализ показывает собранность, наблюдательность и аккуратную коммуникацию.',
     voiceInsight: stored.voiceInsight || 'Голосовой анализ показывает потенциал уверенной экспертной подачи и спокойной аргументации.',
-    trialDays: Number(stored.trialDays || urlParams.get('trial') || 14),
+    trialDays: 30,
   };
 }
 
@@ -267,15 +280,15 @@ function buildPersonalHabit(profile) {
 
 const savedState = readJson(HABIT_STORAGE_KEY);
 let S = { ...DEFAULT, ...(savedState || {}) };
+// Migrate: ensure trialDays is always 30 (fix old states)
+if (S.trialDays > 30) S = { ...S, trialDays: 30 };
 if (cameFromDiagnosis) {
   const profile = getDiagnosticProfile();
   S = {
     ...S,
     onboarded: Boolean(S.onboarded),
     entryMode: 'diagnosis',
-    trialDays: profile?.trialDays || 14
-    
-,
+    trialDays: 30,
     subscriptionPrice: '$8',
     diagnosticProfile: profile,
     personalHabit: buildPersonalHabit(profile),
@@ -298,7 +311,7 @@ function useStore() {
     completeOnboarding: useCallback((name, weakZone, mode='direct', profile=null) => {
       upd(s => ({ ...s, onboarded:true, name, ikigaiWeakZone:weakZone,
         entryMode: mode,
-        trialDays: mode === 'diagnosis' ? (profile?.trialDays || 14) : 0,
+        trialDays: 30,
         subscriptionPrice: '$8',
         diagnosticProfile: profile,
         personalHabit: mode === 'diagnosis' ? buildPersonalHabit(profile) : null,
@@ -315,7 +328,6 @@ function useStore() {
     advanceWeek: useCallback(() => {
       upd(s => {
         let { currentWeek: w, currentCycle: c } = s;
-        // Week advances only if habit has 7 daily check-ins
         const cycle = CYCLES[c-1];
         const habit = cycle?.habits[w-1];
         if (!habit) return s;
@@ -323,11 +335,42 @@ function useStore() {
         const dates = hState.completedDates || [];
         const uniqueDays = new Set(dates).size;
         if (uniqueDays < 7) return { ...s, _weekAdvanceError: `Нужно ещё ${7 - uniqueDays} дней отметок` };
-        if (w < 12) { w++; }
-        else if (c < 4) { w = 1; c++; }
-        // Month 12: review mode, don't advance beyond c4w12
-        return { ...s, currentWeek: w, currentCycle: c, _weekAdvanceError: null };
+
+        // Save completed week to history
+        const pct = Math.round((uniqueDays / 7) * 100);
+        const completedWeeks = [
+          ...(s.completedWeeks || []),
+          {
+            cycle: c, week: w, title: habit.title,
+            pct, xpEarned: uniqueDays * 10,
+            date: new Date().toISOString(),
+            insight: hState.insight || '',
+          }
+        ];
+
+        // Advance
+        let newW = w, newC = c;
+        if (w < 12) { newW = w + 1; }
+        else if (c < 4) { newW = 1; newC = c + 1; }
+
+        // Reset THIS week's completedDates (but keep insight)
+        const updatedHabit = { ...hState, completedDates: [], completed: false };
+
+        return {
+          ...s,
+          currentWeek: newW, currentCycle: newC,
+          completedWeeks,
+          habits: { ...s.habits, [habit.id]: updatedHabit },
+          weeklyFreezes: 1,       // reset freeze each new week
+          weekStartDate: new Date().toISOString(),
+          _weekAdvanceError: null,
+          _showWeekComplete: { cycle: c, week: w, title: habit.title, pct, xpEarned: uniqueDays * 10 },
+        };
       });
+    }, []),
+
+    dismissWeekComplete: useCallback(() => {
+      upd(s => ({ ...s, _showWeekComplete: null }));
     }, []),
 
     // Mark habit for TODAY (daily, same habit repeats 7 days)
@@ -370,7 +413,11 @@ function useStore() {
     updateInsight: useCallback((habitId, insight) => {
       upd(s => ({
         ...s,
-        habits: { ...s.habits, [habitId]: { ...(s.habits[habitId] || {habitId,completed:false,insight:'',completedDates:[]}), insight } }
+        habits: { ...s.habits, [habitId]: {
+          ...(s.habits[habitId] || {habitId,completed:false,insight:'',completedDates:[]}),
+          insight,
+          insightDate: new Date().toISOString(),
+        }}
       }));
     }, []),
 
@@ -393,6 +440,28 @@ function useStore() {
     setApiKey: useCallback((key) => upd(s => ({ ...s, geminiApiKey:key })), []),
     updateAvatar: useCallback((avatarDataUrl) => upd(s => ({ ...s, avatarDataUrl })), []),
     updatePaymentMethod: useCallback((status='ready_for_stripe') => upd(s => ({ ...s, paymentMethodStatus: status })), []),
+
+    useFreeze: useCallback(() => {
+      upd(s => {
+        if ((s.weeklyFreezes || 0) < 1) return s;
+        // Give credit for today's missed check-in
+        const today = todayStr();
+        const cycle = CYCLES[s.currentCycle-1];
+        const habit = cycle?.habits[s.currentWeek-1];
+        if (!habit) return s;
+        const hState = s.habits[habit.id] || { habitId: habit.id, completed: false, insight: '', completedDates: [] };
+        const dates = hState.completedDates || [];
+        if (dates.includes(today)) return s; // already marked
+        const newDates = [...dates, today];
+        const uniqueDays = new Set(newDates).size;
+        return {
+          ...s,
+          weeklyFreezes: s.weeklyFreezes - 1,
+          habits: { ...s.habits, [habit.id]: { ...hState, completedDates: newDates, completed: uniqueDays >= 7 } },
+          totalPoints: (s.totalPoints || 0) + 10,
+        };
+      });
+    }, []),
 
     resetToOnboarding: useCallback(() => {
       try { localStorage.removeItem(HABIT_STORAGE_KEY); } catch(e) {}
@@ -485,7 +554,7 @@ function Onboarding({ onComplete }) {
             <div className="text-sm font-bold text-slate-100 mb-1">Да, использовать мой платный отчет</div>
             <div className="text-xs text-slate-500 leading-relaxed">
               {hasDiagnosis
-                ? `Откроем 14 дней trial, затем подписка ${profile.subscriptionPrice || '$8'} в месяц. Фокус: ${profile.topRole}.`
+                ? `Откроем 30 дней trial, затем подписка ${profile.subscriptionPrice || '$8'} в месяц. Фокус: ${profile.topRole}.`
                 : 'Отчет не найден в этом браузере. Откройте трекер через кнопку в конце платного отчета.'}
             </div>
           </button>
@@ -511,7 +580,7 @@ function Onboarding({ onComplete }) {
             {profile ? 'План из Вашего отчета активирован' : `Ваша зона роста: ${zone.name}`}
           </div>
           <p className="text-slate-400 text-sm mb-4">
-            {profile ? `Фокус: ${profile.topRole}. Trial 14 дней, затем $8 в месяц.` : zone.desc}
+            {profile ? `Фокус: ${profile.topRole}. Trial 30 дней, затем $8 в месяц.` : zone.desc}
           </p>
           <p className="text-xs text-slate-500">Подбираем программу для {name}...</p>
           <div className="mt-4 h-1 rounded-full bg-white/10 overflow-hidden">
@@ -568,7 +637,7 @@ const NAV = [
 ];
 
 function Sidebar({ mobileOpen, onClose }) {
-  const { s, setScreen } = useStore();
+  const { s, setScreen, dismissWeekComplete } = useStore();
   return (
     <>
       {mobileOpen && <div className="fixed inset-0 bg-black/60 z-30 md:hidden" onClick={onClose} />}
@@ -590,6 +659,18 @@ function Sidebar({ mobileOpen, onClose }) {
               }`}>
               <span className="text-base w-5 text-center flex items-center justify-center">{renderNavIcon(item.icon, 20)}</span>
               <span>{item.label}</span>
+              {item.id === 'habits' && (() => {
+                const cycle = CYCLES[s.currentCycle-1];
+                const habit = cycle?.habits[s.currentWeek-1];
+                const dates = habit ? (s.habits[habit.id]?.completedDates || []) : [];
+                const days = new Set(dates).size;
+                return days > 0 ? (
+                  <span className="ml-auto text-xs font-bold px-1.5 py-0.5 rounded-full"
+                    style={{background: days>=7?'rgba(16,185,129,0.2)':'rgba(0,212,255,0.15)', color:days>=7?'#10b981':'#00d4ff', border:`1px solid ${days>=7?'rgba(16,185,129,0.3)':'rgba(0,212,255,0.25)'}`}}>
+                    {days}/7
+                  </span>
+                ) : null;
+              })()}
               {item.id === 'navigator' && (
                 <span className="ml-auto w-1.5 h-1.5 rounded-full bg-green-500 pg" />
               )}
@@ -817,8 +898,8 @@ function Dashboard() {
             const dl = trialDaysLeft(s);
             return (
               <div className="mt-1.5 inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full"
-                style={{background:dl<=7?'rgba(239,68,68,0.12)':'rgba(0,212,255,0.08)',border:`1px solid ${dl<=7?'rgba(239,68,68,0.3)':'rgba(0,212,255,0.2)'}`,color:dl<=7?'#f87171':'#67e8f9'}}>
-                ⏳ {dl} дней trial
+                style={{background:dl<=3?'rgba(239,68,68,0.12)':dl<=7?'rgba(245,158,11,0.12)':'rgba(0,212,255,0.08)',border:`1px solid ${dl<=3?'rgba(239,68,68,0.3)':dl<=7?'rgba(245,158,11,0.3)':'rgba(0,212,255,0.2)'}`,color:dl<=3?'#f87171':dl<=7?'#fbbf24':'#67e8f9'}}>
+                ⏳ Осталось {dl} из 30 дней
               </div>
             );
           })()}
@@ -834,7 +915,7 @@ function Dashboard() {
         <div className="gc p-5 relative overflow-hidden" style={{borderColor:'rgba(0,212,255,.32)',background:'linear-gradient(135deg,rgba(0,212,255,.08),rgba(123,47,247,.06))'}}>
           <div className="absolute top-0 right-0 w-40 h-40 rounded-full opacity-10" style={{background:'#00d4ff',filter:'blur(42px)',transform:'translate(25%,-30%)'}} />
           <div className="relative">
-            <div className="text-xs text-cyan-400 mb-1" style={{letterSpacing:1.5}}>ПЛАН ИЗ ПЛАТНОГО ОТЧЕТА · TRIAL {s.trialDays || 14} ДНЕЙ</div>
+            <div className="text-xs text-cyan-400 mb-1" style={{letterSpacing:1.5}}>ПЛАН ИЗ ПЛАТНОГО ОТЧЕТА · TRIAL 30 ДНЕЙ</div>
             <div className="text-lg font-bold text-slate-100 mb-2" style={{fontFamily:'Space Grotesk'}}>{personalHabit.title}</div>
             <p className="text-sm text-slate-400 leading-relaxed mb-3">{personalHabit.essence}</p>
             <div className="grid md:grid-cols-3 gap-2 mb-4">
@@ -988,7 +1069,7 @@ function Dashboard() {
 
 /* ==================== JOURNEY ==================== */
 function Journey() {
-  const { s, updateHabit, markHabitToday, updateInsight, updateMetrics, toggleReminder, advanceWeek } = useStore();
+  const { s, updateHabit, markHabitToday, updateInsight, updateMetrics, toggleReminder, setReminderTime, advanceWeek, useFreeze } = useStore();
   const cycle = CYCLES[s.currentCycle-1];
   const habit = s.entryMode === 'diagnosis' && s.personalHabit ? s.personalHabit : cycle?.habits[s.currentWeek-1];
   const hState = s.habits[habit?.id] || { completed:false, insight:'', completedDates:[] };
@@ -1010,8 +1091,15 @@ function Journey() {
     if (habit) { updateInsight(habit.id, insightText); setInsightSaved(true); setTimeout(()=>setInsightSaved(false),2000); }
   };
 
+  const [checkLoading, setCheckLoading] = React.useState(false);
   const handleComplete = () => {
-    if (habit) markHabitToday(habit.id);
+    if (!habit || checkLoading) return;
+    setCheckLoading(true);
+    // Simulate save (localStorage is sync, but give UX feedback)
+    setTimeout(() => {
+      markHabitToday(habit.id);
+      setCheckLoading(false);
+    }, 300);
   };
 
   const handleAdvanceWeek = () => {
@@ -1243,20 +1331,34 @@ function Journey() {
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-slate-500">⏳ {habit.rhythm}</span>
                   <button onClick={handleComplete}
-                    className={`flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl font-semibold transition-all ${markedToday ? 'text-slate-900' : 'text-slate-400 gc'}`}
+                    disabled={checkLoading}
+                    className={`flex items-center gap-2 text-sm px-4 py-2.5 rounded-xl font-semibold transition-all ${checkLoading?'opacity-60':''} ${markedToday ? 'text-slate-900' : 'text-slate-400 gc'}`}
                     style={markedToday ? {background:'linear-gradient(135deg,#00d4ff,#0099ff)',boxShadow:'0 0 15px rgba(0,212,255,0.4)'} : {}}>
                     <div className={`hc ${markedToday?'ck':''} w-5 h-5`}>
                       {markedToday && <span className="text-xs text-slate-900 font-bold">✓</span>}
                     </div>
-                    {markedToday ? 'Сегодня отмечено! +10 XP' : 'Отметить сегодня'}
+                    {checkLoading ? '⏳ Сохранение...' : markedToday ? 'Сегодня отмечено! +10 XP' : 'Отметить сегодня'}
                   </button>
                 </div>
 
                 {/* Advance week button */}
                 <div className="pt-3 border-t border-white/5">
                   {uniqueDays < 7 ? (
-                    <div className="text-center py-2.5 rounded-xl text-sm gc text-slate-500">
-                      Осталось отметить: <span className="text-cyan-400 font-bold">{7 - uniqueDays} дн.</span> — затем откроется следующая неделя
+                    <div className="space-y-2">
+                      <div className="text-center py-2.5 rounded-xl text-sm gc text-slate-500">
+                        Осталось отметить: <span className="text-cyan-400 font-bold">{7 - uniqueDays} дн.</span> — затем откроется следующая неделя
+                      </div>
+                      {uniqueDays >= 4 && uniqueDays < 7 && (s.weeklyFreezes||0) > 0 && (
+                        <button onClick={() => useFreeze()}
+                          className="w-full py-2 rounded-xl text-xs gc text-amber-400 hover:border-amber-400/40 transition-all">
+                          🧊 Использовать заморозку дня ({s.weeklyFreezes} осталось) — засчитать сегодня
+                        </button>
+                      )}
+                      {uniqueDays < 4 && (
+                        <p className="text-xs text-center text-slate-600 italic">
+                          {uniqueDays === 0 ? 'Первый шаг всегда самый важный 💙' : uniqueDays <= 2 ? 'Нормальный темп адаптации — просто продолжай 🌱' : 'Хороший ритм набирается! Ещё немного 🔥'}
+                        </p>
+                      )}
                     </div>
                   ) : (
                     <button onClick={handleAdvanceWeek}
@@ -1299,20 +1401,102 @@ function Journey() {
         </div>
       </div>
 
-      {/* Reminders — FIXED: calls toggleReminder from store */}
-      <div className="gc p-5">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <span>🔔</span>
-            <div className="text-sm font-semibold text-slate-200">Напоминания</div>
+      {/* Reminders + Google Calendar */}
+      {(() => {
+        const addToGoogleCalendar = () => {
+          // Build recurring Google Calendar event for daily habit check-in
+          const habitTitle = habit?.title || 'Привычка дня';
+          const reminderTime = s.reminderTime || '09:00';
+          const [rHour, rMin] = reminderTime.split(':').map(Number);
+          
+          // Today as start date
+          const now = new Date();
+          const startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), rHour, rMin, 0);
+          const endDate = new Date(startDate.getTime() + 15 * 60000); // 15 min event
+          
+          const fmt = (d) => d.toISOString().replace(/[-:]/g,'').split('.')[0] + 'Z';
+          
+          const title = encodeURIComponent(`✦ IKIGAI: ${habitTitle}`);
+          const details = encodeURIComponent(
+            `Ежедневная отметка привычки в IKIGAI by LevelUP.AI
+
+` +
+            `Привычка: ${habitTitle}
+` +
+            `Неделя ${s.currentWeek} · Цикл ${s.currentCycle}
+
+` +
+            `Открыть трекер и отметить сегодняшний день.`
+          );
+          const loc = encodeURIComponent('IKIGAI by LevelUP.AI');
+          
+          // RRULE: daily for 7 days (one habit week)
+          const rrule = encodeURIComponent('RRULE:FREQ=DAILY;COUNT=7');
+          
+          const gcalUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE` +
+            `&text=${title}` +
+            `&dates=${fmt(startDate)}/${fmt(endDate)}` +
+            `&details=${details}` +
+            `&location=${loc}` +
+            `&recur=${rrule}` +
+            `&sf=true&output=xml`;
+          
+          window.open(gcalUrl, '_blank');
+        };
+
+        const [calAdded, setCalAdded] = React.useState(false);
+
+        return (
+          <div className="gc p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span>🔔</span>
+                <div className="text-sm font-semibold text-slate-200">Напоминания</div>
+              </div>
+              <button onClick={toggleReminder}
+                className={`w-12 h-6 rounded-full transition-all relative ${s.reminderEnabled?'bg-cyan-500':'bg-white/10'}`}>
+                <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all duration-300 ${s.reminderEnabled?'left-7':'left-1'}`} />
+              </button>
+            </div>
+
+            {s.reminderEnabled && (
+              <div>
+                <label className="text-xs text-slate-500 block mb-2">Время напоминания</label>
+                <input type="time" value={s.reminderTime}
+                  onChange={e => setReminderTime(e.target.value)}
+                  className="gi px-3 py-2 text-sm w-auto" />
+              </div>
+            )}
+
+            {/* Google Calendar CTA */}
+            <div className="p-4 rounded-xl" style={{background:'rgba(66,133,244,0.08)',border:'1px solid rgba(66,133,244,0.25)'}}>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-lg">📅</span>
+                <div className="text-sm font-semibold" style={{color:'#4285f4'}}>Google Календарь</div>
+              </div>
+              <p className="text-xs text-slate-400 mb-3">
+                Добавь ежедневное напоминание в Google Календарь — 7 повторений для текущей привычки.
+                Выбери удобное время и нажми кнопку.
+              </p>
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-xs text-slate-500">Время:</span>
+                <input type="time" value={s.reminderTime}
+                  onChange={e => setReminderTime(e.target.value)}
+                  className="gi px-3 py-1.5 text-xs w-auto" />
+              </div>
+              <button
+                onClick={() => { addToGoogleCalendar(); setCalAdded(true); setTimeout(()=>setCalAdded(false), 4000); }}
+                className={`w-full py-2.5 rounded-xl text-sm font-semibold transition-all ${calAdded ? 'bg-green-500/20 text-green-400 border border-green-500/30' : ''}`}
+                style={!calAdded ? {background:'#4285f4',color:'#fff'} : {}}>
+                {calAdded ? '✓ Открываем Google Календарь...' : '📅 Добавить в Google Календарь'}
+              </button>
+              <p className="text-xs text-slate-600 text-center mt-2">
+                Откроется новая вкладка с готовым событием — просто нажми «Сохранить»
+              </p>
+            </div>
           </div>
-          <button onClick={toggleReminder}
-            className={`w-12 h-6 rounded-full transition-all relative ${s.reminderEnabled?'bg-cyan-500':'bg-white/10'}`}>
-            <div className={`absolute top-1 w-4 h-4 rounded-full bg-white transition-all duration-300 ${s.reminderEnabled?'left-7':'left-1'}`} />
-          </button>
-        </div>
-        <p className="text-xs text-slate-600">Ты управляешь процессом, не система</p>
-      </div>
+        );
+      })()}
 
       {/* Insights preview */}
       {allInsights.length > 0 && (
@@ -1492,16 +1676,22 @@ function HabitsScreen() {
 function Archive() {
   const { s } = useStore();
   const [filter, setFilter] = useState('all');
+  const [activeTab, setActiveTab] = useState('insights'); // 'insights' | 'weeks'
 
   const insights = Object.entries(s.habits).filter(([,h])=>h.insight).map(([id,h]) => {
     const cIdx = parseInt(id.replace('c','').split('w')[0])-1;
     const wIdx = parseInt(id.split('w')[1])-1;
-    const c = CYCLES[cIdx]; const hab = c?.habits[wIdx];
-    // FIXED: deterministic date based on joinDate + week index
-    const weekOffset = (cIdx * 12 + wIdx) * 7;
-    const joinTs = s.joinDate ? new Date(s.joinDate).getTime() : Date.now();
-    const date = new Date(joinTs + weekOffset * 86400000).toLocaleDateString('ru-RU',{day:'numeric',month:'long'});
-    return { id, insight:h.insight, title:hab?.title||'', cycleName:c?.title||'', cycleColor:c?.color||'#00d4ff', zone:hab?.zone||'passion', date };
+    const cyc = CYCLES[cIdx]; const hab = cyc?.habits[wIdx];
+    // Use actual insightDate if saved, otherwise fall back to joinDate+offset
+    let date;
+    if (h.insightDate) {
+      date = new Date(h.insightDate).toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'numeric'});
+    } else {
+      const weekOffset = (cIdx * 12 + wIdx) * 7;
+      const joinTs = s.joinDate ? new Date(s.joinDate).getTime() : Date.now();
+      date = new Date(joinTs + weekOffset * 86400000).toLocaleDateString('ru-RU',{day:'numeric',month:'long'});
+    }
+    return { id, insight:h.insight, title:hab?.title||'', cycleName:cyc?.title||'', cycleColor:cyc?.color||'#00d4ff', zone:hab?.zone||'passion', date };
   }).filter(i => filter==='all' || i.zone===filter);
 
   const totalDone = Object.values(s.habits).filter(h=>h.completed).length;
@@ -1517,15 +1707,16 @@ function Archive() {
         <h1 className="text-2xl font-bold" style={{fontFamily:'Space Grotesk'}}>
           📚 <span className="gt">Архив</span>
         </h1>
-        <p className="text-slate-500 text-sm mt-1">Твои инсайты — личный архив смысла</p>
+        <p className="text-slate-500 text-sm mt-1">Твои инсайты и завершённые недели — зал твоей славы</p>
       </div>
 
+      {/* Stats row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
           {v:totalDone,icon:'✅',color:'#00d4ff',label:'Привычек'},
           {v:totalInsights,icon:'💡',color:'#a855f7',label:'Инсайтов'},
-          {v:s.streakDays,icon:'🗓',color:'#10b981',label:'Дней в пути'},
-          {v:s.totalPoints,icon:'⭐',color:'#f59e0b',label:'XP очков'},
+          {v:(s.completedWeeks||[]).length,icon:'🏆',color:'#f59e0b',label:'Недель закрыто'},
+          {v:s.totalPoints,icon:'⭐',color:'#10b981',label:'XP очков'},
         ].map((st,i) => (
           <div key={i} className="gc p-4 text-center">
             <div className="text-2xl mb-1">{st.icon}</div>
@@ -1535,97 +1726,106 @@ function Archive() {
         ))}
       </div>
 
-      {/* Cycle progress */}
-      <div className="gc p-5">
-        <div className="text-sm font-semibold text-slate-200 mb-4">Прогресс по циклам</div>
-        <div className="space-y-4">
-          {cycleStats.map(c => (
-            <div key={c.id}>
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="text-sm text-slate-300">{c.sub} — {c.title}</span>
-                <span className="text-xs font-bold" style={{color:c.color}}>{c.completed}/12</span>
-              </div>
-              <div className="h-2 rounded-full bg-white/5 overflow-hidden">
-                <div className="h-full rounded-full transition-all duration-700"
-                  style={{width:`${(c.completed/12)*100}%`,background:`linear-gradient(90deg,${c.color}66,${c.color})`}} />
-              </div>
-            </div>
-          ))}
-        </div>
+      {/* Tabs */}
+      <div className="flex gap-2">
+        {[{id:'insights',label:'💡 Инсайты'},{id:'weeks',label:'🏆 Зал славы'}].map(t=>(
+          <button key={t.id} onClick={()=>setActiveTab(t.id)}
+            className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${activeTab===t.id?'text-slate-900':'gc text-slate-400 hover:text-slate-200'}`}
+            style={activeTab===t.id?{background:'linear-gradient(135deg,#00d4ff,#0099ff)'}:{}}>
+            {t.label}
+          </button>
+        ))}
       </div>
 
-      {/* Insights */}
-      <div className="gc p-5">
-        <div className="flex items-center justify-between mb-4">
-          <div className="text-sm font-semibold text-slate-200">💭 Мои инсайты</div>
-          <div className="flex gap-1 flex-wrap">
-            <button onClick={()=>setFilter('all')}
-              className={`text-xs px-2 py-1 rounded-full transition-all ${filter==='all'?'bg-slate-700 text-slate-200':'text-slate-500'}`}>
-              Все
-            </button>
-            {Object.entries(ZONES).map(([k,z]) => (
-              <button key={k} onClick={()=>setFilter(k)}
-                className={`text-xs px-2 py-1 rounded-full transition-all ${filter===k?'font-medium':'text-slate-500'}`}
-                style={filter===k?{background:`${z.color}20`,color:z.color}:{}}>
-                {z.icon}
-              </button>
-            ))}
+      {/* INSIGHTS TAB */}
+      {activeTab === 'insights' && (<>
+        <div className="gc p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="text-sm font-semibold text-slate-200">Фильтр по зоне</div>
+            <div className="flex gap-2 flex-wrap">
+              {[['all','Все'],['passion','Страсть'],['mission','Миссия'],['vocation','Призвание'],['profession','Профессия']].map(([v,l])=>(
+                <button key={v} onClick={()=>setFilter(v)}
+                  className={`text-xs px-3 py-1.5 rounded-lg transition-all ${filter===v?'bp text-slate-900':'gc text-slate-500 hover:text-slate-300'}`}
+                  style={filter===v?{background:'linear-gradient(135deg,#00d4ff,#0099ff)'}:{}}>
+                  {l}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
+
         {insights.length === 0 ? (
-          <div className="text-center py-8">
+          <div className="gc p-10 text-center">
             <div className="text-4xl mb-3">📝</div>
-            <div className="text-sm text-slate-500">Здесь появятся твои инсайты</div>
-            <div className="text-xs text-slate-600 mt-1">Записывай в разделе «Мой путь»</div>
+            <div className="text-slate-400 text-sm">Инсайтов пока нет. Запиши первый после практики!</div>
           </div>
         ) : (
           <div className="space-y-3">
-            {insights.map(item => {
-              const z = ZONES[item.zone];
+            {insights.map(i => (
+              <div key={i.id} className="gc p-5" style={{borderLeft:`3px solid ${i.cycleColor}`}}>
+                <div className="flex items-start justify-between gap-3 mb-2">
+                  <div className="text-sm font-semibold text-slate-200">{i.title}</div>
+                  <div className="text-xs text-slate-500 flex-shrink-0">{i.date}</div>
+                </div>
+                <div className="text-xs text-slate-500 mb-2">{i.cycleName}</div>
+                <p className="text-sm text-slate-300 leading-relaxed">{i.insight}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </>)}
+
+      {/* WEEKS / HALL OF FAME TAB */}
+      {activeTab === 'weeks' && (<>
+        {(s.completedWeeks||[]).length === 0 ? (
+          <div className="gc p-10 text-center">
+            <div className="text-4xl mb-3">🏆</div>
+            <div className="text-slate-400 text-sm">Завершённых недель пока нет. После 7 дней отметок — первая появится здесь!</div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {[...(s.completedWeeks||[])].reverse().map((w, i) => {
+              const pct = w.pct || 0;
+              const status = pct >= 85 ? {label:'Успех 🎯', color:'#10b981'} : pct >= 57 ? {label:'Нормальный темп', color:'#f59e0b'} : {label:'Начало адаптации', color:'#a855f7'};
+              const shareText = `✦ IKIGAI by LevelUP.AI
+Неделя ${w.week}: ${w.title}
+Выполнено: ${pct}% · ${w.xpEarned} XP
+"${w.insight || 'Сделано.'}"`;
               return (
-                <div key={item.id} className="p-4 rounded-xl bg-white/3 border border-white/5 hover:border-white/10 transition-colors">
-                  <div className="flex items-start justify-between gap-3 mb-2">
-                    <div className="flex items-center gap-2">
-                      <span>{z.icon}</span>
-                      <span className="text-xs font-medium text-slate-300">{item.title}</span>
-                      <span className="text-xs px-1.5 py-0.5 rounded-full"
-                        style={{background:`${item.cycleColor}15`,color:item.cycleColor}}>{item.cycleName}</span>
+                <div key={i} className="gc p-5">
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <div>
+                      <div className="text-xs text-slate-500 mb-0.5">Цикл {w.cycle} · Неделя {w.week}</div>
+                      <div className="text-sm font-bold text-slate-100">{w.title}</div>
                     </div>
-                    <span className="text-xs text-slate-600 flex-shrink-0">{item.date}</span>
+                    <div className="text-right flex-shrink-0">
+                      <div className="text-sm font-bold" style={{color:status.color}}>{status.label}</div>
+                      <div className="text-xs text-slate-500">{w.xpEarned} XP</div>
+                    </div>
                   </div>
-                  <p className="text-sm text-slate-300 italic leading-relaxed">"{item.insight}"</p>
+                  <div className="h-2 rounded-full bg-white/5 overflow-hidden mb-2">
+                    <div className="h-full rounded-full transition-all" style={{width:`${pct}%`,background:`linear-gradient(90deg,${status.color}66,${status.color})`}} />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-slate-500">{pct}% дней выполнено · {new Date(w.date).toLocaleDateString('ru-RU',{day:'numeric',month:'long'})}</span>
+                    <button onClick={()=>{navigator.clipboard?.writeText(shareText);}}
+                      className="text-xs px-3 py-1 gc text-slate-400 hover:text-cyan-400 transition-colors">
+                      ↗ Поделиться
+                    </button>
+                  </div>
+                  {w.insight && (
+                    <div className="mt-2 pt-2 border-t border-white/5 text-xs text-slate-500 italic">"{w.insight}"</div>
+                  )}
                 </div>
               );
             })}
           </div>
         )}
-      </div>
-
-      {/* Achievements */}
-      <div className="gc p-5">
-        <div className="text-sm font-semibold text-slate-200 mb-4">🏆 Достижения</div>
-        <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
-          {[
-            {icon:'🔥',label:'Первый огонь',ok:s.streakDays>=1},
-            {icon:'⚡',label:'Неделя',ok:s.streakDays>=7},
-            {icon:'🌊',label:'2 недели',ok:s.streakDays>=14},
-            {icon:'🌙',label:'Месяц',ok:s.streakDays>=30},
-            {icon:'💎',label:'Инсайт',ok:totalInsights>=1},
-            {icon:'🧠',label:'5 инсайтов',ok:totalInsights>=5},
-          ].map(b => (
-            <div key={b.label} className={`p-3 rounded-xl text-center ${b.ok?'ap':''}`}
-              style={{background:b.ok?'rgba(0,212,255,0.08)':'rgba(255,255,255,0.03)',border:`1px solid ${b.ok?'rgba(0,212,255,0.2)':'rgba(255,255,255,0.05)'}`,opacity:b.ok?1:.3}}>
-              <div className="text-2xl mb-1">{b.icon}</div>
-              <div className="text-xs text-slate-400">{b.label}</div>
-            </div>
-          ))}
-        </div>
-      </div>
+      </>)}
     </div>
   );
 }
 
-/* ==================== AI NAVIGATOR (REAL GEMINI) ==================== */
 function AINavigator() {
   const { s } = useStore();
   const cycle = CYCLES[s.currentCycle-1];
@@ -2140,7 +2340,7 @@ function Settings() {
                   {daysLeft > 7 ? 'Пользуйся всеми функциями бесплатно' : daysLeft > 0 ? 'Скоро заканчивается — добавь карту, чтобы не прерываться' : 'Пробный период завершён'}
                 </div>
                 <div className="h-2 rounded-full bg-white/10 overflow-hidden mb-3">
-                  <div className="h-full rounded-full transition-all" style={{width:`${(daysLeft/(s.trialDays||14))*100}%`,background:'linear-gradient(90deg,#00d4ff,#7b2ff7)'}} />
+                  <div className="h-full rounded-full transition-all" style={{width:`${(daysLeft/(s.trialDays||30))*100}%`,background:'linear-gradient(90deg,#00d4ff,#7b2ff7)'}} />
                 </div>
                 <div className="text-xs text-slate-500">После trial: {s.subscriptionPrice || '$8'} / месяц · Отмена в любой момент</div>
               </div>
@@ -2234,10 +2434,36 @@ function Settings() {
               </button>
             </div>
             {s.reminderEnabled && (
-              <div>
-                <label className="text-xs text-slate-500 mb-2 block">Время напоминания</label>
-                <input type="time" value={s.reminderTime} onChange={e=>setReminderTime(e.target.value)}
-                  className="gi px-4 py-2.5 text-sm w-auto" />
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs text-slate-500 mb-2 block">Время напоминания</label>
+                  <input type="time" value={s.reminderTime} onChange={e=>setReminderTime(e.target.value)}
+                    className="gi px-4 py-2.5 text-sm w-auto" />
+                </div>
+                {/* Google Calendar */}
+                <div className="p-4 rounded-xl" style={{background:'rgba(66,133,244,0.08)',border:'1px solid rgba(66,133,244,0.25)'}}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span>📅</span>
+                    <span className="text-sm font-semibold" style={{color:'#4285f4'}}>Добавить в Google Календарь</span>
+                  </div>
+                  <p className="text-xs text-slate-400 mb-3">
+                    Открывает Google Календарь с готовым повторяющимся событием — 7 дней для текущей привычки.
+                  </p>
+                  <button onClick={() => {
+                    const t = s.reminderTime || '09:00';
+                    const [h, m] = t.split(':').map(Number);
+                    const now = new Date();
+                    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, m, 0);
+                    const end = new Date(start.getTime() + 15*60000);
+                    const fmt = d => d.toISOString().replace(/[-:]/g,'').split('.')[0]+'Z';
+                    const title = encodeURIComponent('✦ IKIGAI: Привычка дня');
+                    const details = encodeURIComponent('Ежедневная отметка привычки · IKIGAI by LevelUP.AI');
+                    const rrule = encodeURIComponent('RRULE:FREQ=DAILY;COUNT=7');
+                    window.open(`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${fmt(start)}/${fmt(end)}&details=${details}&recur=${rrule}&sf=true&output=xml`,'_blank');
+                  }} style={{background:'#4285f4',color:'#fff'}} className="w-full py-2 rounded-xl text-sm font-semibold">
+                    📅 Открыть Google Календарь
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -2253,6 +2479,19 @@ function GuideScreen() {
   const [activeSection, setActiveSection] = useState(0);
 
   const SECTIONS = [
+    {
+      id: 'why', icon: '🧠', title: 'Почему одна привычка?',
+      content: [
+        { type: 'heading', text: 'Нейронаука: одна привычка важнее десяти' },
+        { type: 'text', text: 'Многие трекеры предлагают сразу 10–20 привычек. Наш подход противоположный: одна привычка на неделю. Это не ограничение — это точность.' },
+        { type: 'metric', icon: '🧬', label: 'Нейронные связи', color: '#a855f7', text: 'Для формирования привычки мозгу нужно повторение одного действия 7+ дней подряд. Именно тогда нейронная цепочка становится устойчивой.' },
+        { type: 'metric', icon: '🎯', label: 'Фокус внимания', color: '#00d4ff', text: 'Когда у тебя одна задача — ты делаешь её. Когда их 10 — ты думаешь о них, но не делаешь ни одну.' },
+        { type: 'metric', icon: '💧', label: 'Ресурс воли', color: '#10b981', text: 'Сила воли — ограниченный ресурс. Чем меньше решений ты принимаешь в день, тем сильнее ты там, где важно.' },
+        { type: 'tip', text: '💡 Исследования показывают: один новый паттерн поведения в неделю даёт эффект через 3–4 месяца. Это и есть основа программы.' },
+        { type: 'heading', text: 'Месяц 12: повторение — мать учения' },
+        { type: 'text', text: 'Последний месяц программы — не новые привычки, а повторение любимых из пройденных 48. Так нейронные связи закрепляются на уровне автопилота.' },
+      ]
+    },
     {
       id: 'welcome', icon: '🐧', title: 'Знакомство с Пингви',
       content: [
@@ -2454,9 +2693,135 @@ function GuideScreen() {
   );
 }
 
+/* ==================== WEEK COMPLETE MODAL ==================== */
+function WeekCompleteModal({ data, onDismiss, onShare }) {
+  const pct = data.pct || 0;
+  const status = pct === 100 ? '🏆 Идеальная неделя!'
+    : pct >= 85 ? '🎯 Отличный результат!'
+    : pct >= 57 ? '💪 Нормальный темп адаптации'
+    : '🌱 Начало пути — главное не бросать';
+  const statusColor = pct === 100 ? '#f59e0b' : pct >= 85 ? '#10b981' : pct >= 57 ? '#00d4ff' : '#a855f7';
+  const shareText = `✦ IKIGAI by LevelUP.AI\nНеделя ${data.week}: ${data.title}\nВыполнено: ${pct}% · +${data.xpEarned} XP\n#ikigai #levelup #habits`;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{background:'rgba(0,0,0,0.8)',backdropFilter:'blur(8px)'}}>
+      <div className="gc max-w-sm w-full p-6 text-center relative" style={{border:'1px solid rgba(0,212,255,0.3)',boxShadow:'0 0 60px rgba(0,212,255,0.15)'}}>
+        {/* Confetti-like dots */}
+        <div className="absolute inset-0 overflow-hidden rounded-xl pointer-events-none">
+          {[...Array(12)].map((_,i)=>(
+            <div key={i} className="absolute w-1.5 h-1.5 rounded-full animate-pulse"
+              style={{
+                background: ['#00d4ff','#a855f7','#f59e0b','#10b981'][i%4],
+                left:`${10+i*7}%`, top:`${15+((i*37)%70)}%`,
+                opacity: 0.4, animationDelay:`${i*0.2}s`
+              }} />
+          ))}
+        </div>
+
+        <div className="text-5xl mb-3">🎉</div>
+        <div className="text-xl font-bold text-slate-100 mb-1" style={{fontFamily:'Space Grotesk'}}>
+          Неделя {data.week} завершена!
+        </div>
+        <div className="text-sm font-semibold mb-4" style={{color:statusColor}}>{status}</div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-3 gap-3 mb-5">
+          {[
+            {icon:'📅', val:`${Math.round(pct/100*7)}/7`, label:'дней'},
+            {icon:'⭐', val:`+${data.xpEarned}`, label:'XP'},
+            {icon:'✦', val:data.title.split(' ').slice(0,2).join(' '), label:'привычка'},
+          ].map((s,i)=>(
+            <div key={i} className="p-3 rounded-xl" style={{background:'rgba(255,255,255,0.04)'}}>
+              <div className="text-lg">{s.icon}</div>
+              <div className="text-sm font-bold text-slate-200">{s.val}</div>
+              <div className="text-xs text-slate-500">{s.label}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Progress bar */}
+        <div className="h-2 rounded-full bg-white/5 overflow-hidden mb-2">
+          <div className="h-full rounded-full transition-all duration-1000"
+            style={{width:`${pct}%`, background:`linear-gradient(90deg,${statusColor}88,${statusColor})`}} />
+        </div>
+        <p className="text-xs text-slate-500 mb-5">
+          {pct < 100 ? 'Нормальный темп адаптации. Главное — не бросать.' : 'Идеальное выполнение! Ты в настоящем потоке.'}
+        </p>
+
+        {/* Buttons */}
+        <div className="space-y-2">
+          <button onClick={()=>{navigator.clipboard?.writeText(shareText);}}
+            className="w-full py-2.5 rounded-xl text-sm gc text-slate-300 hover:text-cyan-400 transition-colors">
+            ↗ Поделиться результатом
+          </button>
+          {data.week === 1 && data.cycle === 1 && (
+            <div className="p-3 rounded-xl mb-2 text-xs text-center"
+              style={{background:'rgba(245,158,11,0.1)',border:'1px solid rgba(245,158,11,0.25)',color:'#fbbf24'}}>
+              🎯 Первая привычка внедрена! Ещё 47 впереди — разблокируй полный год трансформации.
+            </div>
+          )}
+          <button onClick={onDismiss}
+            className="w-full py-2.5 rounded-xl text-sm font-semibold bp">
+            Открыть следующую привычку →
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ==================== SUBSCRIPTION UPGRADE ==================== */
+function SubscriptionUpgrade() {
+  const { s, setScreen } = useStore();
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{background:'rgba(2,11,24,0.97)'}}>
+      <div className="max-w-md w-full text-center space-y-6">
+        <div className="text-5xl">👑</div>
+        <div>
+          <div className="text-2xl font-bold text-slate-100 mb-2" style={{fontFamily:'Space Grotesk'}}>
+            Пробный период завершён
+          </div>
+          <p className="text-slate-400 text-sm">
+            Ты прошёл(шла) {(s.completedWeeks||[]).length} {(s.completedWeeks||[]).length===1?'неделю':'недель'} и набрал(а) <span className="text-amber-400 font-bold">{s.totalPoints} XP</span>.
+            Продолжи путь к Мастеру Икигай 👑
+          </p>
+        </div>
+        <div className="gc p-5 text-left space-y-2">
+          {['Полный доступ ко всем 48 привычкам','AI-наставник Пингви всегда онлайн','История инсайтов и зал славы','Система XP и звания','Поддержка изменений на весь год'].map(f=>(
+            <div key={f} className="flex items-center gap-2 text-sm text-slate-300">
+              <span className="text-green-400">✓</span>{f}
+            </div>
+          ))}
+        </div>
+        <div>
+          <button onClick={()=>setScreen('settings')}
+            className="bp w-full py-3 text-base font-bold mb-3">
+            💳 Подключить подписку — $8/мес
+          </button>
+          <p className="text-xs text-slate-600">Отмена в любой момент · Защита данных SSL</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ==================== APP ==================== */
 function App() {
-  const { s, setScreen, completeOnboarding } = useStore();
+  // Version check: show reload toast if app updated
+  React.useEffect(() => {
+    const CURRENT_VERSION = '1.0.4';
+    const stored = localStorage.getItem('_ikigai_app_version');
+    if (stored && stored !== CURRENT_VERSION) {
+      const toast = document.createElement('div');
+      toast.textContent = '🔄 Доступно обновление — обновите страницу';
+      Object.assign(toast.style, {position:'fixed',bottom:'80px',left:'50%',transform:'translateX(-50%)',background:'rgba(2,11,24,0.95)',border:'1px solid rgba(0,212,255,0.25)',color:'#00d4ff',padding:'10px 20px',borderRadius:'12px',zIndex:'9999',fontSize:'13px',cursor:'pointer',backdropFilter:'blur(8px)'});
+      toast.onclick = () => location.reload();
+      document.body.appendChild(toast);
+      setTimeout(()=>toast.remove(), 8000);
+    }
+    localStorage.setItem('_ikigai_app_version', CURRENT_VERSION);
+  }, []);
+  const { s, setScreen, completeOnboarding, dismissWeekComplete } = useStore();
   const isMobile = useIsMobile();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [celebrationStreak, setCelebrationStreak] = useState(0);
@@ -2497,6 +2862,10 @@ function App() {
     }
   };
 
+  // Trial check
+  const daysLeft = trialDaysLeft(s);
+  const trialExpired = daysLeft !== null && daysLeft <= 0 && s.paymentMethodStatus !== 'ready_for_stripe';
+
   const screenTitles = { dashboard:'Дашборд', journey:'Мой путь', habits:'Привычки', archive:'Архив', navigator:'AI Навигатор', settings:'Настройки', guide:'Гид' };
 
   return (
@@ -2522,6 +2891,13 @@ function App() {
       )}
 
       <Sidebar mobileOpen={mobileOpen} onClose={()=>setMobileOpen(false)} />
+
+      {/* Trial expired wall */}
+      {trialExpired && <SubscriptionUpgrade />}
+      {/* Week complete celebration modal */}
+      {s._showWeekComplete && (
+        <WeekCompleteModal data={s._showWeekComplete} onDismiss={dismissWeekComplete} />
+      )}
 
       <main style={{position:'relative',zIndex:10}}>
         {/* Mobile header */}
@@ -2551,7 +2927,7 @@ function App() {
               {(() => { const dl = trialDaysLeft(s); return dl !== null && dl >= 0 ? (
                 <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs"
                   style={{background:dl<=7?'rgba(239,68,68,0.12)':'rgba(0,212,255,0.08)',border:`1px solid ${dl<=7?'rgba(239,68,68,0.3)':'rgba(0,212,255,0.2)'}`,color:dl<=7?'#f87171':'#67e8f9'}}>
-                  ⏳ Trial: {dl} д.
+                  ⏳ {dl}/30 дней
                 </div>
               ) : null; })()}
               <button onClick={()=>setScreen('navigator')} className="gc flex items-center gap-2 px-3 py-1.5 hover:border-cyan-500/30 transition-all text-xs text-slate-400">
@@ -2585,6 +2961,17 @@ function App() {
               {item.id==='navigator' && <div className="absolute top-0.5 right-1/2 translate-x-4 w-2 h-2 rounded-full bg-green-500 pg" />}
               <span className={`text-lg transition-all ${s.activeScreen===item.id?'scale-110':''}`} style={{display:'flex',justifyContent:'center'}}>{item.icon==='NAV_PENGUIN' ? <PenguinHeadIcon size={24} /> : item.icon}</span>
               <span className={`text-xs mt-0.5 ${s.activeScreen===item.id?'text-cyan-400 font-medium':'text-slate-600'}`}>{item.label}</span>
+              {item.id==='habits' && (() => {
+                const cyc = CYCLES[s.currentCycle-1];
+                const hab = cyc?.habits[s.currentWeek-1];
+                const days = hab ? new Set(s.habits[hab.id]?.completedDates||[]).size : 0;
+                return days > 0 ? (
+                  <span className="absolute top-1 right-1 text-xs w-4 h-4 rounded-full flex items-center justify-center font-bold"
+                    style={{background:days>=7?'#10b981':'#00d4ff',color:'#020b18',fontSize:'8px'}}>
+                    {days}
+                  </span>
+                ) : null;
+              })()}
               {s.activeScreen===item.id && <div className="absolute bottom-0 w-6 h-0.5 rounded-full bg-cyan-400" />}
             </button>
           ))}

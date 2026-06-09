@@ -1,6 +1,9 @@
 import Link from "next/link";
+import { defaultSiteText } from "@/lib/messages";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
+  const text = defaultSiteText.ru;
+
   return (
     <>
       <div className="glow-tl" />
@@ -12,11 +15,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <img src="/assets/levelup-logo.jpg" alt="" />
             </div>
             <div className="logo-text">
-              <div className="brand">ИКИГАЙ</div>
-              <div className="sub">от LevelUP.AI</div>
+              <div className="brand">{text.nav.brand}</div>
+              <div className="sub">{text.nav.sub}</div>
             </div>
           </Link>
-          <Link className="btn-back" href="/">← Главная</Link>
+          <Link className="btn-back" href="/">{text.nav.backHome}</Link>
         </nav>
         <main className="screen app-screen">{children}</main>
       </div>

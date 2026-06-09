@@ -1,40 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import { useSiteText } from "@/lib/useSiteText";
 
-const zones = {
-  passion: {
-    title: "Страсть",
-    insight: "Зона показывает, где интерес совпадает с тем, что у Вас уже получается.",
-    recommendation: "Навыки: сторителлинг, исследование, методология."
-  },
-  mission: {
-    title: "Миссия",
-    insight: "Зона связывает личную энергию с задачами, которые нужны людям и рынку.",
-    recommendation: "Роли: консультант, фасилитатор, образовательный продукт."
-  },
-  vocation: {
-    title: "Призвание",
-    insight: "Зона отвечает за пользу, которую можно превратить в устойчивую карьерную траекторию.",
-    recommendation: "Роли: продуктовый стратег, карьерный аналитик, CX/UX эксперт."
-  },
-  profession: {
-    title: "Профессия",
-    insight: "Зона соединяет сильные навыки и платежеспособный спрос. Это главный мост к монетизации.",
-    recommendation: "Роли: продуктовый стратег, AI-консультант, методолог."
-  },
-  ikigai: {
-    title: "Икигай",
-    insight: "Центральная точка, где энергия, компетенции, польза рынку и доход соединяются в рабочую стратегию.",
-    recommendation: "Соберите 7-дневную проверку оффера и покажите ее реальным клиентам."
-  }
-} as const;
-
-type ZoneId = keyof typeof zones;
+type ZoneId = "passion" | "mission" | "vocation" | "profession" | "ikigai";
 
 export function IkigaiPremiumMap({ allActive = false, landingMode = false }: { allActive?: boolean; landingMode?: boolean }) {
+  const text = useSiteText().ikigaiMap;
   const [active, setActive] = useState<ZoneId>("ikigai");
-  const activeZone = zones[active];
+  const activeZone = text.zones[active];
 
   return (
     <div className={landingMode ? "ikigai-premium-map landing-mode" : "card stack"}>
@@ -46,23 +20,23 @@ export function IkigaiPremiumMap({ allActive = false, landingMode = false }: { a
         </defs>
         <g opacity={allActive || active === "passion" ? 1 : .4} filter={active === "passion" || allActive ? "none" : "blur(2px)"} onClick={() => setActive("passion")} style={{ cursor: "pointer" }}>
           <circle cx="245" cy="230" r="145" fill="url(#cyanGlow)" stroke="#00D4FF" strokeWidth="3" />
-          <text x="170" y="225" fill="white" fontWeight="800">СТРАСТЬ</text>
+          <text x="170" y="225" fill="white" fontWeight="800">{text.labels.passion}</text>
         </g>
         <g opacity={allActive || active === "mission" ? 1 : .4} filter={active === "mission" || allActive ? "none" : "blur(2px)"} onClick={() => setActive("mission")} style={{ cursor: "pointer" }}>
           <circle cx="375" cy="230" r="145" fill="url(#violetGlow)" stroke="#9B5DE5" strokeWidth="3" />
-          <text x="374" y="225" fill="white" fontWeight="800">МИССИЯ</text>
+          <text x="374" y="225" fill="white" fontWeight="800">{text.labels.mission}</text>
         </g>
         <g opacity={allActive || active === "profession" ? 1 : .4} filter={active === "profession" || allActive ? "none" : "blur(2px)"} onClick={() => setActive("profession")} style={{ cursor: "pointer" }}>
           <circle cx="245" cy="350" r="145" fill="url(#cyanGlow)" stroke="#00D4FF" strokeWidth="3" />
-          <text x="155" y="390" fill="white" fontWeight="800">ПРОФЕССИЯ</text>
+          <text x="155" y="390" fill="white" fontWeight="800">{text.labels.profession}</text>
         </g>
         <g opacity={allActive || active === "vocation" ? 1 : .4} filter={active === "vocation" || allActive ? "none" : "blur(2px)"} onClick={() => setActive("vocation")} style={{ cursor: "pointer" }}>
           <circle cx="375" cy="350" r="145" fill="url(#violetGlow)" stroke="#9B5DE5" strokeWidth="3" />
-          <text x="365" y="390" fill="white" fontWeight="800">ПРИЗВАНИЕ</text>
+          <text x="365" y="390" fill="white" fontWeight="800">{text.labels.vocation}</text>
         </g>
         <g onClick={() => setActive("ikigai")} style={{ cursor: "pointer", filter: "drop-shadow(0 0 18px rgba(255, 209, 102, .8))" }}>
           <circle cx="310" cy="290" r="72" fill="url(#goldGlow)" stroke="#FFD166" strokeWidth="4" />
-          <text x="268" y="298" fill="white" fontWeight="900">Икигай</text>
+          <text x="268" y="298" fill="white" fontWeight="900">{text.labels.ikigai}</text>
         </g>
       </svg>
       {!allActive && (

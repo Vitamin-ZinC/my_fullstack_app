@@ -4,8 +4,10 @@ import Link from "next/link";
 import { Mic, Square } from "lucide-react";
 import { useRef, useState } from "react";
 import { api, storeAnalysisDraft, uploadMedia } from "@/lib/api";
+import { useSiteText } from "@/lib/useSiteText";
 
 export default function VoicePage() {
+  const text = useSiteText().flow.voice;
   const recorder = useRef<MediaRecorder | null>(null);
   const chunks = useRef<Blob[]>([]);
   const [recording, setRecording] = useState(false);
@@ -29,7 +31,7 @@ export default function VoicePage() {
       recorder.current.start();
       setRecording(true);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Voice recording failed");
+      setError(reason instanceof Error ? reason.message : text.failed);
     } finally {
       setBusy(false);
     }
@@ -38,12 +40,12 @@ export default function VoicePage() {
   async function uploadRecording(uploadUrl: string, stream: MediaStream) {
     try {
       const blob = new Blob(chunks.current, { type: recorder.current?.mimeType || "audio/webm" });
-      if (blob.size <= 2048) throw new Error("Voice fragment is too short");
+      if (blob.size <= 2048) throw new Error(text.tooShort);
       await uploadMedia(uploadUrl, blob);
       window.sessionStorage.setItem("levelup_voice_ready", "1");
       setDone(true);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Voice upload failed");
+      setError(reason instanceof Error ? reason.message : text.failed);
       setDone(false);
     } finally {
       stream.getTracks().forEach((track) => track.stop());
@@ -58,9 +60,9 @@ export default function VoicePage() {
   return (
     <div className="stack" data-testid="voice-page">
       <div>
-        <div className="eyebrow">Шаг 1</div>
-        <h1 className="ub">Голосовая диагностика</h1>
-        <p className="muted">Произнеси короткую фразу. Фрагмент загрузится в анализ и откроет следующий шаг.</p>
+        <div className="eyebrow">{text.eyebrow}</div>
+        <h1 className="ub">{text.title}</h1>
+        <p className="muted">{text.copy}</p>
       </div>
       <div className={`voice-video-ring ${recording ? "recording" : done ? "done" : ""}`}>
         <video src="/assets/voice-analysis.mp4" autoPlay muted loop playsInline />
@@ -68,9 +70,9 @@ export default function VoicePage() {
       </div>
       {error && <div className="card" style={{ borderColor: "var(--danger)" }}>{error}</div>}
       <button className="button" data-testid="voice-record-button" onClick={recording ? stop : start} disabled={busy}>
-        {recording ? <Square size={18} /> : <Mic size={18} />} {recording ? "Остановить запись" : busy ? "Подготовка..." : "Записать голос"}
+        {recording ? <Square size={18} /> : <Mic size={18} />} {recording ? text.stop : busy ? text.busy : text.start}
       </button>
-      {done && <Link className="button secondary" data-testid="voice-next-link" href="/flow/face">Перейти к анализу лица</Link>}
+      {done && <Link className="button secondary" data-testid="voice-next-link" href="/flow/face">{text.next}</Link>}
     </div>
   );
 }

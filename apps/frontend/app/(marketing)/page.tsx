@@ -1,37 +1,13 @@
+"use client";
+
 import Link from "next/link";
 import { IkigaiPremiumMap } from "@/components/IkigaiPremiumMap";
-
-const problemItems = [
-  "Ты вроде бы справляешься, но постоянно устаёшь",
-  "Достигать целей, но терять ощущение смысла",
-  "Решения даются тяжело, даже когда всё «логично»",
-  "Хочется ясности, но не очередного теста"
-];
-
-const faceSignals = ["Напряжение", "Внимание", "Когн. нагрузка", "Баланс энергии"];
-const voiceSignals = ["Энергия", "Эмоц. нагрузка", "Стиль мышления", "Тип усилия"];
-
-const steps = [
-  ["1", "Сканирование лица", "Смотри в экран 10–15 сек или загрузи фото"],
-  ["2", "Голосовая фраза", "Произнеси текст до 20 секунд"],
-  ["3", "AI-анализ", "Алгоритм формирует персональный отчёт"]
-];
-
-const freeReportItems = [
-  "Твоя текущая профессиональная роль",
-  "Направления, соответствующие твоей энергии",
-  "Первичные сигналы твоей точки ИКИГАЙ",
-  "Намёк на более подходящие профессии"
-];
-
-const privacyItems = [
-  "Фото и аудио не сохраняются",
-  "Данные не используются для обучения",
-  "Никаких оценок внешности",
-  "Никаких диагнозов — только паттерны"
-];
+import { useSiteText } from "@/lib/useSiteText";
 
 export default function LandingPage() {
+  const text = useSiteText();
+  const landing = text.landing;
+
   return (
     <>
       <div className="glow-tl" />
@@ -42,58 +18,47 @@ export default function LandingPage() {
           <div className="landing-flow">
             <section className="landing-hero">
               <div className="hero-video-wrap float">
-                <img src="/assets/levelup-logo.jpg" alt="LevelUP.AI" />
+                <img src="/assets/levelup-logo.jpg" alt={text.nav.brand} />
               </div>
-              <div className="ub very-muted landing-kicker">LEVELUP.AI</div>
+              <div className="ub very-muted landing-kicker">{landing.kicker}</div>
               <h1 className="ub landing-title">
-                Найди свою точку
+                {landing.titlePrefix}
                 <br />
-                <span className="cyan cyan-glow">ИКИГАЙ</span>
+                <span className="cyan cyan-glow">{landing.titleAccent}</span>
               </h1>
-              <p className="muted landing-sub">за 3 минуты с помощью AI</p>
-              <p className="very-muted landing-lead">
-                Экспресс-диагностика по лицу и голосу помогает увидеть,
-                <br />
-                как ты на самом деле распределяешь энергию и фокус.
-              </p>
-              <Link className="btn-primary" href="/flow/voice">👉 Пройти экспресс-диагностику</Link>
-              <p className="very-muted landing-note">Займёт 3–5 минут · Без тестов · Бесплатный отчёт</p>
+              <p className="muted landing-sub">{landing.subtitle}</p>
+              <p className="very-muted landing-lead">{landing.lead}</p>
+              <Link className="btn-primary" href="/flow/voice">{landing.cta}</Link>
+              <p className="very-muted landing-note">{landing.note}</p>
             </section>
 
             <div className="divider landing-divider" />
 
             <section className="landing-section">
               <div className="card card-lg">
-                <h2 className="ub landing-card-title">
-                  🤔 Почему так сложно понять, <span className="cyan">что с тобой происходит</span>?
-                </h2>
-                {problemItems.map((item) => (
+                <h2 className="ub landing-card-title">{landing.problemTitle}</h2>
+                {landing.problemItems.map((item) => (
                   <div className="landing-list-row" key={item}>
                     <span className="cyan">—</span>
                     <span>{item}</span>
                   </div>
                 ))}
                 <div className="divider" />
-                <p className="landing-small-copy">
-                  Большинство тестов задают <strong>150 вопросов</strong> и анализируют прошлый опыт.
-                  <br />
-                  <br />
-                  Но твои реальные состояния проявляются <strong className="cyan">раньше мыслей</strong> — в лице, голосе, микрореакциях.
-                </p>
+                <p className="landing-small-copy">{landing.problemCopy}</p>
               </div>
             </section>
 
             <section className="landing-section compact">
-              <h2 className="ub landing-section-title">🔬 Что анализирует LevelUP.AI</h2>
+              <h2 className="ub landing-section-title">{landing.signalsTitle}</h2>
               <div className="landing-two-col">
-                <SignalCard tone="cyan" title="Лицо" icon="📷" items={faceSignals} />
-                <SignalCard tone="violet" title="Голос" icon="🎤" items={voiceSignals} />
+                <SignalCard tone="cyan" title={landing.faceTitle} icon="📷" items={landing.faceSignals} />
+                <SignalCard tone="violet" title={landing.voiceTitle} icon="🎤" items={landing.voiceSignals} />
               </div>
             </section>
 
             <section className="landing-section compact">
-              <h2 className="ub landing-section-title">🧩 Как это работает</h2>
-              {steps.map(([number, title, description]) => (
+              <h2 className="ub landing-section-title">{landing.howTitle}</h2>
+              {landing.steps.map(([number, title, description]) => (
                 <div className="card landing-step" key={number}>
                   <span className="landing-step-number">{number}</span>
                   <div>
@@ -106,8 +71,8 @@ export default function LandingPage() {
 
             <section className="landing-section compact">
               <div className="card cyan-border card-lg">
-                <h2 className="ub cyan landing-card-title">📄 В бесплатном отчёте</h2>
-                {freeReportItems.map((item) => (
+                <h2 className="ub cyan landing-card-title">{landing.freeTitle}</h2>
+                {landing.freeItems.map((item) => (
                   <div className="landing-bullet" key={item}>
                     <span className="cyan">✦</span>
                     <span>{item}</span>
@@ -118,27 +83,20 @@ export default function LandingPage() {
 
             <section className="landing-section compact">
               <div className="card cyan-border card-lg ikigai-landing-card">
-                <h2 className="ub cyan landing-card-title">🧩 МОДЕЛЬ ИКИГАЙ</h2>
+                <h2 className="ub cyan landing-card-title">{landing.modelTitle}</h2>
                 <IkigaiPremiumMap allActive landingMode />
-                <p className="landing-model-copy">
-                  LevelUP использует динамическую модель ИКИГАЙ. Она показывает пересечение четырех факторов:
-                </p>
+                <p className="landing-model-copy">{landing.modelCopy}</p>
                 <div className="ikigai-factor-list">
-                  <div>что у тебя получается</div>
-                  <div>что дает тебе энергию</div>
-                  <div>что нужно рынку</div>
-                  <div>что может приносить доход</div>
+                  {landing.modelFactors.map((factor) => <div key={factor}>{factor}</div>)}
                 </div>
-                <div className="highlight-box">
-                  В точке пересечения возникает окно профессиональной реализации: зона, где способности, энергия, польза и деньги перестают конфликтовать.
-                </div>
+                <div className="highlight-box">{landing.modelHighlight}</div>
               </div>
             </section>
 
             <section className="landing-section compact">
               <div className="card green-border">
-                <h2 className="ub landing-privacy-title">🛡️ Данные в безопасности</h2>
-                {privacyItems.map((item) => (
+                <h2 className="ub landing-privacy-title">{landing.privacyTitle}</h2>
+                {landing.privacyItems.map((item) => (
                   <div className="landing-safe-row" key={item}>
                     <span>✓</span>
                     <span>{item}</span>
@@ -148,12 +106,10 @@ export default function LandingPage() {
             </section>
 
             <section className="landing-section final">
-              <h2 className="ub landing-final-title">🚀 Хочешь увидеть свою реальную картину?</h2>
-              <p className="landing-final-copy">
-                Иногда несколько минут ясности экономят годы движения не в ту сторону.
-              </p>
-              <Link className="btn-primary" href="/flow/voice">👉 Пройти экспресс-диагностику</Link>
-              <p className="very-muted landing-note center">3 минуты · Бесплатный отчёт · Без регистрации</p>
+              <h2 className="ub landing-final-title">{landing.finalTitle}</h2>
+              <p className="landing-final-copy">{landing.finalCopy}</p>
+              <Link className="btn-primary" href="/flow/voice">{landing.cta}</Link>
+              <p className="very-muted landing-note center">{landing.finalNote}</p>
             </section>
           </div>
         </main>
@@ -163,6 +119,8 @@ export default function LandingPage() {
 }
 
 function AppNav() {
+  const text = useSiteText();
+
   return (
     <nav className="app-nav">
       <div className="logo-wrap">
@@ -170,15 +128,15 @@ function AppNav() {
           <img src="/assets/levelup-logo.jpg" alt="" />
         </div>
         <div className="logo-text">
-          <div className="brand">ИКИГАЙ</div>
-          <div className="sub">от LevelUP.AI</div>
+          <div className="brand">{text.nav.brand}</div>
+          <div className="sub">{text.nav.sub}</div>
         </div>
       </div>
     </nav>
   );
 }
 
-function SignalCard({ icon, items, title, tone }: { icon: string; items: string[]; title: string; tone: "cyan" | "violet" }) {
+function SignalCard({ icon, items, title, tone }: { icon: string; items: readonly string[]; title: string; tone: "cyan" | "violet" }) {
   return (
     <div className={`card ${tone === "cyan" ? "cyan-border" : "violet-border"}`}>
       <div className="signal-icon">{icon}</div>

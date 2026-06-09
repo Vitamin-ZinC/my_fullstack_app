@@ -4,15 +4,12 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { IkigaiPremiumMap } from "@/components/IkigaiPremiumMap";
 import { api, getAnalysisDraft } from "@/lib/api";
-
-const fields = [
-  ["love", "Что даёт тебе энергию?"],
-  ["good_at", "Что у тебя получается?"],
-  ["world_needs", "Что нужно людям и рынку?"],
-  ["paid_for", "За что тебе могут платить?"]
-] as const;
+import { useSiteText } from "@/lib/useSiteText";
 
 export default function IkigaiPage() {
+  const siteText = useSiteText();
+  const text = siteText.flow.ikigai;
+  const faceText = siteText.flow.face;
   const router = useRouter();
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
@@ -22,7 +19,7 @@ export default function IkigaiPage() {
     setError("");
     const draft = getAnalysisDraft();
     if (!draft) {
-      setError("Сначала запиши голос");
+      setError(faceText.noVoice);
       return;
     }
 
@@ -39,7 +36,7 @@ export default function IkigaiPage() {
       await api.confirmAnalysis(draft.analysisId, ikigaiAnswers);
       router.push("/flow/analysis");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Не удалось запустить анализ");
+      setError(reason instanceof Error ? reason.message : text.launchError);
     } finally {
       setBusy(false);
     }
@@ -48,21 +45,21 @@ export default function IkigaiPage() {
   return (
     <div className="stack" data-testid="ikigai-page">
       <div>
-        <div className="eyebrow">Шаг 3</div>
-        <h1 className="ub">Карта Икигай</h1>
-        <p className="muted">Ответь коротко: можно перечислять слова через запятую.</p>
+        <div className="eyebrow">{text.eyebrow}</div>
+        <h1 className="ub">{text.title}</h1>
+        <p className="muted">{text.copy}</p>
       </div>
       <IkigaiPremiumMap />
       <div className="grid grid-2">
-        {fields.map(([id, label]) => (
+        {text.questions.map(([id, label]) => (
           <label className="card" key={id}>
             <div className="eyebrow">{label}</div>
-            <input className="input" data-testid={`ikigai-${id}`} value={answers[id] ?? ""} onChange={(event) => setAnswers({ ...answers, [id]: event.target.value })} placeholder="Через запятую" />
+            <input className="input" data-testid={`ikigai-${id}`} value={answers[id] ?? ""} onChange={(event) => setAnswers({ ...answers, [id]: event.target.value })} placeholder={text.placeholder} />
           </label>
         ))}
       </div>
       {error && <div className="card" style={{ borderColor: "var(--danger)" }}>{error}</div>}
-      <button className="button" data-testid="ikigai-submit-button" onClick={submit} disabled={busy}>{busy ? "Запуск..." : "Начать AI-анализ"}</button>
+      <button className="button" data-testid="ikigai-submit-button" onClick={submit} disabled={busy}>{busy ? text.busy : text.submit}</button>
     </div>
   );
 }

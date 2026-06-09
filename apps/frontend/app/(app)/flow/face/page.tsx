@@ -4,8 +4,10 @@ import Link from "next/link";
 import { Camera } from "lucide-react";
 import { useRef, useState } from "react";
 import { getAnalysisDraft, uploadMedia } from "@/lib/api";
+import { useSiteText } from "@/lib/useSiteText";
 
 export default function FacePage() {
+  const text = useSiteText().flow.face;
   const video = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [preview, setPreview] = useState("");
@@ -21,7 +23,7 @@ export default function FacePage() {
       if (video.current) video.current.srcObject = stream;
       setCameraReady(true);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Камера недоступна");
+      setError(reason instanceof Error ? reason.message : text.cameraError);
     }
   }
 
@@ -29,7 +31,7 @@ export default function FacePage() {
     if (!video.current) return;
     const draft = getAnalysisDraft();
     if (!draft) {
-      setError("Сначала запиши голос");
+      setError(text.noVoice);
       return;
     }
 
@@ -42,7 +44,7 @@ export default function FacePage() {
 
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.9));
     if (!blob) {
-      setError("Не удалось подготовить снимок");
+      setError(text.uploadError);
       return;
     }
 
@@ -52,16 +54,16 @@ export default function FacePage() {
       streamRef.current?.getTracks().forEach((track) => track.stop());
       setUploaded(true);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Не удалось загрузить фото");
+      setError(reason instanceof Error ? reason.message : text.uploadError);
     }
   }
 
   return (
     <div className="stack" data-testid="face-page">
       <div>
-        <div className="eyebrow">Шаг 2</div>
-        <h1 className="ub">Анализ лица</h1>
-        <p className="muted">Сделай спокойный снимок при хорошем освещении. Это нужно для оценки паттернов внимания и энергии.</p>
+        <div className="eyebrow">{text.eyebrow}</div>
+        <h1 className="ub">{text.title}</h1>
+        <p className="muted">{text.copy}</p>
       </div>
       <div className="face-visual-card">
         {preview ? <img src={preview} alt="" /> : <video ref={video} autoPlay muted playsInline />}
@@ -69,9 +71,9 @@ export default function FacePage() {
       </div>
       {error && <div className="card" style={{ borderColor: "var(--danger)" }}>{error}</div>}
       <button className="button" data-testid="face-capture-button" onClick={cameraReady ? capture : openCamera}>
-        <Camera size={18} /> {cameraReady ? "Сделать снимок" : "Открыть камеру"}
+        <Camera size={18} /> {cameraReady ? text.capture : text.openCamera}
       </button>
-      {uploaded && <Link className="button secondary" data-testid="face-next-link" href="/flow/ikigai">Перейти к модели Икигай</Link>}
+      {uploaded && <Link className="button secondary" data-testid="face-next-link" href="/flow/ikigai">{text.next}</Link>}
     </div>
   );
 }

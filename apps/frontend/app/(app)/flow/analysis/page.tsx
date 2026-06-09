@@ -4,18 +4,20 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { AnalysisProgressEvent } from "@levelup/contracts";
 import { api, createProgressSource, getAnalysisDraft } from "@/lib/api";
+import { useSiteText } from "@/lib/useSiteText";
 
 export default function AnalysisPage() {
+  const text = useSiteText().flow.analysis;
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState("QUEUED");
-  const [log, setLog] = useState("Ожидаем обработку...");
+  const [log, setLog] = useState(text.waiting);
   const [analysisId, setAnalysisId] = useState("");
   const [error, setError] = useState("");
 
   useEffect(() => {
     const draft = getAnalysisDraft();
     if (!draft) {
-      setError("Анализ не был создан");
+      setError(text.noAnalysis);
       return;
     }
 
@@ -46,17 +48,17 @@ export default function AnalysisPage() {
       setStatus(next.status);
       setProgress(next.progress);
       if (next.errorMessage) setLog(next.errorMessage);
-      if (next.status === "DONE") setLog("Отчёт готов");
+      if (next.status === "DONE") setLog(text.ready);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Не удалось загрузить статус анализа");
+      setError(reason instanceof Error ? reason.message : text.failed);
     }
   }
 
   return (
     <div className="stack" data-testid="analysis-page">
       <div>
-        <div className="eyebrow">AI-анализ</div>
-        <h1 className="ub">Идёт обработка</h1>
+        <div className="eyebrow">{text.eyebrow}</div>
+        <h1 className="ub">{text.title}</h1>
         <p className="muted">{status}</p>
       </div>
       <div className="video-frame">
@@ -70,7 +72,7 @@ export default function AnalysisPage() {
         <h2>{progress}%</h2>
         <p className="muted">{log}</p>
       </div>
-      {status === "DONE" && analysisId && <Link className="button" data-testid="free-report-link" href={`/report/${analysisId}/free`}>Открыть бесплатный отчёт</Link>}
+      {status === "DONE" && analysisId && <Link className="button" data-testid="free-report-link" href={`/report/${analysisId}/free`}>{text.openReport}</Link>}
     </div>
   );
 }

@@ -1,6 +1,6 @@
-# LevelUP.AI Ikigai
+# ORKEN.LIFE
 
-Production scaffold for the Ikigai diagnostic product.
+Production scaffold for the ORKEN.LIFE diagnostic product.
 
 The original `index.html` stays in the repository as the approved UX prototype. The production app is split into:
 

@@ -5,8 +5,12 @@ import { useEffect, useState } from "react";
 import type { ReportFull } from "@levelup/contracts";
 import { IkigaiPremiumMap } from "@/components/IkigaiPremiumMap";
 import { api } from "@/lib/api";
+import { useSiteText } from "@/lib/useSiteText";
 
 export default function FullReportPage({ params }: { params: { analysisId: string } }) {
+  const siteText = useSiteText();
+  const text = siteText.report.full;
+  const habitsText = siteText.habits;
   const [report, setReport] = useState<ReportFull | null>(null);
   const [error, setError] = useState("");
 
@@ -20,43 +24,104 @@ export default function FullReportPage({ params }: { params: { analysisId: strin
     return (
       <article className="stack">
         <div>
-          <div className="eyebrow">PRO-отчёт</div>
-          <h1 className="ub">Нужна оплата</h1>
+          <div className="eyebrow">{text.eyebrow}</div>
+          <h1 className="ub">{text.needsPayment}</h1>
           <p className="muted">{error}</p>
         </div>
-        <Link className="button" href={`/pay/${params.analysisId}`}>Перейти к оплате</Link>
+        <Link className="button" href={`/pay/${params.analysisId}`}>{text.pay}</Link>
       </article>
     );
   }
 
   return (
-    <article className="stack" data-testid="full-report-page">
-      <section>
-        <div className="eyebrow">PRO-отчёт</div>
-        <h1 className="ub">{report?.profession ?? "Загружаем полный отчёт..."}</h1>
-        <nav className="toc">
-          <a href="#map">Карта</a>
-          <a href="#voice">Голос</a>
-          <a href="#face">Лицо</a>
-          <a href="#roles">Роли</a>
-          <a href="#plan">План</a>
+    <article className="report-page stack" data-testid="full-report-page">
+      <section className="report-hero">
+        <div className="report-eyebrow">{text.eyebrow}</div>
+        <h1 className="report-title">{text.title}</h1>
+        <p className="report-lead">{report?.profession ?? text.loading}</p>
+        <nav className="report-toc">
+          {text.toc.map((item, index) => (
+            <a key={item} href={`#section-${index}`}>{item}</a>
+          ))}
         </nav>
       </section>
-      <section id="map"><IkigaiPremiumMap /></section>
+
+      <section id="section-0" className="report-section">
+        <h2>{text.sections[0]}</h2>
+        <img className="report-visual" src="/assets/ikigai-cones-transparent.png" alt="" />
+        <IkigaiPremiumMap />
+      </section>
+
       {report && (
         <>
-          <section id="voice" className="card"><h2>Анализ голоса</h2><p className="muted">{report.voice_analysis.confidence}</p><p>{report.voice_analysis.communication}</p></section>
-          <section id="face" className="card"><h2>Анализ лица</h2><p className="muted">{report.face_analysis.confidence}</p><p>{report.face_analysis.thinkingType}</p></section>
-          <section id="roles" className="grid grid-2">
-            {report.top_roles.map((role) => (
-              <div className="card" key={role.name}>
-                <div className="eyebrow">{role.match}% совпадение</div>
-                <h2>{role.name}</h2>
-                <p className="muted">{role.why}</p>
-              </div>
-            ))}
+          <section id="section-1" className="report-section">
+            <h2>{text.sections[1]}</h2>
+            <p className="report-lead">{report.summary}</p>
           </section>
-          <section id="plan" className="card"><h2>Карьерное действие</h2><p>{report.career_action}</p><p className="muted">{report.final_insight}</p></section>
+          <section id="section-2" className="report-section">
+            <h2>{text.sections[2]}</h2>
+            <div className="metric-grid">
+              {Object.entries(report.voice_analysis).map(([key, value]) => (
+                <div className="metric-card" key={key}>
+                  <h3>{key}</h3>
+                  <p>{value}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+          <section id="section-3" className="report-section">
+            <h2>{text.sections[3]}</h2>
+            <div className="metric-grid">
+              {Object.entries(report.face_analysis).map(([key, value]) => (
+                <div className="metric-card" key={key}>
+                  <h3>{key}</h3>
+                  <p>{value}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+          <section id="section-4" className="report-section">
+            <h2>{text.sections[4]}</h2>
+            <div className="roles-grid">
+              {report.top_roles.map((role) => (
+                <div className="role-card" key={role.name}>
+                  <div className="role-head">
+                    <h3>{role.name}</h3>
+                    <span>{role.match}% {text.match}</span>
+                  </div>
+                  <p>{role.why}</p>
+                  <div className="reason-item">{role.strengths}</div>
+                  <div className="reason-item">{role.risks}</div>
+                </div>
+              ))}
+            </div>
+          </section>
+          <section id="section-5" className="report-section">
+            <h2>{text.sections[5]}</h2>
+            <p className="report-lead">{report.top_roles.map((role) => role.risks).join(" ")}</p>
+          </section>
+          <section id="section-6" className="report-section">
+            <h2>{text.sections[6]}</h2>
+            <div className="highlight-box">{report.career_action}</div>
+          </section>
+          <section id="section-7" className="report-section">
+            <h2>{text.sections[7]}</h2>
+            <p className="report-lead">{report.final_insight}</p>
+          </section>
+          <section className="habit-bridge-card">
+            <div className="habit-bridge-kicker">{habitsText.trial}</div>
+            <div className="habit-bridge-title">{habitsText.currentHabit.title}</div>
+            <div className="habit-bridge-text">{habitsText.currentHabit.essence}</div>
+            <div className="habit-bridge-grid">
+              <div className="habit-bridge-item"><strong>{habitsText.currentHabit.focus}</strong>{habitsText.currentHabit.practice}</div>
+              <div className="habit-bridge-item"><strong>{habitsText.currentHabit.book}</strong>{habitsText.currentHabit.why}</div>
+              <div className="habit-bridge-item"><strong>{habitsText.dashboardTitle}</strong>{habitsText.dashboardCopy}</div>
+            </div>
+            <Link className="button" href="/habits">{habitsText.trialButton}</Link>
+          </section>
+          <div className="print-actions">
+            <button className="button" onClick={() => window.print()}>{text.savePdf}</button>
+          </div>
         </>
       )}
     </article>

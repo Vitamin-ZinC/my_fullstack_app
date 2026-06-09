@@ -324,7 +324,7 @@ export async function paymentRoutes(app: FastifyInstance) {
           currency: env.PRICE_CURRENCY,
           unit_amount: finalAmount,
           product_data: {
-            name: "LevelUP.AI PRO report"
+            name: "ORKEN.LIFE PRO report"
           }
         }
       }],

@@ -2,9 +2,13 @@
 
 import { useEffect, useState } from "react";
 import type { AdminStats, AppSetting, FeatureFlag, PromoCode, PromptTemplate } from "@levelup/contracts";
-import { adminApi } from "@/lib/api";
+import { adminApi, contentSettingKey, type TextLocale } from "@/lib/api";
+import { defaultSiteText } from "@/lib/messages";
+
+const textLocales: TextLocale[] = ["ru", "en"];
 
 export default function AdminPage() {
+  const adminText = defaultSiteText.ru.admin;
   const [password, setPassword] = useState("");
   const [authenticated, setAuthenticated] = useState(false);
   const [stats, setStats] = useState<AdminStats | null>(null);
@@ -13,6 +17,11 @@ export default function AdminPage() {
   const [flags, setFlags] = useState<FeatureFlag[]>([]);
   const [prompts, setPrompts] = useState<PromptTemplate[]>([]);
   const [promoCodes, setPromoCodes] = useState<PromoCode[]>([]);
+  const [activeTextLocale, setActiveTextLocale] = useState<TextLocale>("ru");
+  const [textDrafts, setTextDrafts] = useState<Record<TextLocale, string>>({
+    ru: JSON.stringify(defaultSiteText.ru, null, 2),
+    en: JSON.stringify(defaultSiteText.en, null, 2)
+  });
   const [promoForm, setPromoForm] = useState({
     code: "",
     description: "",
@@ -50,11 +59,24 @@ export default function AdminPage() {
       setFlags(nextFlags);
       setPrompts(nextPrompts);
       setPromoCodes(nextPromoCodes);
+      hydrateTextDrafts(nextSettings);
     } catch (reason) {
       setAuthenticated(false);
       window.sessionStorage.removeItem("levelup_admin_session");
       setMessage(reason instanceof Error ? reason.message : "Admin API failed");
     }
+  }
+
+  function hydrateTextDrafts(nextSettings: AppSetting[]) {
+    setTextDrafts({
+      ru: JSON.stringify(readTextSetting(nextSettings, "ru"), null, 2),
+      en: JSON.stringify(readTextSetting(nextSettings, "en"), null, 2)
+    });
+  }
+
+  function readTextSetting(nextSettings: AppSetting[], locale: TextLocale) {
+    const setting = nextSettings.find((item) => item.key === contentSettingKey(locale));
+    return setting?.value && typeof setting.value === "object" ? setting.value : defaultSiteText[locale];
   }
 
   async function login() {
@@ -95,10 +117,29 @@ export default function AdminPage() {
       locale: "ru",
       version: 1,
       status: "DRAFT",
-      title: "Full Ikigai report",
+      title: "Full ORKEN.LIFE report",
       content: "Generate a structured Ikigai career report from voice, face and questionnaire signals."
     });
     await refresh();
+  }
+
+  async function saveTexts(locale: TextLocale) {
+    setMessage("");
+    try {
+      const parsed = JSON.parse(textDrafts[locale]);
+      await adminApi.saveContent(locale, parsed);
+      setMessage(adminText.savedTexts);
+      await refresh();
+    } catch (reason) {
+      setMessage(reason instanceof SyntaxError ? adminText.invalidJson : reason instanceof Error ? reason.message : "Failed to save texts");
+    }
+  }
+
+  function resetTexts(locale: TextLocale) {
+    setTextDrafts((current) => ({
+      ...current,
+      [locale]: JSON.stringify(defaultSiteText[locale], null, 2)
+    }));
   }
 
   async function upsertPromoCode() {
@@ -127,18 +168,18 @@ export default function AdminPage() {
     <main className="page stack">
       <section className="stack">
         <div>
-          <div className="eyebrow">Admin</div>
-          <h1>Operations dashboard</h1>
+          <div className="eyebrow">{adminText.eyebrow}</div>
+          <h1>{adminText.title}</h1>
         </div>
         {!authenticated ? (
           <div className="grid grid-2">
-            <input className="input" data-testid="admin-password-input" type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Admin password" />
-            <button className="button" data-testid="admin-login-button" onClick={login}>Log in</button>
+            <input className="input" data-testid="admin-password-input" type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder={adminText.passwordPlaceholder} />
+            <button className="button" data-testid="admin-login-button" onClick={login}>{adminText.login}</button>
           </div>
         ) : (
           <div className="row">
-            <p className="muted" style={{ margin: 0 }}>Admin session is active for this browser tab.</p>
-            <button className="button secondary" style={{ width: "auto" }} onClick={logout}>Log out</button>
+            <p className="muted" style={{ margin: 0 }}>{adminText.activeSession}</p>
+            <button className="button secondary" style={{ width: "auto" }} onClick={logout}>{adminText.logout}</button>
           </div>
         )}
         {message && <div className="card" style={{ borderColor: "var(--danger)" }}>{message}</div>}
@@ -148,23 +189,52 @@ export default function AdminPage() {
         <>
           {stats && (
             <section className="grid grid-3" data-testid="admin-stats">
-              <Metric label="Analyses" value={stats.analysesTotal} />
-              <Metric label="Paid reports" value={stats.paymentsSucceeded} />
-              <Metric label="Revenue cents" value={stats.revenueSucceeded} />
-              <Metric label="Events 24h" value={stats.eventsLast24h} />
-              <Metric label="Failed" value={stats.failedAnalyses} />
-              <Metric label="Statuses" value={stats.analysesByStatus.map((item) => `${item.status}:${item.count}`).join(" ")} />
+              <Metric label={adminText.stats[0]} value={stats.analysesTotal} />
+              <Metric label={adminText.stats[1]} value={stats.paymentsSucceeded} />
+              <Metric label={adminText.stats[2]} value={stats.revenueSucceeded} />
+              <Metric label={adminText.stats[3]} value={stats.eventsLast24h} />
+              <Metric label={adminText.stats[4]} value={stats.failedAnalyses} />
+              <Metric label={adminText.stats[5]} value={stats.analysesByStatus.map((item) => `${item.status}:${item.count}`).join(" ")} />
             </section>
           )}
 
           <section className="grid grid-3">
-            <button className="button secondary" onClick={upsertLocaleSettings}>Seed locales</button>
-            <button className="button secondary" onClick={upsertFeatureFlag}>Seed flag</button>
-            <button className="button secondary" onClick={upsertPrompt}>Seed prompt</button>
+            <button className="button secondary" onClick={upsertLocaleSettings}>{adminText.seedLocales}</button>
+            <button className="button secondary" onClick={upsertFeatureFlag}>{adminText.seedFlag}</button>
+            <button className="button secondary" onClick={upsertPrompt}>{adminText.seedPrompt}</button>
           </section>
 
           <section className="card stack">
-            <h2>Promo codes</h2>
+            <div>
+              <h2>{adminText.textTitle}</h2>
+              <p className="muted">{adminText.textCopy}</p>
+            </div>
+            <div className="row" style={{ justifyContent: "flex-start" }}>
+              {textLocales.map((locale) => (
+                <button
+                  className={`button secondary ${activeTextLocale === locale ? "active-control" : ""}`}
+                  key={locale}
+                  onClick={() => setActiveTextLocale(locale)}
+                  style={{ width: "auto" }}
+                >
+                  {locale.toUpperCase()}
+                </button>
+              ))}
+            </div>
+            <textarea
+              className="input text-editor"
+              value={textDrafts[activeTextLocale]}
+              onChange={(event) => setTextDrafts((current) => ({ ...current, [activeTextLocale]: event.target.value }))}
+              spellCheck={false}
+            />
+            <div className="grid grid-2">
+              <button className="button" onClick={() => saveTexts(activeTextLocale)}>{adminText.saveTexts}</button>
+              <button className="button secondary" onClick={() => resetTexts(activeTextLocale)}>{adminText.resetTexts}</button>
+            </div>
+          </section>
+
+          <section className="card stack">
+            <h2>{adminText.promoTitle}</h2>
             <div className="grid grid-3">
               <input className="input" value={promoForm.code} onChange={(event) => setPromoForm({ ...promoForm, code: event.target.value })} placeholder="Code" />
               <input className="input" value={promoForm.description} onChange={(event) => setPromoForm({ ...promoForm, description: event.target.value })} placeholder="Description" />
@@ -199,10 +269,10 @@ export default function AdminPage() {
           </section>
 
           <section className="grid grid-2">
-            <List title="Settings" items={settings.map((item) => `${item.key}: ${JSON.stringify(item.value)}`)} />
-            <List title="Feature flags" items={flags.map((item) => `${item.key}: ${item.enabled}`)} />
-            <List title="Prompts" items={prompts.map((item) => `${item.key}/${item.locale}/v${item.version}: ${item.status}`)} />
-            <List title="Recent analyses" items={analyses.map((item) => JSON.stringify(item).slice(0, 220))} />
+            <List title={adminText.lists[0]} items={settings.map((item) => `${item.key}: ${JSON.stringify(item.value).slice(0, 180)}`)} />
+            <List title={adminText.lists[1]} items={flags.map((item) => `${item.key}: ${item.enabled}`)} />
+            <List title={adminText.lists[2]} items={prompts.map((item) => `${item.key}/${item.locale}/v${item.version}: ${item.status}`)} />
+            <List title={adminText.lists[3]} items={analyses.map((item) => JSON.stringify(item).slice(0, 220))} />
           </section>
         </>
       )}

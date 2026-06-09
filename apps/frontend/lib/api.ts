@@ -11,10 +11,12 @@ import type {
   ReportFull
 } from "@levelup/contracts";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
+export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 const SESSION_ID_KEY = "levelup_session_id";
 const GUEST_TOKEN_KEY = "levelup_guest_token";
 const LOCALE_KEY = "levelup_locale";
+
+export type TextLocale = "ru" | "en";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
@@ -37,12 +39,13 @@ function hasWindow() {
   return typeof window !== "undefined";
 }
 
-export function getStoredLocale() {
+export function getStoredLocale(): TextLocale {
   if (!hasWindow()) return "ru";
-  return window.localStorage.getItem(LOCALE_KEY) ?? navigator.language?.slice(0, 2) ?? "ru";
+  const locale = window.localStorage.getItem(LOCALE_KEY) ?? navigator.language?.slice(0, 2) ?? "ru";
+  return locale === "en" ? "en" : "ru";
 }
 
-export function setStoredLocale(locale: string) {
+export function setStoredLocale(locale: TextLocale) {
   if (!hasWindow()) return;
   window.localStorage.setItem(LOCALE_KEY, locale);
 }
@@ -51,11 +54,10 @@ function sessionHeaders() {
   if (!hasWindow()) return {};
   const sessionId = window.sessionStorage.getItem(SESSION_ID_KEY);
   const guestToken = window.sessionStorage.getItem(GUEST_TOKEN_KEY);
-  const locale = getStoredLocale();
   return {
     ...(sessionId ? { "x-session-id": sessionId } : {}),
     ...(guestToken ? { "x-guest-token": guestToken } : {}),
-    "x-locale": locale
+    "x-locale": getStoredLocale()
   };
 }
 
@@ -75,6 +77,12 @@ export async function ensureGuestSession() {
   window.sessionStorage.setItem(GUEST_TOKEN_KEY, session.guestToken);
   return session;
 }
+
+export const contentSettingKey = (locale: TextLocale) => `site_texts_${locale}`;
+
+export const contentApi = {
+  get: (locale: TextLocale) => request<{ locale: TextLocale; value: unknown | null }>(`/api/content/${locale}`)
+};
 
 export const api = {
   createGuest: () => ensureGuestSession(),
@@ -103,7 +111,8 @@ export const api = {
   trackEvent: (name: string, properties?: Record<string, unknown>, analysisId?: string) => request<{ ok: true }>("/api/events", {
     method: "POST",
     body: JSON.stringify({ name, properties, analysisId, locale: getStoredLocale() })
-  })
+  }),
+  getContent: contentApi.get
 };
 
 export async function uploadMedia(uploadUrl: string, blob: Blob) {
@@ -183,5 +192,6 @@ export const adminApi = {
   setPromoCodeActive: (id: string, active: boolean) => adminRequest<PromoCode>(`/api/admin/promo-codes/${encodeURIComponent(id)}/active`, {
     method: "PUT",
     body: JSON.stringify({ active })
-  })
+  }),
+  saveContent: (locale: TextLocale, value: unknown) => adminApi.upsertSetting(contentSettingKey(locale), value)
 };

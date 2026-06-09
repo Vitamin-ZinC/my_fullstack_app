@@ -5,23 +5,25 @@ import { useEffect, useState } from "react";
 import type { ReportFree } from "@levelup/contracts";
 import { IkigaiPremiumMap } from "@/components/IkigaiPremiumMap";
 import { api } from "@/lib/api";
+import { useSiteText } from "@/lib/useSiteText";
 
 export default function FreeReportPage({ params }: { params: { analysisId: string } }) {
+  const text = useSiteText().report.free;
   const [report, setReport] = useState<ReportFree | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
     api.getFreeReport(params.analysisId)
       .then((result) => setReport(result.reportFree))
-      .catch((reason) => setError(reason instanceof Error ? reason.message : "Не удалось загрузить отчёт"));
-  }, [params.analysisId]);
+      .catch((reason) => setError(reason instanceof Error ? reason.message : text.loadError));
+  }, [params.analysisId, text.loadError]);
 
   return (
     <article className="stack" data-testid="free-report-page">
       <div>
-        <div className="eyebrow">Бесплатный отчёт</div>
-        <h1 className="ub">{report ? `Базовая роль: ${report.profession}` : "Загружаем отчёт..."}</h1>
-        <p className="muted">{report?.summary ?? "Отчёт появится после завершения анализа."}</p>
+        <div className="eyebrow">{text.eyebrow}</div>
+        <h1 className="ub">{report ? text.title : text.loading}</h1>
+        <p className="muted">{report ? `${text.baseRole}: ${report.profession}. ${report.summary}` : text.pending}</p>
       </div>
       {error && <div className="card" style={{ borderColor: "var(--danger)" }}>{error}</div>}
       <IkigaiPremiumMap />
@@ -35,7 +37,7 @@ export default function FreeReportPage({ params }: { params: { analysisId: strin
           ))}
         </div>
       )}
-      <Link className="button" data-testid="open-pro-report-link" href={`/pay/${params.analysisId}`}>Открыть PRO-отчёт</Link>
+      <Link className="button" data-testid="open-pro-report-link" href={`/pay/${params.analysisId}`}>{text.unlock}</Link>
     </article>
   );
 }

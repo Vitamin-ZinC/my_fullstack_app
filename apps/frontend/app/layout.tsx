@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { BRAND_NAME } from "@/lib/messages";
 
 export const metadata: Metadata = {
-  title: "Икигай — LevelUP.AI",
+  title: BRAND_NAME,
   description: "AI диагностика Икигай по голосу, лицу и карьерным сигналам"
 };
 

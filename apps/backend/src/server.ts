@@ -9,6 +9,7 @@ import { env } from "./env.js";
 import { adminRoutes } from "./routes/admin.js";
 import { authRoutes } from "./routes/auth.js";
 import { analysisRoutes } from "./routes/analyses.js";
+import { contentRoutes } from "./routes/content.js";
 import { eventRoutes } from "./routes/events.js";
 import { paymentRoutes } from "./routes/payments.js";
 
@@ -40,6 +41,7 @@ app.addContentTypeParser(["audio/webm", "image/jpeg", "application/octet-stream"
 });
 
 await app.register(authRoutes);
+await app.register(contentRoutes);
 await app.register(analysisRoutes);
 await app.register(paymentRoutes);
 await app.register(eventRoutes);

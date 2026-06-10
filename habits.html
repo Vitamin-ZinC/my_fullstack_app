@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>IKIGAI by LevelUP.AI</title>
+  <title>IKIGAI by ORKEN.LIFE</title>
 
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -273,7 +273,7 @@ function buildPersonalHabit(profile) {
     essence: `Ваш платный отчет показывает вектор «${profile.topRole}». Сейчас задача не проходить новый опрос, а ежедневно превращать этот вывод в маленькое действие: формулировку ценности, проверку спроса, разговор с аудиторией или фиксацию инсайта.`,
     practice: 'Сегодня выберите один шаг: описать результат, за который Вам могут заплатить; написать одному человеку из целевой аудитории; или зафиксировать, какая задача дала энергию и почему.',
     why: `${profile.faceInsight} ${profile.voiceInsight} Поэтому трекер усиливает именно Ваш выявленный в отчете вектор, а не строит случайный план.`,
-    book: 'Персональный план LevelUP.AI',
+    book: 'Персональный план ORKEN.LIFE',
     rhythm: 'Каждый день 10–15 минут',
   };
 }
@@ -515,7 +515,7 @@ function Onboarding({ onComplete }) {
       <div className="gc p-8 max-w-md w-full slide-in text-center">
         <div className="mb-4 flex justify-center"><div style={{width:88,height:88,borderRadius:'50%',overflow:'hidden',background:'#0d2137',boxShadow:'0 0 30px rgba(0,212,255,0.25)'}}><PenguinIcon size={88} /></div></div>
         <h1 className="text-3xl font-bold mb-2" style={{fontFamily:'Space Grotesk'}}>
-          <span className="gt">IKIGAI by LevelUP.AI</span>
+          <span className="gt">IKIGAI by ORKEN.LIFE</span>
         </h1>
         <p className="text-slate-400 text-sm mb-6">Трекер превращает выводы Икигай в ежедневные действия</p>
         <div className="text-left mb-6">
@@ -645,7 +645,7 @@ function Sidebar({ mobileOpen, onClose }) {
         <div className="flex items-center gap-2 mb-8 px-2">
           <PenguinHeadIcon size={22} />
           <div>
-            <div className="text-sm font-bold gt" style={{fontFamily:'Space Grotesk',fontSize:'12px'}}>IKIGAI by LevelUP.AI</div>
+            <div className="text-sm font-bold gt" style={{fontFamily:'Space Grotesk',fontSize:'12px'}}>IKIGAI by ORKEN.LIFE</div>
           </div>
         </div>
         <nav className="flex-1 space-y-1">
@@ -1418,7 +1418,7 @@ function Journey() {
           
           const title = encodeURIComponent(`✦ IKIGAI: ${habitTitle}`);
           const details = encodeURIComponent(
-            `Ежедневная отметка привычки в IKIGAI by LevelUP.AI
+            `Ежедневная отметка привычки в IKIGAI by ORKEN.LIFE
 
 ` +
             `Привычка: ${habitTitle}
@@ -1428,7 +1428,7 @@ function Journey() {
 ` +
             `Открыть трекер и отметить сегодняшний день.`
           );
-          const loc = encodeURIComponent('IKIGAI by LevelUP.AI');
+          const loc = encodeURIComponent('IKIGAI by ORKEN.LIFE');
           
           // RRULE: daily for 7 days (one habit week)
           const rrule = encodeURIComponent('RRULE:FREQ=DAILY;COUNT=7');
@@ -1787,7 +1787,7 @@ function Archive() {
             {[...(s.completedWeeks||[])].reverse().map((w, i) => {
               const pct = w.pct || 0;
               const status = pct >= 85 ? {label:'Успех 🎯', color:'#10b981'} : pct >= 57 ? {label:'Нормальный темп', color:'#f59e0b'} : {label:'Начало адаптации', color:'#a855f7'};
-              const shareText = `✦ IKIGAI by LevelUP.AI
+              const shareText = `✦ IKIGAI by ORKEN.LIFE
 Неделя ${w.week}: ${w.title}
 Выполнено: ${pct}% · ${w.xpEarned} XP
 "${w.insight || 'Сделано.'}"`;
@@ -1831,7 +1831,7 @@ function AINavigator() {
   const cycle = CYCLES[s.currentCycle-1];
   const habit = cycle?.habits[s.currentWeek-1];
 
-  const sysPrompt = `Ты — Пингви, AI-наставник приложения LevelUP.AI. Ты умный, тёплый и чуть ироничный.
+  const sysPrompt = `Ты — Пингви, AI-наставник приложения ORKEN.LIFE. Ты умный, тёплый и чуть ироничный.
 Пользователь: ${s.name}. Цикл: ${cycle?.sub} — ${cycle?.title}. Неделя: ${s.currentWeek}.
 Текущая привычка: «${habit?.title}». Слабая зона Икигай: ${ZONES[s.ikigaiWeakZone]?.name}.
 Метрики: Энергия ${s.energyLevel}/10, Ясность ${s.clarityLevel}/10, Устойчивость ${s.stabilityLevel}/10. Стрик: ${s.streakDays} дней.
@@ -1950,7 +1950,7 @@ function AINavigator() {
         <h1 className="text-2xl font-bold" style={{fontFamily:'Space Grotesk'}}>
           🤖 <span className="gt">AI Навигатор</span>
         </h1>
-        <p className="text-slate-500 text-sm mt-1">Пингви — твой личный AI-наставник в LevelUP.AI</p>
+        <p className="text-slate-500 text-sm mt-1">Пингви — твой личный AI-наставник в ORKEN.LIFE</p>
       </div>
 
       {/* Пингви info */}
@@ -2457,7 +2457,7 @@ function Settings() {
                     const end = new Date(start.getTime() + 15*60000);
                     const fmt = d => d.toISOString().replace(/[-:]/g,'').split('.')[0]+'Z';
                     const title = encodeURIComponent('✦ IKIGAI: Привычка дня');
-                    const details = encodeURIComponent('Ежедневная отметка привычки · IKIGAI by LevelUP.AI');
+                    const details = encodeURIComponent('Ежедневная отметка привычки · IKIGAI by ORKEN.LIFE');
                     const rrule = encodeURIComponent('RRULE:FREQ=DAILY;COUNT=7');
                     window.open(`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${fmt(start)}/${fmt(end)}&details=${details}&recur=${rrule}&sf=true&output=xml`,'_blank');
                   }} style={{background:'#4285f4',color:'#fff'}} className="w-full py-2 rounded-xl text-sm font-semibold">
@@ -2495,7 +2495,7 @@ function GuideScreen() {
     {
       id: 'welcome', icon: '🐧', title: 'Знакомство с Пингви',
       content: [
-        { type: 'heading', text: 'Добро пожаловать в LevelUP.AI Ikigai' },
+        { type: 'heading', text: 'Добро пожаловать в ORKEN.LIFE Ikigai' },
         { type: 'text', text: 'Пингви — твой личный AI-наставник. Он всегда онлайн, помнит твой путь и готов поддержать в любой момент.' },
         { type: 'text', text: 'Программа рассчитана на 1 год: 4 цикла по 3 месяца, каждый цикл — 12 привычек. Это не гонка — это твой ритм.' },
         { type: 'tip', text: '💡 Совет: Открывай Пингви в любой момент — спроси о своём состоянии, попроси совет или просто поговори.' },
@@ -2701,7 +2701,7 @@ function WeekCompleteModal({ data, onDismiss, onShare }) {
     : pct >= 57 ? '💪 Нормальный темп адаптации'
     : '🌱 Начало пути — главное не бросать';
   const statusColor = pct === 100 ? '#f59e0b' : pct >= 85 ? '#10b981' : pct >= 57 ? '#00d4ff' : '#a855f7';
-  const shareText = `✦ IKIGAI by LevelUP.AI\nНеделя ${data.week}: ${data.title}\nВыполнено: ${pct}% · +${data.xpEarned} XP\n#ikigai #levelup #habits`;
+  const shareText = `✦ IKIGAI by ORKEN.LIFE\nНеделя ${data.week}: ${data.title}\nВыполнено: ${pct}% · +${data.xpEarned} XP\n#ikigai #levelup #habits`;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{background:'rgba(0,0,0,0.8)',backdropFilter:'blur(8px)'}}>

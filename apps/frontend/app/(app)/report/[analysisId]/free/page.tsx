@@ -21,27 +21,31 @@ export default function FreeReportPage() {
 
   return (
     <article className="stack" data-testid="free-report-page">
-      <div>
+      <div className="free-report-intro">
         <div className="eyebrow">{text.eyebrow}</div>
         <h1 className="ub">{report ? text.title : text.loading}</h1>
-        <p className="muted">{report ? `${text.baseRole}: ${report.profession}. ${report.summary}` : text.pending}</p>
+        <p className="muted">{report ? text.subtitle : text.pending}</p>
       </div>
       {error && <div className="card" style={{ borderColor: "var(--danger)" }}>{error}</div>}
-      <IkigaiPremiumMap freeMode />
+      <div className="card free-report-map-card">
+        <IkigaiPremiumMap freeMode />
+      </div>
       {report && (
-        <div className="grid grid-2">
-          {Object.entries(report.ikigai_scores).map(([key, value]) => (
-            <div className="card" key={key}>
-              <div className="eyebrow">{key}</div>
-              <h2>{value}%</h2>
-            </div>
-          ))}
+        <div className="card cyan-border free-status-card">
+          <div className="ub">{text.statusTitle}</div>
+          <p>{text.statusIntro}</p>
+          <h2 className="ub cyan">{report.profession}</h2>
+          <p>{report.summary}</p>
         </div>
       )}
       {report && (
-        <button className="button" data-testid="open-pro-report-link" onClick={() => window.location.assign(`/pay/${analysisId}`)}>
-          {text.unlock}
-        </button>
+        <div className="card cyan-border free-upgrade-card">
+          <p>{text.upgradeCopy}</p>
+          <button className="button" data-testid="open-pro-report-link" onClick={() => window.location.assign(`/pay/${analysisId}`)}>
+            {text.unlock}
+          </button>
+          <div className="very-muted free-upgrade-note">{text.upgradeNote}</div>
+        </div>
       )}
     </article>
   );

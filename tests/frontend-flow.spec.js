@@ -50,7 +50,7 @@ test("ORKEN.LIFE frontend flow works with mocked backend", async ({ page }) => {
   await page.route(`${apiBase}/api/analyses/analysis-test/status`, async (route) => fulfillJson(route, { status: "DONE", progress: 100 }));
   await page.route(`${apiBase}/api/analyses/analysis-test/report/free`, async (route) => fulfillJson(route, {
       reportFree: {
-        profession: "AI product strategist",
+        profession: "Продуктовый стратег",
         summary: "Короткий бесплатный отчёт сформирован.",
         ikigai_scores: { love: 82, good_at: 77, world_needs: 74, paid_for: 69 }
       }
@@ -88,10 +88,13 @@ test("ORKEN.LIFE frontend flow works with mocked backend", async ({ page }) => {
   await page.getByTestId("ikigai-submit-button").click();
   await expect(page).toHaveURL(/\/flow\/analysis$/);
   await expect(page.getByTestId("free-report-link")).toBeVisible({ timeout: 10000 });
+  await expect(page.getByTestId("analysis-email-input")).toBeVisible();
 
+  await page.getByTestId("analysis-email-input").fill("test@orken.life");
   await page.getByTestId("free-report-link").click();
   await expect(page).toHaveURL(/\/report\/analysis-test\/free$/);
-  await expect(page.getByText("AI product strategist")).toBeVisible();
+  await expect(page.getByText("Profession / Профессия")).toBeVisible();
+  await expect(page.getByText("Продуктовый стратег")).toBeVisible();
   await expect(page.getByTestId("open-pro-report-link")).toBeVisible();
 
   await page.getByTestId("open-pro-report-link").click();

@@ -27,7 +27,7 @@ const schema = z.object({
   S3_SECRET_ACCESS_KEY: z.string().optional(),
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
-  PRICE_AMOUNT: z.coerce.number().default(990),
+  PRICE_AMOUNT: z.coerce.number().default(300),
   PRICE_CURRENCY: z.string().default("usd"),
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_MODEL: z.string().default("gpt-4o-mini"),

@@ -2,6 +2,7 @@ import { Worker } from "bullmq";
 import { redis } from "../lib/queue.js";
 import { emitProgress } from "../lib/progress.js";
 import { prisma } from "../lib/prisma.js";
+import { env } from "../env.js";
 import { buildFallbackReport } from "../services/report.js";
 import { generateOpenAiReport } from "../services/aiReport.js";
 
@@ -27,8 +28,9 @@ export const worker = new Worker("analysis", async (job) => {
     include: { mediaAssets: true }
   });
   const answers = analysis.ikigaiAnswers as any;
-  let report = buildFallbackReport(answers);
-  let reportModel = "fallback";
+  const allowFallbackReport = env.NODE_ENV !== "production" || env.DEV_TOOLS_ENABLED;
+  let report = allowFallbackReport ? buildFallbackReport(answers) : null;
+  let reportModel = allowFallbackReport ? "fallback" : "";
 
   try {
     emitProgress(analysisId, { progress: 96, log: "Generating AI report...", stage: "ai" });
@@ -47,11 +49,22 @@ export const worker = new Worker("analysis", async (job) => {
         log: `AI report generated (${generated.mediaSignals.audioTranscript ? "audio" : "no audio"}, ${generated.mediaSignals.photoInput ? "photo" : "no photo"})`
       });
     } else {
+      if (!allowFallbackReport) {
+        throw new Error("AI report generation is not configured");
+      }
       emitProgress(analysisId, { progress: 98, stage: "fallback", log: "AI is not configured; using fallback report" });
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : "AI report generation failed";
+    if (!allowFallbackReport) {
+      emitProgress(analysisId, { progress: 98, stage: "failed", log: message });
+      throw error;
+    }
     emitProgress(analysisId, { progress: 98, stage: "fallback", log: `${message}; using fallback report` });
+  }
+
+  if (!report) {
+    throw new Error("AI report generation did not produce a report");
   }
 
   const reportFree = {

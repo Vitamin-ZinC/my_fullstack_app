@@ -825,12 +825,12 @@ svg {
   filter: drop-shadow(0 0 24px rgba(255, 198, 74, 0.82)) drop-shadow(0 0 42px rgba(0, 212, 255, 0.24));
 }
 
-.ikigai-premium-map.free-mode::after {
-  content: "Остальные зоны доступны в полном отчёте";
-  position: absolute;
-  left: 50%;
-  bottom: 10px;
-  transform: translateX(-50%);
+.ikigai-lock-badge {
+  position: relative;
+  z-index: 5;
+  width: fit-content;
+  max-width: calc(100% - 28px);
+  margin: -42px auto 18px;
   padding: 10px 14px;
   border-radius: 999px;
   background: rgba(0, 0, 0, 0.72);
@@ -838,9 +838,9 @@ svg {
   color: #fff;
   font-family: "Unbounded", sans-serif;
   font-size: 10px;
-  white-space: nowrap;
+  line-height: 1.35;
+  text-align: center;
   box-shadow: 0 0 24px rgba(0, 212, 255, 0.16);
-  z-index: 5;
 }
 
 .ikigai-analysis-panel {
@@ -1343,7 +1343,8 @@ svg {
 .analysis-stage {
   display: flex;
   align-items: center;
-  gap: 9px;
+  justify-content: space-between;
+  gap: 12px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.035);
   border-radius: 13px;
@@ -1352,9 +1353,26 @@ svg {
   font-size: 12px;
 }
 
-.analysis-stage span {
-  color: rgba(255, 255, 255, 0.35);
-  width: 18px;
+.analysis-stage-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.analysis-stage-dot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.analysis-stage-badge {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  padding: 5px 10px;
+  color: rgba(255, 255, 255, 0.48);
+  font-size: 10px;
 }
 
 .analysis-stage.active {
@@ -1363,16 +1381,30 @@ svg {
   background: rgba(0, 212, 255, 0.08);
 }
 
-.analysis-stage.active span {
+.analysis-stage.active .analysis-stage-dot {
+  background: var(--cyan);
+  box-shadow: 0 0 10px rgba(0, 212, 255, 0.82);
+  animation: pulse 1.5s infinite;
+}
+
+.analysis-stage-badge.active {
+  border-color: rgba(0, 212, 255, 0.35);
   color: var(--cyan);
+  background: rgba(0, 212, 255, 0.08);
 }
 
 .analysis-stage.done {
   color: rgba(255, 255, 255, 0.74);
 }
 
-.analysis-stage.done span {
+.analysis-stage.done .analysis-stage-dot {
+  background: var(--green);
+}
+
+.analysis-stage-badge.done {
+  border-color: rgba(32, 229, 137, 0.35);
   color: var(--green);
+  background: rgba(32, 229, 137, 0.08);
 }
 
 .neuro-log {
@@ -1392,6 +1424,79 @@ svg {
   line-height: 1.55;
   padding: 7px 0;
   border-top: 1px solid rgba(255, 255, 255, 0.055);
+}
+
+.neuro-log-item.done .neuro-log-dot {
+  background: var(--green);
+  box-shadow: 0 0 10px rgba(32, 229, 137, 0.6);
+}
+
+.neuro-log-item.active {
+  color: #fff;
+  border: 1px solid rgba(0, 212, 255, 0.28);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: rgba(0, 212, 255, 0.06);
+  box-shadow: 0 0 20px rgba(0, 212, 255, 0.08);
+}
+
+.analysis-contact-card {
+  display: grid;
+  gap: 14px;
+}
+
+.analysis-contact-card h2 {
+  font-size: 18px;
+}
+
+.analysis-contact-card p {
+  line-height: 1.7;
+}
+
+.form-error {
+  color: var(--danger);
+  font-size: 12px;
+}
+
+.free-report-intro .eyebrow {
+  color: rgba(255, 255, 255, 0.42);
+  letter-spacing: 3px;
+}
+
+.free-report-intro h1 {
+  font-size: 20px;
+  line-height: 1.25;
+}
+
+.free-report-map-card {
+  padding: 16px;
+  overflow: hidden;
+}
+
+.free-status-card .ub:first-child {
+  font-size: 11px;
+  color: rgba(0, 212, 255, 0.7);
+  margin-bottom: 8px;
+}
+
+.free-status-card p,
+.free-upgrade-card p {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 13px;
+  line-height: 1.7;
+  margin-bottom: 12px;
+}
+
+.free-status-card h2 {
+  font-size: 22px;
+  line-height: 1.25;
+  margin-bottom: 8px;
+}
+
+.free-upgrade-note {
+  font-size: 11px;
+  text-align: center;
+  margin-top: 8px;
 }
 
 .neuro-log-item:first-of-type {

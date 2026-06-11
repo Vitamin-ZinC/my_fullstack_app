@@ -55,7 +55,7 @@ export default function IkigaiPage() {
       <p className="muted flow-copy">{text.copy}</p>
 
       <div className="card cyan-border ikigai-flow-card">
-        <IkigaiPremiumMap />
+        <IkigaiPremiumMap showPanel={false} />
         <div className="ikigai-factor-list">
           {siteText.landing.modelFactors.map((factor) => <div key={factor}>{factor}</div>)}
         </div>

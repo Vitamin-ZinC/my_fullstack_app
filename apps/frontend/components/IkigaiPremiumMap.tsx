@@ -9,6 +9,7 @@ type IkigaiPremiumMapProps = {
   allActive?: boolean;
   freeMode?: boolean;
   landingMode?: boolean;
+  showPanel?: boolean;
 };
 
 const zoneSubtitles: Record<ZoneId, string> = {
@@ -19,7 +20,7 @@ const zoneSubtitles: Record<ZoneId, string> = {
   ikigai: "центр реализации"
 };
 
-export function IkigaiPremiumMap({ allActive = false, freeMode = false, landingMode = false }: IkigaiPremiumMapProps) {
+export function IkigaiPremiumMap({ allActive = false, freeMode = false, landingMode = false, showPanel = true }: IkigaiPremiumMapProps) {
   const text = useSiteText().ikigaiMap;
   const [active, setActive] = useState<ZoneId>("ikigai");
   const activeId = freeMode ? "profession" : active;
@@ -70,7 +71,8 @@ export function IkigaiPremiumMap({ allActive = false, freeMode = false, landingM
           </g>
         </g>
       </svg>
-      {!allActive && !landingMode && (
+      {freeMode && <div className="ikigai-lock-badge">{text.lockedNote}</div>}
+      {showPanel && !allActive && !landingMode && (
         <div className="ikigai-analysis-panel">
           <h3>{activeZone.title}</h3>
           <p>{activeZone.insight}</p>

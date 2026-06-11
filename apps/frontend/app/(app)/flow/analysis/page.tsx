@@ -6,12 +6,16 @@ import type { AnalysisProgressEvent } from "@levelup/contracts";
 import { api, createProgressSource, getAnalysisDraft } from "@/lib/api";
 import { useSiteText } from "@/lib/useSiteText";
 
+const logThresholds = [5, 18, 32, 48, 64, 80, 94];
+
 export default function AnalysisPage() {
   const text = useSiteText().flow.analysis;
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState("QUEUED");
   const [log, setLog] = useState(text.waiting);
   const [analysisId, setAnalysisId] = useState("");
+  const [email, setEmail] = useState("");
+  const [emailError, setEmailError] = useState("");
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -61,11 +65,38 @@ export default function AnalysisPage() {
     return Math.min(text.stages.length - 1, Math.floor(normalizedProgress / Math.max(1, 100 / text.stages.length)));
   }, [normalizedProgress, status, text.stages.length]);
 
+  function stageState(index: number) {
+    if (status === "DONE" || index < activeStage) return "done";
+    if (index === activeStage) return "active";
+    return "wait";
+  }
+
+  function logState(index: number) {
+    const threshold = logThresholds[index] ?? 0;
+    if (status === "DONE") return index === text.neuralLog.length - 1 ? "active" : "done";
+    if (normalizedProgress > threshold + 12) return "done";
+    if (normalizedProgress >= threshold) return "active";
+    return "";
+  }
+
+  function saveEmailAndOpen() {
+    const trimmed = email.trim();
+    if (!trimmed) {
+      setEmailError(text.contactError);
+      return;
+    }
+
+    window.sessionStorage.setItem("levelup_contact_email", trimmed);
+    window.location.assign(`/report/${analysisId}/free`);
+  }
+
+  const done = status === "DONE";
+
   return (
     <div className="flow-inner" data-testid="analysis-page">
       <div className="ub very-muted analysis-kicker">{text.eyebrow}</div>
-      <h1 className="ub flow-title">{text.title}</h1>
-      <p className="muted flow-copy">{status}</p>
+      <h1 className="ub flow-title">{done ? text.completeTitle : text.title}</h1>
+      <p className="muted flow-copy">{done ? text.completeSubtitle : text.subtitle}</p>
 
       <div className="analysis-video-card">
         <video src="/assets/processing-analysis.mp4" autoPlay muted loop playsInline />
@@ -75,25 +106,33 @@ export default function AnalysisPage() {
         <div className="analysis-orb" style={{ "--progress": `${normalizedProgress * 3.6}deg` } as CSSProperties}>
           <span className="ub">{normalizedProgress}%</span>
         </div>
-        <p className="muted">{log}</p>
+        <p className="muted">{done ? text.ready : log}</p>
       </div>
 
       <div className="card">
         <div className="ub muted instruction-title">{text.stagesTitle}</div>
         <div className="analysis-stage-list">
-          {text.stages.map((stage, index) => (
-            <div className={`analysis-stage ${index < activeStage ? "done" : index === activeStage ? "active" : ""}`} key={stage}>
-              <span>{index < activeStage ? "✓" : index === activeStage ? "●" : "○"}</span>
-              {stage}
+          {text.stages.map((stage, index) => {
+            const state = stageState(index);
+            return (
+            <div className={`analysis-stage ${state}`} key={stage}>
+              <div className="analysis-stage-main">
+                <span className="analysis-stage-dot" />
+                {stage}
+              </div>
+              <span className={`analysis-stage-badge ${state}`}>
+                {state === "done" ? text.stageDone : state === "active" ? text.stageActive : text.stageQueued}
+              </span>
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
       <div className="neuro-log">
         <div className="ub muted instruction-title">{text.logTitle}</div>
-        {[text.waiting, log, status === "DONE" ? text.ready : text.processing].map((item, index) => (
-          <div className="neuro-log-item" key={`${item}-${index}`}>
+        {text.neuralLog.map((item, index) => (
+          <div className={`neuro-log-item ${logState(index)}`} key={item}>
             <span className="neuro-log-dot" />
             {item}
           </div>
@@ -102,9 +141,26 @@ export default function AnalysisPage() {
 
       {error && <div className="card error-card">{error}</div>}
       {status === "DONE" && analysisId && (
-        <button className="button" data-testid="free-report-link" onClick={() => window.location.assign(`/report/${analysisId}/free`)}>
-          {text.openReport}
-        </button>
+        <div className="card cyan-border analysis-contact-card">
+          <h2 className="ub">{text.contactTitle}</h2>
+          <p className="muted">{text.contactCopy}</p>
+          <input
+            className="input"
+            data-testid="analysis-email-input"
+            inputMode="email"
+            type="email"
+            value={email}
+            onChange={(event) => {
+              setEmail(event.target.value);
+              setEmailError("");
+            }}
+            placeholder={text.contactPlaceholder}
+          />
+          {emailError && <div className="form-error">{emailError}</div>}
+          <button className="button" data-testid="free-report-link" onClick={saveEmailAndOpen}>
+            {text.contactSubmit}
+          </button>
+        </div>
       )}
     </div>
   );

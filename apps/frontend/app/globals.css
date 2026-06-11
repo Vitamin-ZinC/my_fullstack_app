@@ -112,10 +112,8 @@ svg {
 .logo-mark {
   width: 34px;
   height: 34px;
-  border-radius: 9px;
   overflow: hidden;
-  background: #000;
-  box-shadow: 0 0 12px rgba(0, 212, 255, 0.18);
+  background: transparent;
   flex: none;
 }
 
@@ -124,7 +122,7 @@ svg {
   width: 100%;
   height: 100%;
   display: block;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .logo-text .brand {
@@ -132,14 +130,14 @@ svg {
   font-size: 11px;
   font-weight: 900;
   color: var(--cyan);
-  letter-spacing: 0;
+  letter-spacing: 2px;
   text-shadow: 0 0 10px rgba(0, 212, 255, 0.5);
 }
 
 .logo-text .sub {
   font-size: 9px;
   color: rgba(255, 255, 255, 0.4);
-  letter-spacing: 0;
+  letter-spacing: 1px;
   margin-top: 1px;
 }
 
@@ -282,7 +280,7 @@ svg {
   min-height: 52px;
   transition: all 0.3s;
   box-shadow: 0 0 30px rgba(0, 212, 255, 0.2), 0 4px 20px rgba(0, 0, 0, 0.4);
-  letter-spacing: 0;
+  letter-spacing: 0.5px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -541,7 +539,7 @@ svg {
 
 .landing-kicker {
   font-size: 11px;
-  letter-spacing: 0;
+  letter-spacing: 4px;
   margin-bottom: 12px;
 }
 
@@ -627,6 +625,10 @@ svg {
   color: #fff;
 }
 
+.landing-small-copy strong.cyan {
+  color: var(--cyan);
+}
+
 .landing-two-col {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -661,19 +663,19 @@ svg {
 }
 
 .landing-step-number {
-  width: 25px;
-  height: 25px;
-  border-radius: 50%;
-  background: rgba(0, 212, 255, 0.12);
-  border: 1px solid rgba(0, 212, 255, 0.28);
-  color: var(--cyan);
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  background: transparent;
+  border: none;
+  color: inherit;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex: none;
-  font-family: "Unbounded", sans-serif;
-  font-size: 12px;
-  font-weight: 800;
+  font-family: inherit;
+  font-size: 20px;
+  font-weight: 400;
 }
 
 .landing-step-title {
@@ -726,9 +728,149 @@ svg {
   isolation: isolate;
 }
 
+.ikigai-premium-map svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  background: transparent;
+  overflow: visible;
+}
+
 .ikigai-premium-map.landing-mode {
   margin-top: 2px;
   margin-bottom: 10px;
+}
+
+.ikigai-sector {
+  cursor: pointer;
+  transition: opacity 0.25s ease, filter 0.25s ease, transform 0.25s ease;
+  transform-origin: 50% 50%;
+  filter: drop-shadow(0 0 10px rgba(0, 212, 255, 0.22));
+}
+
+.ikigai-sector .sector-hit {
+  pointer-events: all;
+  fill: transparent;
+  stroke: transparent;
+}
+
+.ikigai-sector text {
+  pointer-events: none;
+  font-family: "Unbounded", sans-serif;
+  font-weight: 800;
+  letter-spacing: 0;
+  font-size: 12px;
+  fill: #fff;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.75);
+}
+
+.ikigai-sector .sector-sub {
+  font-size: 8px;
+  font-weight: 600;
+  fill: rgba(255, 255, 255, 0.72);
+}
+
+.ikigai-sector.passion {
+  filter: drop-shadow(0 0 13px rgba(0, 212, 255, 0.5));
+}
+
+.ikigai-sector.profession {
+  filter: drop-shadow(0 0 15px rgba(0, 212, 255, 0.65));
+}
+
+.ikigai-sector.mission {
+  filter: drop-shadow(0 0 13px rgba(155, 93, 229, 0.5));
+}
+
+.ikigai-sector.vocation {
+  filter: drop-shadow(0 0 15px rgba(155, 93, 229, 0.62));
+}
+
+.ikigai-sector.ikigai {
+  filter: drop-shadow(0 0 18px rgba(255, 198, 74, 0.72));
+}
+
+.ikigai-svg-map.has-active .ikigai-sector:not(.active-sector) {
+  opacity: 0.4;
+  filter: blur(2px) drop-shadow(0 0 0 transparent);
+}
+
+.ikigai-svg-map.has-active .ikigai-sector.active-sector {
+  opacity: 1;
+  filter: drop-shadow(0 0 24px rgba(0, 212, 255, 0.9)) drop-shadow(0 0 42px rgba(155, 93, 229, 0.38));
+  transform: scale(1.018);
+}
+
+.ikigai-svg-map.has-active .ikigai-sector.ikigai.active-sector {
+  filter: drop-shadow(0 0 26px rgba(255, 198, 74, 0.95)) drop-shadow(0 0 50px rgba(0, 212, 255, 0.38));
+}
+
+.ikigai-premium-map.free-mode .ikigai-sector:not(.profession) {
+  opacity: 0.22;
+  filter: blur(3px) saturate(0.65);
+}
+
+.ikigai-premium-map.free-mode .ikigai-sector.profession {
+  opacity: 1;
+  filter: drop-shadow(0 0 26px rgba(0, 212, 255, 0.95)) drop-shadow(0 0 48px rgba(0, 212, 255, 0.38));
+  transform: scale(1.025);
+}
+
+.ikigai-premium-map.landing-mode .ikigai-sector {
+  opacity: 1 !important;
+  filter: drop-shadow(0 0 20px rgba(0, 212, 255, 0.55)) drop-shadow(0 0 34px rgba(155, 93, 229, 0.25));
+}
+
+.ikigai-premium-map.landing-mode .ikigai-sector.ikigai {
+  filter: drop-shadow(0 0 24px rgba(255, 198, 74, 0.82)) drop-shadow(0 0 42px rgba(0, 212, 255, 0.24));
+}
+
+.ikigai-premium-map.free-mode::after {
+  content: "Остальные зоны доступны в полном отчёте";
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%);
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.72);
+  border: 1px solid rgba(0, 212, 255, 0.32);
+  color: #fff;
+  font-family: "Unbounded", sans-serif;
+  font-size: 10px;
+  white-space: nowrap;
+  box-shadow: 0 0 24px rgba(0, 212, 255, 0.16);
+  z-index: 5;
+}
+
+.ikigai-analysis-panel {
+  border: 1px solid rgba(0, 212, 255, 0.28);
+  background: linear-gradient(180deg, rgba(0, 212, 255, 0.08), rgba(255, 255, 255, 0.035));
+  border-radius: 16px;
+  padding: 16px;
+  margin-top: 14px;
+  break-inside: avoid;
+  page-break-inside: avoid;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.ikigai-analysis-panel h3 {
+  font-family: "Unbounded", sans-serif;
+  font-size: 15px;
+  margin-bottom: 8px;
+  color: var(--cyan);
+  line-height: 1.35;
+}
+
+.ikigai-analysis-panel p {
+  font-size: 12.5px;
+  color: rgba(255, 255, 255, 0.72);
+  line-height: 1.7;
+  margin-bottom: 8px;
+}
+
+.ikigai-analysis-panel p:last-child {
+  margin-bottom: 0;
 }
 
 .highlight-box {
@@ -1743,10 +1885,6 @@ p {
   .grid-2,
   .grid-3 {
     grid-template-columns: 1fr;
-  }
-
-  .landing-lead br {
-    display: none;
   }
 
   .compare-row,

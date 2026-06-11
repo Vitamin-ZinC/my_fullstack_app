@@ -27,7 +27,7 @@ export default function FreeReportPage() {
         <p className="muted">{report ? `${text.baseRole}: ${report.profession}. ${report.summary}` : text.pending}</p>
       </div>
       {error && <div className="card" style={{ borderColor: "var(--danger)" }}>{error}</div>}
-      <IkigaiPremiumMap />
+      <IkigaiPremiumMap freeMode />
       {report && (
         <div className="grid grid-2">
           {Object.entries(report.ikigai_scores).map(([key, value]) => (

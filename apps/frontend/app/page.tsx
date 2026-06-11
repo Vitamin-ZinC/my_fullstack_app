@@ -18,7 +18,7 @@ export default function LandingPage() {
           <div className="landing-flow">
             <section className="landing-hero">
               <div className="hero-video-wrap float">
-                <video src="/assets/paid-report-animation.mp4" autoPlay muted loop playsInline poster="/assets/levelup-logo.jpg" aria-label={`${text.nav.brand} preview`} />
+                <video src="/assets/paid-report-animation.mp4" autoPlay muted loop playsInline preload="auto" poster="/assets/levelup-logo.jpg" aria-label={`${text.nav.brand} preview`} />
               </div>
               <div className="ub very-muted landing-kicker">{landing.kicker}</div>
               <h1 className="ub landing-title">
@@ -27,7 +27,7 @@ export default function LandingPage() {
                 <span className="cyan cyan-glow">{landing.titleAccent}</span>
               </h1>
               <p className="muted landing-sub">{landing.subtitle}</p>
-              <p className="very-muted landing-lead">{landing.lead}</p>
+              <p className="very-muted landing-lead">{renderLandingLead(landing.lead)}</p>
               <a className="btn-primary" data-testid="landing-start-primary" href="/flow/voice">{landing.cta}</a>
               <p className="very-muted landing-note">{landing.note}</p>
             </section>
@@ -36,15 +36,15 @@ export default function LandingPage() {
 
             <section className="landing-section">
               <div className="card card-lg">
-                <h2 className="ub landing-card-title">{landing.problemTitle}</h2>
+                <h2 className="ub landing-card-title">{renderProblemTitle(landing.problemTitle)}</h2>
                 {landing.problemItems.map((item) => (
                   <div className="landing-list-row" key={item}>
-                    <span className="cyan">-</span>
+                    <span className="cyan">—</span>
                     <span>{item}</span>
                   </div>
                 ))}
                 <div className="divider" />
-                <p className="landing-small-copy">{landing.problemCopy}</p>
+                <ProblemCopy copy={landing.problemCopy} />
               </div>
             </section>
 
@@ -146,4 +146,79 @@ function SignalCard({ icon, items, title, tone }: { icon: string; items: readonl
       ))}
     </div>
   );
+}
+
+function renderLandingLead(lead: string) {
+  const needle = "увидеть, как";
+  const index = lead.indexOf(needle);
+  if (index === -1) return lead;
+
+  return (
+    <>
+      {lead.slice(0, index)}увидеть,
+      <br />
+      как{lead.slice(index + needle.length)}
+    </>
+  );
+}
+
+function renderProblemTitle(title: string) {
+  const accent = "что с тобой происходит";
+  const index = title.indexOf(accent);
+  if (index === -1) return title;
+
+  return (
+    <>
+      {title.slice(0, index)}
+      <span className="cyan">{accent}</span>
+      {title.slice(index + accent.length)}
+    </>
+  );
+}
+
+function ProblemCopy({ copy }: { copy: string }) {
+  const [first, ...rest] = copy.split(" Но ");
+  const second = rest.length ? `Но ${rest.join(" Но ")}` : "";
+
+  return (
+    <p className="landing-small-copy">
+      {highlightProblemText(first)}
+      {second && (
+        <>
+          <br />
+          <br />
+          {highlightProblemText(second)}
+        </>
+      )}
+    </p>
+  );
+}
+
+function highlightProblemText(text: string) {
+  const first = "150 вопросов";
+  const second = "раньше мыслей";
+
+  if (text.includes(first)) {
+    const [before, after] = text.split(first);
+    return (
+      <>
+        {before}
+        <strong>{first}</strong>
+        {after}
+      </>
+    );
+  }
+
+  if (text.includes(second)) {
+    const [before, after] = text.split(second);
+    return (
+      <>
+        {before}
+        <strong className="cyan">{second}</strong>
+        {after}
+      </>
+    );
+  }
+
+  return text;
 }

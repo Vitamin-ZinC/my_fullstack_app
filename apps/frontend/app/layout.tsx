@@ -3,7 +3,7 @@ import "./globals.css";
 import { BRAND_NAME } from "@/lib/messages";
 
 export const metadata: Metadata = {
-  title: BRAND_NAME,
+  title: `Икигай — ${BRAND_NAME}`,
   description: "AI диагностика Икигай по голосу, лицу и карьерным сигналам"
 };
 

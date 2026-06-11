@@ -1,24 +1,26 @@
 "use client";
 
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { ReportFull } from "@levelup/contracts";
 import { IkigaiPremiumMap } from "@/components/IkigaiPremiumMap";
 import { api } from "@/lib/api";
 import { useSiteText } from "@/lib/useSiteText";
 
-export default function FullReportPage({ params }: { params: { analysisId: string } }) {
+export default function FullReportPage() {
   const siteText = useSiteText();
   const text = siteText.report.full;
   const habitsText = siteText.habits;
+  const { analysisId } = useParams<{ analysisId: string }>();
   const [report, setReport] = useState<ReportFull | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    api.getFullReport(params.analysisId)
+    api.getFullReport(analysisId)
       .then((result) => setReport(result.reportFull))
       .catch((reason) => setError(reason instanceof Error ? reason.message : "Не удалось загрузить отчёт"));
-  }, [params.analysisId]);
+  }, [analysisId]);
 
   if (error) {
     return (
@@ -28,7 +30,7 @@ export default function FullReportPage({ params }: { params: { analysisId: strin
           <h1 className="ub">{text.needsPayment}</h1>
           <p className="muted">{error}</p>
         </div>
-        <Link className="button" href={`/pay/${params.analysisId}`}>{text.pay}</Link>
+        <Link className="button" href={`/pay/${analysisId}`}>{text.pay}</Link>
       </article>
     );
   }

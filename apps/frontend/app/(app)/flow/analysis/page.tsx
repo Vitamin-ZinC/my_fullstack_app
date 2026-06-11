@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useState } from "react";
+import type { CSSProperties } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { AnalysisProgressEvent } from "@levelup/contracts";
 import { api, createProgressSource, getAnalysisDraft } from "@/lib/api";
 import { useSiteText } from "@/lib/useSiteText";
@@ -49,30 +49,63 @@ export default function AnalysisPage() {
       setProgress(next.progress);
       if (next.errorMessage) setLog(next.errorMessage);
       if (next.status === "DONE") setLog(text.ready);
+      if (next.status === "FAILED") setError(next.errorMessage || text.failed);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : text.failed);
     }
   }
 
+  const normalizedProgress = Math.max(0, Math.min(100, Math.round(progress)));
+  const activeStage = useMemo(() => {
+    if (status === "DONE") return text.stages.length;
+    return Math.min(text.stages.length - 1, Math.floor(normalizedProgress / Math.max(1, 100 / text.stages.length)));
+  }, [normalizedProgress, status, text.stages.length]);
+
   return (
-    <div className="stack" data-testid="analysis-page">
-      <div>
-        <div className="eyebrow">{text.eyebrow}</div>
-        <h1 className="ub">{text.title}</h1>
-        <p className="muted">{status}</p>
-      </div>
-      <div className="video-frame">
+    <div className="flow-inner" data-testid="analysis-page">
+      <div className="ub very-muted analysis-kicker">{text.eyebrow}</div>
+      <h1 className="ub flow-title">{text.title}</h1>
+      <p className="muted flow-copy">{status}</p>
+
+      <div className="analysis-video-card">
         <video src="/assets/processing-analysis.mp4" autoPlay muted loop playsInline />
       </div>
-      {error && <div className="card" style={{ borderColor: "var(--danger)" }}>{error}</div>}
-      <div className="card">
-        <div style={{ height: 12, borderRadius: 999, background: "rgba(255,255,255,.08)", overflow: "hidden" }}>
-          <div style={{ height: "100%", width: `${progress}%`, background: "linear-gradient(90deg, var(--cyan), var(--violet))" }} />
+
+      <div className="analysis-progress-card">
+        <div className="analysis-orb" style={{ "--progress": `${normalizedProgress * 3.6}deg` } as CSSProperties}>
+          <span className="ub">{normalizedProgress}%</span>
         </div>
-        <h2>{progress}%</h2>
         <p className="muted">{log}</p>
       </div>
-      {status === "DONE" && analysisId && <Link className="button" data-testid="free-report-link" href={`/report/${analysisId}/free`}>{text.openReport}</Link>}
+
+      <div className="card">
+        <div className="ub muted instruction-title">{text.stagesTitle}</div>
+        <div className="analysis-stage-list">
+          {text.stages.map((stage, index) => (
+            <div className={`analysis-stage ${index < activeStage ? "done" : index === activeStage ? "active" : ""}`} key={stage}>
+              <span>{index < activeStage ? "✓" : index === activeStage ? "●" : "○"}</span>
+              {stage}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="neuro-log">
+        <div className="ub muted instruction-title">{text.logTitle}</div>
+        {[text.waiting, log, status === "DONE" ? text.ready : text.processing].map((item, index) => (
+          <div className="neuro-log-item" key={`${item}-${index}`}>
+            <span className="neuro-log-dot" />
+            {item}
+          </div>
+        ))}
+      </div>
+
+      {error && <div className="card error-card">{error}</div>}
+      {status === "DONE" && analysisId && (
+        <button className="button" data-testid="free-report-link" onClick={() => window.location.assign(`/report/${analysisId}/free`)}>
+          {text.openReport}
+        </button>
+      )}
     </div>
   );
 }

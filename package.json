@@ -13,8 +13,12 @@
     "build": "npm run build --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
+    "test:e2e": "playwright test \"tests/frontend-flow.spec.js\" --workers=1",
     "smoke:prod": "node scripts/smoke-prod.mjs",
     "prisma:generate": "npm --workspace apps/backend run prisma:generate",
     "prisma:migrate": "npm --workspace apps/backend run prisma:migrate"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.51.1"
   }
 }

@@ -18,7 +18,7 @@ export default function LandingPage() {
           <div className="landing-flow">
             <section className="landing-hero">
               <div className="hero-video-wrap float">
-                <img src="/assets/levelup-logo.jpg" alt={text.nav.brand} />
+                <video src="/assets/paid-report-animation.mp4" autoPlay muted loop playsInline poster="/assets/levelup-logo.jpg" aria-label={`${text.nav.brand} preview`} />
               </div>
               <div className="ub very-muted landing-kicker">{landing.kicker}</div>
               <h1 className="ub landing-title">
@@ -28,7 +28,7 @@ export default function LandingPage() {
               </h1>
               <p className="muted landing-sub">{landing.subtitle}</p>
               <p className="very-muted landing-lead">{landing.lead}</p>
-              <Link className="btn-primary" href="/flow/voice">{landing.cta}</Link>
+              <a className="btn-primary" data-testid="landing-start-primary" href="/flow/voice">{landing.cta}</a>
               <p className="very-muted landing-note">{landing.note}</p>
             </section>
 
@@ -39,7 +39,7 @@ export default function LandingPage() {
                 <h2 className="ub landing-card-title">{landing.problemTitle}</h2>
                 {landing.problemItems.map((item) => (
                   <div className="landing-list-row" key={item}>
-                    <span className="cyan">—</span>
+                    <span className="cyan">-</span>
                     <span>{item}</span>
                   </div>
                 ))}
@@ -59,13 +59,13 @@ export default function LandingPage() {
             <section className="landing-section compact">
               <h2 className="ub landing-section-title">{landing.howTitle}</h2>
               {landing.steps.map(([number, title, description]) => (
-                <div className="card landing-step" key={number}>
+                <a className="card landing-step" href="/flow/voice" key={number}>
                   <span className="landing-step-number">{number}</span>
                   <div>
                     <div className="ub landing-step-title">{title}</div>
                     <div className="landing-step-copy">{description}</div>
                   </div>
-                </div>
+                </a>
               ))}
             </section>
 
@@ -108,7 +108,7 @@ export default function LandingPage() {
             <section className="landing-section final">
               <h2 className="ub landing-final-title">{landing.finalTitle}</h2>
               <p className="landing-final-copy">{landing.finalCopy}</p>
-              <Link className="btn-primary" href="/flow/voice">{landing.cta}</Link>
+              <a className="btn-primary" data-testid="landing-start-final" href="/flow/voice">{landing.cta}</a>
               <p className="very-muted landing-note center">{landing.finalNote}</p>
             </section>
           </div>
@@ -123,7 +123,7 @@ function AppNav() {
 
   return (
     <nav className="app-nav">
-      <div className="logo-wrap">
+      <Link className="logo-wrap" href="/">
         <div className="logo-mark" aria-hidden="true">
           <img src="/assets/levelup-logo.jpg" alt="" />
         </div>
@@ -131,7 +131,7 @@ function AppNav() {
           <div className="brand">{text.nav.brand}</div>
           <div className="sub">{text.nav.sub}</div>
         </div>
-      </div>
+      </Link>
     </nav>
   );
 }

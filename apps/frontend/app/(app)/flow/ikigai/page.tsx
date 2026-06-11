@@ -43,22 +43,40 @@ export default function IkigaiPage() {
   }
 
   return (
-    <div className="stack" data-testid="ikigai-page">
-      <div>
-        <div className="eyebrow">{text.eyebrow}</div>
-        <h1 className="ub">{text.title}</h1>
-        <p className="muted">{text.copy}</p>
+    <div className="flow-inner" data-testid="ikigai-page">
+      <div className="stepbar">
+        <div className="step-done" />
+        <div className="step-done" />
+        <div className="step-done" />
+        <span>{text.step}</span>
       </div>
-      <IkigaiPremiumMap />
-      <div className="grid grid-2">
+
+      <h1 className="ub flow-title">{text.title}</h1>
+      <p className="muted flow-copy">{text.copy}</p>
+
+      <div className="card cyan-border ikigai-flow-card">
+        <IkigaiPremiumMap />
+        <div className="ikigai-factor-list">
+          {siteText.landing.modelFactors.map((factor) => <div key={factor}>{factor}</div>)}
+        </div>
+      </div>
+
+      <div className="ikigai-question-grid">
         {text.questions.map(([id, label]) => (
-          <label className="card" key={id}>
+          <label className="card ikigai-question" key={id}>
             <div className="eyebrow">{label}</div>
-            <input className="input" data-testid={`ikigai-${id}`} value={answers[id] ?? ""} onChange={(event) => setAnswers({ ...answers, [id]: event.target.value })} placeholder={text.placeholder} />
+            <input
+              className="input"
+              data-testid={`ikigai-${id}`}
+              value={answers[id] ?? ""}
+              onChange={(event) => setAnswers({ ...answers, [id]: event.target.value })}
+              placeholder={text.placeholder}
+            />
           </label>
         ))}
       </div>
-      {error && <div className="card" style={{ borderColor: "var(--danger)" }}>{error}</div>}
+
+      {error && <div className="card error-card">{error}</div>}
       <button className="button" data-testid="ikigai-submit-button" onClick={submit} disabled={busy}>{busy ? text.busy : text.submit}</button>
     </div>
   );

@@ -1,22 +1,23 @@
 "use client";
 
-import Link from "next/link";
+import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { ReportFree } from "@levelup/contracts";
 import { IkigaiPremiumMap } from "@/components/IkigaiPremiumMap";
 import { api } from "@/lib/api";
 import { useSiteText } from "@/lib/useSiteText";
 
-export default function FreeReportPage({ params }: { params: { analysisId: string } }) {
+export default function FreeReportPage() {
   const text = useSiteText().report.free;
+  const { analysisId } = useParams<{ analysisId: string }>();
   const [report, setReport] = useState<ReportFree | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    api.getFreeReport(params.analysisId)
+    api.getFreeReport(analysisId)
       .then((result) => setReport(result.reportFree))
       .catch((reason) => setError(reason instanceof Error ? reason.message : text.loadError));
-  }, [params.analysisId, text.loadError]);
+  }, [analysisId, text.loadError]);
 
   return (
     <article className="stack" data-testid="free-report-page">
@@ -37,7 +38,11 @@ export default function FreeReportPage({ params }: { params: { analysisId: strin
           ))}
         </div>
       )}
-      <Link className="button" data-testid="open-pro-report-link" href={`/pay/${params.analysisId}`}>{text.unlock}</Link>
+      {report && (
+        <button className="button" data-testid="open-pro-report-link" onClick={() => window.location.assign(`/pay/${analysisId}`)}>
+          {text.unlock}
+        </button>
+      )}
     </article>
   );
 }

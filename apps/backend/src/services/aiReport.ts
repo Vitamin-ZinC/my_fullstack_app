@@ -22,6 +22,11 @@ export type GeneratedReport = {
   };
 };
 
+type CompletionResult = {
+  report: ReportFull;
+  photoInputUsed: boolean;
+};
+
 const scoreSchema = z.object({
   love: z.number().int().min(0).max(100),
   good_at: z.number().int().min(0).max(100),
@@ -250,6 +255,20 @@ export async function generateOpenAiReport(context: ReportContext): Promise<Gene
   }
 
   const photoInput = await buildPhotoInput(photoAsset);
+  const completion = await createReportCompletion(context, transcript, photoInput);
+
+  return {
+    report: completion.report,
+    model: env.OPENAI_MODEL,
+    usedOpenAI: true,
+    mediaSignals: {
+      audioTranscript: Boolean(transcript),
+      photoInput: completion.photoInputUsed
+    }
+  };
+}
+
+function buildUserContent(context: ReportContext, transcript: string | null, photoInput: string | null) {
   const userContent: Array<Record<string, unknown>> = [
     { type: "text", text: buildPrompt(context, transcript, Boolean(photoInput)) }
   ];
@@ -259,7 +278,26 @@ export async function generateOpenAiReport(context: ReportContext): Promise<Gene
       image_url: { url: photoInput, detail: "low" }
     });
   }
+  return userContent;
+}
 
+function isImageInputError(body: string) {
+  return /image_parse_error|unsupported image|invalid image|invalid_image/i.test(body);
+}
+
+async function createReportCompletion(context: ReportContext, transcript: string | null, photoInput: string | null): Promise<CompletionResult> {
+  try {
+    return await requestReportCompletion(buildUserContent(context, transcript, photoInput), Boolean(photoInput));
+  } catch (error) {
+    if (!photoInput || !(error instanceof Error) || !isImageInputError(error.message)) {
+      throw error;
+    }
+
+    return requestReportCompletion(buildUserContent(context, transcript, null), false);
+  }
+}
+
+async function requestReportCompletion(userContent: Array<Record<string, unknown>>, photoInputUsed: boolean): Promise<CompletionResult> {
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -310,11 +348,6 @@ export async function generateOpenAiReport(context: ReportContext): Promise<Gene
 
   return {
     report: reportFullSchema.parse(JSON.parse(message.content)),
-    model: env.OPENAI_MODEL,
-    usedOpenAI: true,
-    mediaSignals: {
-      audioTranscript: Boolean(transcript),
-      photoInput: Boolean(photoInput)
-    }
+    photoInputUsed
   };
 }

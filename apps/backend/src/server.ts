@@ -33,7 +33,17 @@ await app.register(rawBody, {
 await app.register(sensible);
 await app.register(rateLimit, { max: 120, timeWindow: "1 minute" });
 
-app.addContentTypeParser(["audio/webm", "image/jpeg", "application/octet-stream"], {
+app.addContentTypeParser([
+  "audio/webm",
+  "audio/mp4",
+  "audio/ogg",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+  "application/octet-stream"
+], {
   parseAs: "buffer",
   bodyLimit: 10 * 1024 * 1024
 }, (_request, body, done) => {

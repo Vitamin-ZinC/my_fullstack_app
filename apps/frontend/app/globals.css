@@ -1238,6 +1238,53 @@ svg {
   min-height: 140px;
 }
 
+.prompt-editor {
+  min-height: 360px;
+}
+
+.prompt-output-note,
+.prompt-help {
+  display: grid;
+  gap: 6px;
+  border: 1px solid rgba(0, 212, 255, 0.18);
+  border-radius: 12px;
+  padding: 12px;
+  background: rgba(0, 212, 255, 0.045);
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.prompt-output-note strong,
+.prompt-help strong {
+  color: var(--cyan);
+  font-family: "Unbounded", sans-serif;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.free-key-insight {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(0, 212, 255, 0.18);
+}
+
+.free-paid-preview {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.free-paid-preview-item {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.76);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .compare-table {
   display: grid;
   gap: 10px;
@@ -1569,6 +1616,28 @@ svg {
   background: rgba(255, 255, 255, 0.04);
   margin-top: 12px;
   padding: 14px;
+}
+
+.promo-code-card {
+  display: grid;
+  gap: 10px;
+}
+
+.promo-code-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.promo-code-field svg {
+  color: var(--cyan);
+  flex: none;
+}
+
+.promo-code-card p {
+  font-size: 12px;
+  line-height: 1.55;
+  margin: 0;
 }
 
 .stripe-placeholder {

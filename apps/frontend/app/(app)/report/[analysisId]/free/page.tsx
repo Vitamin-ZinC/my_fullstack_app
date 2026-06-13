@@ -36,10 +36,25 @@ export default function FreeReportPage() {
           <p>{text.statusIntro}</p>
           <h2 className="ub cyan">{report.profession}</h2>
           <p>{report.summary}</p>
+          {report.key_insight && (
+            <div className="free-key-insight">
+              <div className="ub cyan">{text.insightTitle}</div>
+              <p>{report.key_insight}</p>
+            </div>
+          )}
         </div>
       )}
       {report && (
         <div className="card cyan-border free-upgrade-card">
+          {report.paid_report_teaser && <p>{report.paid_report_teaser}</p>}
+          {report.paid_report_preview && report.paid_report_preview.length > 0 && (
+            <div className="free-paid-preview">
+              <div className="ub cyan">{text.paidPreviewTitle}</div>
+              {report.paid_report_preview.map((item) => (
+                <div className="free-paid-preview-item" key={item}>{item}</div>
+              ))}
+            </div>
+          )}
           <p>{text.upgradeCopy}</p>
           <button className="button" data-testid="open-pro-report-link" onClick={() => window.location.assign(`/pay/${analysisId}`)}>
             {text.unlock}

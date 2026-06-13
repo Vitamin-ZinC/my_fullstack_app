@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { CreditCard, Lock } from "lucide-react";
+import { CreditCard, Lock, Percent } from "lucide-react";
 import { loadStripe, type StripeElements } from "@stripe/stripe-js";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { useSiteText } from "@/lib/useSiteText";
 
@@ -16,21 +16,46 @@ export default function PayPage() {
   const paymentElementRef = useRef<HTMLDivElement>(null);
   const elementsRef = useRef<StripeElements | null>(null);
   const [holderName, setHolderName] = useState("");
+  const [promoCode, setPromoCode] = useState("");
   const [message, setMessage] = useState("");
+  const [priceLabel, setPriceLabel] = useState(text.price);
+  const [mounted, setMounted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    let cancelled = false;
+    api.getPaymentConfig()
+      .then((config) => {
+        if (!cancelled) setPriceLabel(config.priceLabel);
+      })
+      .catch(() => {
+        if (!cancelled) setPriceLabel(text.price);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [text.price]);
 
   async function createIntent() {
     setBusy(true);
     setMessage("");
+    const normalizedPromoCode = promoCode.trim();
     try {
       if (!publishableKey) {
-        const session = await api.createCheckoutSession(analysisId);
+        const session = await api.createCheckoutSession(analysisId, normalizedPromoCode);
+        if (session.amount === 0) setMessage(text.openedByPromo);
         window.location.assign(session.url);
         return;
       }
 
-      const intent = await api.createPaymentIntent(analysisId);
+      const intent = await api.createPaymentIntent(analysisId, normalizedPromoCode);
+      if (!intent.clientSecret && intent.status === "SUCCEEDED") {
+        setMessage(text.openedByPromo);
+        window.location.assign(`/report/${analysisId}/full`);
+        return;
+      }
       if (!intent.clientSecret) throw new Error(text.stripeNoSecret);
       const stripe = await loadStripe(publishableKey);
       if (!stripe) throw new Error(text.stripeNotLoaded);
@@ -75,7 +100,7 @@ export default function PayPage() {
       <p className="muted flow-copy">{text.subtitle}</p>
 
       <div className="payment-price-card card cyan-border">
-        <div className="ub cyan">{text.price}</div>
+        <div className="ub cyan">{priceLabel}</div>
         <p className="muted">{text.priceHint}</p>
       </div>
 
@@ -95,6 +120,23 @@ export default function PayPage() {
         </div>
       </div>
 
+      <div className="card promo-code-card">
+        <div className="ub muted instruction-title">{text.promoTitle}</div>
+        <label className="promo-code-field">
+          <Percent size={18} />
+          <input
+            className="input"
+            data-testid="promo-code-input"
+            value={promoCode}
+            onChange={(event) => setPromoCode(event.target.value.toUpperCase())}
+            placeholder={text.promoPlaceholder}
+            disabled={!mounted || busy || ready}
+            autoComplete="off"
+          />
+        </label>
+        <p className="muted">{text.promoHint}</p>
+      </div>
+
       <div className="card-art">
         <div className="ub card-art-title">{text.cardTitle}</div>
         <label>
@@ -111,7 +153,7 @@ export default function PayPage() {
       </div>
 
       {!ready && (
-        <button className="button" data-testid="checkout-button" onClick={createIntent} disabled={busy}>
+        <button className="button" data-testid="checkout-button" onClick={createIntent} disabled={!mounted || busy}>
           <CreditCard size={18} /> {busy ? text.busy : publishableKey ? text.checkout : text.checkoutExternal}
         </button>
       )}

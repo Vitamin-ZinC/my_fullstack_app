@@ -3,7 +3,7 @@ import { redis } from "../lib/queue.js";
 import { emitProgress } from "../lib/progress.js";
 import { prisma } from "../lib/prisma.js";
 import { env } from "../env.js";
-import { buildFallbackReport } from "../services/report.js";
+import { buildFallbackFreeReport, buildFallbackReport } from "../services/report.js";
 import { generateOpenAiReport } from "../services/aiReport.js";
 
 const logs = [
@@ -30,7 +30,11 @@ export const worker = new Worker("analysis", async (job) => {
   const answers = analysis.ikigaiAnswers as any;
   const allowFallbackReport = env.NODE_ENV !== "production" || env.DEV_TOOLS_ENABLED;
   let report = allowFallbackReport ? buildFallbackReport(answers) : null;
+  let reportFree = report ? buildFallbackFreeReport(report) : null;
   let reportModel = allowFallbackReport ? "fallback" : "";
+  let reportPromptVersion = analysis.reportVersion;
+  let freePromptVersion = analysis.reportVersion;
+  let fullPromptVersion = analysis.reportVersion;
 
   try {
     emitProgress(analysisId, { progress: 96, log: "Generating AI report...", stage: "ai" });
@@ -42,7 +46,11 @@ export const worker = new Worker("analysis", async (job) => {
     });
     if (generated) {
       report = generated.report;
+      reportFree = generated.reportFree;
       reportModel = generated.model;
+      reportPromptVersion = generated.promptVersion;
+      freePromptVersion = generated.promptVersions.free;
+      fullPromptVersion = generated.promptVersions.full;
       emitProgress(analysisId, {
         progress: 98,
         stage: "ai",
@@ -63,15 +71,9 @@ export const worker = new Worker("analysis", async (job) => {
     emitProgress(analysisId, { progress: 98, stage: "fallback", log: `${message}; using fallback report` });
   }
 
-  if (!report) {
+  if (!report || !reportFree) {
     throw new Error("AI report generation did not produce a report");
   }
-
-  const reportFree = {
-    profession: report.profession,
-    summary: report.summary,
-    ikigai_scores: report.ikigai_scores
-  };
 
   await prisma.analysis.update({
     where: { id: analysisId },
@@ -79,18 +81,19 @@ export const worker = new Worker("analysis", async (job) => {
       status: "DONE",
       reportFree,
       reportFull: report,
+      reportVersion: reportPromptVersion,
       completedAt: new Date()
     }
   });
 
   await prisma.report.upsert({
     where: { analysisId_tier_language: { analysisId, tier: "FREE", language: analysis.locale } },
-    update: { output: reportFree, promptVersion: analysis.reportVersion, model: reportModel },
+    update: { output: reportFree, promptVersion: freePromptVersion, model: reportModel },
     create: {
       analysisId,
       tier: "FREE",
       language: analysis.locale,
-      promptVersion: analysis.reportVersion,
+      promptVersion: freePromptVersion,
       model: reportModel,
       output: reportFree
     }
@@ -98,12 +101,12 @@ export const worker = new Worker("analysis", async (job) => {
 
   await prisma.report.upsert({
     where: { analysisId_tier_language: { analysisId, tier: "FULL", language: analysis.locale } },
-    update: { output: report, promptVersion: analysis.reportVersion, model: reportModel },
+    update: { output: report, promptVersion: fullPromptVersion, model: reportModel },
     create: {
       analysisId,
       tier: "FULL",
       language: analysis.locale,
-      promptVersion: analysis.reportVersion,
+      promptVersion: fullPromptVersion,
       model: reportModel,
       output: report
     }

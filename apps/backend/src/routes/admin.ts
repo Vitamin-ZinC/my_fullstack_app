@@ -3,6 +3,7 @@ import { z } from "zod";
 import { env } from "../env.js";
 import { createAdminSessionToken, requireAdmin, verifyAdminPassword, writeAdminAudit } from "../lib/auth.js";
 import { prisma } from "../lib/prisma.js";
+import { defaultReportPromptTemplates } from "../services/reportPrompts.js";
 
 const jsonValueSchema: z.ZodType<unknown> = z.lazy(() =>
   z.union([
@@ -175,6 +176,8 @@ export async function adminRoutes(app: FastifyInstance) {
       orderBy: [{ key: "asc" }, { locale: "asc" }, { version: "desc" }]
     });
   });
+
+  app.get("/api/admin/prompts/defaults", async () => defaultReportPromptTemplates);
 
   app.post("/api/admin/prompts", async (request) => {
     const body = promptSchema.parse(request.body);

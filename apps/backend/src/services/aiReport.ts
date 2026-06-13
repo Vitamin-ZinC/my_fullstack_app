@@ -1,9 +1,10 @@
-import type { IkigaiAnswers, ReportFull } from "@levelup/contracts";
+import type { IkigaiAnswers, ReportFree, ReportFull, ReportTier } from "@levelup/contracts";
 import type { MediaAsset } from "@prisma/client";
 import { basename } from "node:path";
 import { z } from "zod";
 import { env } from "../env.js";
 import { readMediaAssetBuffer } from "./media.js";
+import { buildReportPromptMessages } from "./reportPrompts.js";
 
 type ReportContext = {
   analysisId: string;
@@ -13,8 +14,14 @@ type ReportContext = {
 };
 
 export type GeneratedReport = {
+  reportFree: ReportFree;
   report: ReportFull;
   model: string;
+  promptVersion: number;
+  promptVersions: {
+    free: number;
+    full: number;
+  };
   usedOpenAI: boolean;
   mediaSignals: {
     audioTranscript: boolean;
@@ -22,9 +29,10 @@ export type GeneratedReport = {
   };
 };
 
-type CompletionResult = {
-  report: ReportFull;
+type CompletionResult<TReport> = {
+  report: TReport;
   photoInputUsed: boolean;
+  promptVersion: number;
 };
 
 const scoreSchema = z.object({
@@ -81,7 +89,52 @@ export const reportFullSchema = z.object({
   final_insight: z.string()
 });
 
-const reportJsonSchema = {
+export const reportFreeSchema = z.object({
+  profession: z.string().min(2),
+  summary: z.string().min(20),
+  ikigai_scores: scoreSchema,
+  key_insight: z.string().min(20),
+  paid_report_teaser: z.string().min(20),
+  paid_report_preview: z.array(z.string().min(3)).min(4).max(6)
+});
+
+const scoreJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["love", "good_at", "paid_for", "world_needs"],
+  properties: {
+    love: { type: "integer" },
+    good_at: { type: "integer" },
+    paid_for: { type: "integer" },
+    world_needs: { type: "integer" }
+  }
+} as const;
+
+const reportFreeJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "profession",
+    "summary",
+    "ikigai_scores",
+    "key_insight",
+    "paid_report_teaser",
+    "paid_report_preview"
+  ],
+  properties: {
+    profession: { type: "string" },
+    summary: { type: "string" },
+    ikigai_scores: scoreJsonSchema,
+    key_insight: { type: "string" },
+    paid_report_teaser: { type: "string" },
+    paid_report_preview: {
+      type: "array",
+      items: { type: "string" }
+    }
+  }
+} as const;
+
+const reportFullJsonSchema = {
   type: "object",
   additionalProperties: false,
   required: [
@@ -97,17 +150,7 @@ const reportJsonSchema = {
   properties: {
     profession: { type: "string" },
     summary: { type: "string" },
-    ikigai_scores: {
-      type: "object",
-      additionalProperties: false,
-      required: ["love", "good_at", "paid_for", "world_needs"],
-      properties: {
-        love: { type: "integer" },
-        good_at: { type: "integer" },
-        paid_for: { type: "integer" },
-        world_needs: { type: "integer" }
-      }
-    },
+    ikigai_scores: scoreJsonSchema,
     voice_analysis: textMapSchema([
       "timbre",
       "emotionality",
@@ -224,23 +267,6 @@ async function buildPhotoInput(asset: MediaAsset | null) {
   return `data:${mimeType};base64,${buffer.toString("base64")}`;
 }
 
-function buildPrompt(context: ReportContext, transcript: string | null, photoIncluded: boolean) {
-  const language = context.locale.startsWith("en") ? "English" : "Russian";
-  return [
-    `Output language: ${language}.`,
-    "Create a practical ikigai/career report for a consumer app.",
-    "Use the questionnaire as the primary evidence. Treat voice transcript and image, when present, as weak presentation signals only.",
-    "Do not identify the person, infer sensitive attributes, diagnose health, or claim deterministic traits from appearance or voice.",
-    "If media evidence is unavailable, explicitly ground voice/face sections in limited available evidence.",
-    "Return exactly the requested JSON shape. Use 3 to 5 top_roles. Keep every field useful and specific.",
-    "",
-    `Analysis ID: ${context.analysisId}`,
-    `Questionnaire JSON: ${JSON.stringify(context.answers)}`,
-    `Voice transcript: ${transcript || "unavailable"}`,
-    `Photo input included: ${photoIncluded ? "yes" : "no"}`
-  ].join("\n");
-}
-
 export async function generateOpenAiReport(context: ReportContext): Promise<GeneratedReport | null> {
   if (!env.OPENAI_API_KEY) return null;
 
@@ -255,22 +281,47 @@ export async function generateOpenAiReport(context: ReportContext): Promise<Gene
   }
 
   const photoInput = await buildPhotoInput(photoAsset);
-  const completion = await createReportCompletion(context, transcript, photoInput);
+  const freeCompletion = await createReportCompletion({
+    context,
+    tier: "FREE",
+    transcript,
+    photoInput,
+    schemaName: "ikigai_free_report",
+    jsonSchema: reportFreeJsonSchema,
+    parseReport: (content) => reportFreeSchema.parse(JSON.parse(content))
+  });
+  const fullCompletion = await createReportCompletion({
+    context,
+    tier: "FULL",
+    transcript,
+    photoInput,
+    schemaName: "ikigai_full_report",
+    jsonSchema: reportFullJsonSchema,
+    parseReport: (content) => reportFullSchema.parse(JSON.parse(content))
+  });
+  const promptVersion = Math.max(freeCompletion.promptVersion, fullCompletion.promptVersion);
 
   return {
-    report: completion.report,
+    reportFree: freeCompletion.report,
+    report: fullCompletion.report,
     model: env.OPENAI_MODEL,
+    promptVersion,
+    promptVersions: {
+      free: freeCompletion.promptVersion,
+      full: fullCompletion.promptVersion
+    },
     usedOpenAI: true,
     mediaSignals: {
       audioTranscript: Boolean(transcript),
-      photoInput: completion.photoInputUsed
+      photoInput: freeCompletion.photoInputUsed || fullCompletion.photoInputUsed
     }
   };
 }
 
-function buildUserContent(context: ReportContext, transcript: string | null, photoInput: string | null) {
+async function buildCompletionInput(context: ReportContext, tier: ReportTier, transcript: string | null, photoInput: string | null) {
+  const prompts = await buildReportPromptMessages(context, tier, transcript, Boolean(photoInput));
   const userContent: Array<Record<string, unknown>> = [
-    { type: "text", text: buildPrompt(context, transcript, Boolean(photoInput)) }
+    { type: "text", text: prompts.userPrompt }
   ];
   if (photoInput) {
     userContent.push({
@@ -278,26 +329,53 @@ function buildUserContent(context: ReportContext, transcript: string | null, pho
       image_url: { url: photoInput, detail: "low" }
     });
   }
-  return userContent;
+  return {
+    userContent,
+    systemPrompt: prompts.systemPrompt,
+    promptVersion: prompts.promptVersion
+  };
 }
 
 function isImageInputError(body: string) {
   return /image_parse_error|unsupported image|invalid image|invalid_image/i.test(body);
 }
 
-async function createReportCompletion(context: ReportContext, transcript: string | null, photoInput: string | null): Promise<CompletionResult> {
+type ReportCompletionRequest<TReport> = {
+  context: ReportContext;
+  tier: ReportTier;
+  transcript: string | null;
+  photoInput: string | null;
+  schemaName: string;
+  jsonSchema: unknown;
+  parseReport: (content: string) => TReport;
+};
+
+async function createReportCompletion<TReport>(request: ReportCompletionRequest<TReport>): Promise<CompletionResult<TReport>> {
+  const input = await buildCompletionInput(request.context, request.tier, request.transcript, request.photoInput);
   try {
-    return await requestReportCompletion(buildUserContent(context, transcript, photoInput), Boolean(photoInput));
+    return await requestReportCompletion(input, Boolean(request.photoInput), request.schemaName, request.jsonSchema, request.parseReport);
   } catch (error) {
-    if (!photoInput || !(error instanceof Error) || !isImageInputError(error.message)) {
+    if (!request.photoInput || !(error instanceof Error) || !isImageInputError(error.message)) {
       throw error;
     }
 
-    return requestReportCompletion(buildUserContent(context, transcript, null), false);
+    return requestReportCompletion(
+      await buildCompletionInput(request.context, request.tier, request.transcript, null),
+      false,
+      request.schemaName,
+      request.jsonSchema,
+      request.parseReport
+    );
   }
 }
 
-async function requestReportCompletion(userContent: Array<Record<string, unknown>>, photoInputUsed: boolean): Promise<CompletionResult> {
+async function requestReportCompletion<TReport>(
+  input: Awaited<ReturnType<typeof buildCompletionInput>>,
+  photoInputUsed: boolean,
+  schemaName: string,
+  jsonSchema: unknown,
+  parseReport: (content: string) => TReport
+): Promise<CompletionResult<TReport>> {
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -311,19 +389,19 @@ async function requestReportCompletion(userContent: Array<Record<string, unknown
       messages: [
         {
           role: "system",
-          content: "You are a careful career-report writer. Generate useful, non-medical, non-deterministic guidance as valid JSON."
+          content: input.systemPrompt
         },
         {
           role: "user",
-          content: userContent
+          content: input.userContent
         }
       ],
       response_format: {
         type: "json_schema",
         json_schema: {
-          name: "ikigai_report",
+          name: schemaName,
           strict: true,
-          schema: reportJsonSchema
+          schema: jsonSchema
         }
       }
     })
@@ -347,7 +425,8 @@ async function requestReportCompletion(userContent: Array<Record<string, unknown
   if (!message?.content) throw new Error("OpenAI returned an empty report");
 
   return {
-    report: reportFullSchema.parse(JSON.parse(message.content)),
-    photoInputUsed
+    report: parseReport(message.content),
+    photoInputUsed,
+    promptVersion: input.promptVersion
   };
 }

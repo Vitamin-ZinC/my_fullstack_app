@@ -1,4 +1,21 @@
-import type { IkigaiAnswers, ReportFull } from "@levelup/contracts";
+import type { IkigaiAnswers, ReportFree, ReportFull } from "@levelup/contracts";
+
+export function buildFallbackFreeReport(report: ReportFull): ReportFree {
+  return {
+    profession: report.profession,
+    summary: report.summary,
+    ikigai_scores: report.ikigai_scores,
+    key_insight: "Your current professional pattern already has a visible direction: turn structured expertise into a clear market offer.",
+    paid_report_teaser: "The full report opens the deeper voice, face, role-fit and action-plan layers behind this first result.",
+    paid_report_preview: [
+      "Detailed voice-analysis signals",
+      "Face and visual-focus interpretation",
+      "Top professional roles with match percentages",
+      "Career risks and growth points",
+      "A practical next-step route"
+    ]
+  };
+}
 
 export function buildFallbackReport(answers: IkigaiAnswers): ReportFull {
   return {

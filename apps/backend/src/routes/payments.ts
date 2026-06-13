@@ -5,6 +5,7 @@ import { env } from "../env.js";
 import { requireAnalysisAccess } from "../lib/auth.js";
 import { prisma } from "../lib/prisma.js";
 import { calculatePromoDiscount, normalizePromoCode, validatePromoCode } from "../services/promoCodes.js";
+import { getReportPriceConfig } from "../services/pricing.js";
 
 const stripe = env.STRIPE_SECRET_KEY ? new Stripe(env.STRIPE_SECRET_KEY) : null;
 
@@ -29,6 +30,8 @@ async function resolvePromoDiscount(rawCode: string | undefined, amount: number,
 }
 
 export async function paymentRoutes(app: FastifyInstance) {
+  app.get("/api/payments/config", async () => getReportPriceConfig());
+
   app.post("/api/payments/create-intent", async (request, reply) => {
     const body = createIntentSchema.parse(request.body);
     const access = await requireAnalysisAccess(request, reply, body.analysisId);
@@ -48,56 +51,17 @@ export async function paymentRoutes(app: FastifyInstance) {
       };
     }
 
+    const price = await getReportPriceConfig();
     let promoResult: Awaited<ReturnType<typeof resolvePromoDiscount>>;
     try {
-      promoResult = await resolvePromoDiscount(body.promoCode, env.PRICE_AMOUNT, env.PRICE_CURRENCY);
+      promoResult = await resolvePromoDiscount(body.promoCode, price.amount, price.currency);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Invalid promo code";
       return reply.code(400).send({ error: message });
     }
-    const finalAmount = env.PRICE_AMOUNT - promoResult.discountAmount;
-    if (env.PRICE_CURRENCY.toLowerCase() === "usd" && finalAmount > 0 && finalAmount < 50) {
+    const finalAmount = price.amount - promoResult.discountAmount;
+    if (price.currency.toLowerCase() === "usd" && finalAmount > 0 && finalAmount < 50) {
       return reply.code(400).send({ error: "Discounted amount is below Stripe minimum charge" });
-    }
-
-    if (!stripe) {
-      if (env.NODE_ENV === "production" || !env.DEV_TOOLS_ENABLED) {
-        return reply.code(501).send({ error: "Stripe is not configured" });
-      }
-      const payment = await prisma.payment.upsert({
-        where: { analysisId: analysis.id },
-        update: {
-          status: "SUCCEEDED",
-          originalAmount: env.PRICE_AMOUNT,
-          discountAmount: promoResult.discountAmount,
-          amount: finalAmount,
-          currency: env.PRICE_CURRENCY,
-          promoCodeId: promoResult.promo?.id ?? null,
-          paidAt: new Date()
-        },
-        create: {
-          analysisId: analysis.id,
-          stripePaymentIntentId: `dev_${analysis.id}`,
-          originalAmount: env.PRICE_AMOUNT,
-          discountAmount: promoResult.discountAmount,
-          amount: finalAmount,
-          currency: env.PRICE_CURRENCY,
-          status: "SUCCEEDED",
-          promoCodeId: promoResult.promo?.id ?? null,
-          userId: analysis.userId,
-          paidAt: new Date()
-        }
-      });
-      return {
-        clientSecret: "dev_client_secret",
-        paymentIntentId: payment.stripePaymentIntentId,
-        status: payment.status,
-        amount: payment.amount,
-        originalAmount: payment.originalAmount ?? env.PRICE_AMOUNT,
-        discountAmount: payment.discountAmount,
-        currency: payment.currency,
-        promoCode: promoResult.promo?.code ?? null
-      };
     }
 
     if (finalAmount === 0) {
@@ -107,20 +71,20 @@ export async function paymentRoutes(app: FastifyInstance) {
           update: {
             stripePaymentIntentId: `promo_${analysis.id}_${Date.now()}`,
             status: "SUCCEEDED",
-            originalAmount: env.PRICE_AMOUNT,
+            originalAmount: price.amount,
             discountAmount: promoResult.discountAmount,
             amount: 0,
-            currency: env.PRICE_CURRENCY,
+            currency: price.currency,
             promoCodeId: promoResult.promo?.id ?? null,
             paidAt: new Date()
           },
           create: {
             analysisId: analysis.id,
             stripePaymentIntentId: `promo_${analysis.id}_${Date.now()}`,
-            originalAmount: env.PRICE_AMOUNT,
+            originalAmount: price.amount,
             discountAmount: promoResult.discountAmount,
             amount: 0,
-            currency: env.PRICE_CURRENCY,
+            currency: price.currency,
             status: "SUCCEEDED",
             promoCodeId: promoResult.promo?.id ?? null,
             userId: analysis.userId,
@@ -144,7 +108,7 @@ export async function paymentRoutes(app: FastifyInstance) {
           analysisId: analysis.id,
           properties: {
             paymentIntentId: payment.stripePaymentIntentId,
-            originalAmount: env.PRICE_AMOUNT,
+            originalAmount: price.amount,
             discountAmount: promoResult.discountAmount,
             promoCode: promoResult.promo?.code
           }
@@ -155,7 +119,47 @@ export async function paymentRoutes(app: FastifyInstance) {
         paymentIntentId: payment.stripePaymentIntentId,
         status: payment.status,
         amount: payment.amount,
-        originalAmount: payment.originalAmount ?? env.PRICE_AMOUNT,
+        originalAmount: payment.originalAmount ?? price.amount,
+        discountAmount: payment.discountAmount,
+        currency: payment.currency,
+        promoCode: promoResult.promo?.code ?? null
+      };
+    }
+
+    if (!stripe) {
+      if (env.NODE_ENV === "production" || !env.DEV_TOOLS_ENABLED) {
+        return reply.code(501).send({ error: "Stripe is not configured" });
+      }
+      const payment = await prisma.payment.upsert({
+        where: { analysisId: analysis.id },
+        update: {
+          status: "SUCCEEDED",
+          originalAmount: price.amount,
+          discountAmount: promoResult.discountAmount,
+          amount: finalAmount,
+          currency: price.currency,
+          promoCodeId: promoResult.promo?.id ?? null,
+          paidAt: new Date()
+        },
+        create: {
+          analysisId: analysis.id,
+          stripePaymentIntentId: `dev_${analysis.id}`,
+          originalAmount: price.amount,
+          discountAmount: promoResult.discountAmount,
+          amount: finalAmount,
+          currency: price.currency,
+          status: "SUCCEEDED",
+          promoCodeId: promoResult.promo?.id ?? null,
+          userId: analysis.userId,
+          paidAt: new Date()
+        }
+      });
+      return {
+        clientSecret: "dev_client_secret",
+        paymentIntentId: payment.stripePaymentIntentId,
+        status: payment.status,
+        amount: payment.amount,
+        originalAmount: payment.originalAmount ?? price.amount,
         discountAmount: payment.discountAmount,
         currency: payment.currency,
         promoCode: promoResult.promo?.code ?? null
@@ -164,12 +168,12 @@ export async function paymentRoutes(app: FastifyInstance) {
 
     const intent = await stripe.paymentIntents.create({
       amount: finalAmount,
-      currency: env.PRICE_CURRENCY,
+      currency: price.currency,
       automatic_payment_methods: { enabled: true },
       metadata: {
         analysisId: analysis.id,
         sessionId: analysis.sessionId,
-        originalAmount: String(env.PRICE_AMOUNT),
+        originalAmount: String(price.amount),
         discountAmount: String(promoResult.discountAmount),
         promoCodeId: promoResult.promo?.id ?? "",
         promoCode: promoResult.promo?.code ?? ""
@@ -180,20 +184,20 @@ export async function paymentRoutes(app: FastifyInstance) {
       update: {
         stripePaymentIntentId: intent.id,
         status: "PENDING",
-        originalAmount: env.PRICE_AMOUNT,
+        originalAmount: price.amount,
         discountAmount: promoResult.discountAmount,
         amount: finalAmount,
-        currency: env.PRICE_CURRENCY,
+        currency: price.currency,
         promoCodeId: promoResult.promo?.id ?? null,
         paidAt: null
       },
       create: {
         analysisId: analysis.id,
         stripePaymentIntentId: intent.id,
-        originalAmount: env.PRICE_AMOUNT,
+        originalAmount: price.amount,
         discountAmount: promoResult.discountAmount,
         amount: finalAmount,
-        currency: env.PRICE_CURRENCY,
+        currency: price.currency,
         promoCodeId: promoResult.promo?.id ?? null,
         userId: analysis.userId
       }
@@ -207,7 +211,7 @@ export async function paymentRoutes(app: FastifyInstance) {
         analysisId: analysis.id,
         properties: {
           paymentIntentId: intent.id,
-          originalAmount: env.PRICE_AMOUNT,
+          originalAmount: price.amount,
           discountAmount: promoResult.discountAmount,
           amount: finalAmount,
           promoCode: promoResult.promo?.code
@@ -219,9 +223,9 @@ export async function paymentRoutes(app: FastifyInstance) {
       paymentIntentId: intent.id,
       status: "PENDING",
       amount: finalAmount,
-      originalAmount: env.PRICE_AMOUNT,
+      originalAmount: price.amount,
       discountAmount: promoResult.discountAmount,
-      currency: env.PRICE_CURRENCY,
+      currency: price.currency,
       promoCode: promoResult.promo?.code ?? null
     };
   });
@@ -232,7 +236,6 @@ export async function paymentRoutes(app: FastifyInstance) {
     if (!access) return;
     const analysis = access.analysis;
     if (!analysis || analysis.status !== "DONE") return reply.code(400).send({ error: "Analysis not ready" });
-    if (!stripe) return reply.code(501).send({ error: "Stripe is not configured" });
     if (analysis.payment?.status === "SUCCEEDED") {
       return {
         url: `${env.APP_ORIGIN}/report/${analysis.id}/full`,
@@ -245,15 +248,16 @@ export async function paymentRoutes(app: FastifyInstance) {
       };
     }
 
+    const price = await getReportPriceConfig();
     let promoResult: Awaited<ReturnType<typeof resolvePromoDiscount>>;
     try {
-      promoResult = await resolvePromoDiscount(body.promoCode, env.PRICE_AMOUNT, env.PRICE_CURRENCY);
+      promoResult = await resolvePromoDiscount(body.promoCode, price.amount, price.currency);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Invalid promo code";
       return reply.code(400).send({ error: message });
     }
-    const finalAmount = env.PRICE_AMOUNT - promoResult.discountAmount;
-    if (env.PRICE_CURRENCY.toLowerCase() === "usd" && finalAmount > 0 && finalAmount < 50) {
+    const finalAmount = price.amount - promoResult.discountAmount;
+    if (price.currency.toLowerCase() === "usd" && finalAmount > 0 && finalAmount < 50) {
       return reply.code(400).send({ error: "Discounted amount is below Stripe minimum charge" });
     }
 
@@ -266,20 +270,20 @@ export async function paymentRoutes(app: FastifyInstance) {
             stripePaymentIntentId: paymentIntentId,
             stripeCheckoutSessionId: null,
             status: "SUCCEEDED",
-            originalAmount: env.PRICE_AMOUNT,
+            originalAmount: price.amount,
             discountAmount: promoResult.discountAmount,
             amount: 0,
-            currency: env.PRICE_CURRENCY,
+            currency: price.currency,
             promoCodeId: promoResult.promo?.id ?? null,
             paidAt: new Date()
           },
           create: {
             analysisId: analysis.id,
             stripePaymentIntentId: paymentIntentId,
-            originalAmount: env.PRICE_AMOUNT,
+            originalAmount: price.amount,
             discountAmount: promoResult.discountAmount,
             amount: 0,
-            currency: env.PRICE_CURRENCY,
+            currency: price.currency,
             status: "SUCCEEDED",
             promoCodeId: promoResult.promo?.id ?? null,
             userId: analysis.userId,
@@ -298,17 +302,19 @@ export async function paymentRoutes(app: FastifyInstance) {
         url: `${env.APP_ORIGIN}/report/${analysis.id}/full`,
         sessionId: payment.stripePaymentIntentId,
         amount: payment.amount,
-        originalAmount: payment.originalAmount ?? env.PRICE_AMOUNT,
+        originalAmount: payment.originalAmount ?? price.amount,
         discountAmount: payment.discountAmount,
         currency: payment.currency,
         promoCode: promoResult.promo?.code ?? null
       };
     }
 
+    if (!stripe) return reply.code(501).send({ error: "Stripe is not configured" });
+
     const metadata = {
       analysisId: analysis.id,
       sessionId: analysis.sessionId,
-      originalAmount: String(env.PRICE_AMOUNT),
+      originalAmount: String(price.amount),
       discountAmount: String(promoResult.discountAmount),
       promoCodeId: promoResult.promo?.id ?? "",
       promoCode: promoResult.promo?.code ?? ""
@@ -321,7 +327,7 @@ export async function paymentRoutes(app: FastifyInstance) {
       line_items: [{
         quantity: 1,
         price_data: {
-          currency: env.PRICE_CURRENCY,
+          currency: price.currency,
           unit_amount: finalAmount,
           product_data: {
             name: "ORKEN.LIFE PRO report"
@@ -338,10 +344,10 @@ export async function paymentRoutes(app: FastifyInstance) {
         stripePaymentIntentId: paymentIntentId,
         stripeCheckoutSessionId: session.id,
         status: "PENDING",
-        originalAmount: env.PRICE_AMOUNT,
+        originalAmount: price.amount,
         discountAmount: promoResult.discountAmount,
         amount: finalAmount,
-        currency: env.PRICE_CURRENCY,
+        currency: price.currency,
         promoCodeId: promoResult.promo?.id ?? null,
         paidAt: null
       },
@@ -349,10 +355,10 @@ export async function paymentRoutes(app: FastifyInstance) {
         analysisId: analysis.id,
         stripePaymentIntentId: paymentIntentId,
         stripeCheckoutSessionId: session.id,
-        originalAmount: env.PRICE_AMOUNT,
+        originalAmount: price.amount,
         discountAmount: promoResult.discountAmount,
         amount: finalAmount,
-        currency: env.PRICE_CURRENCY,
+        currency: price.currency,
         promoCodeId: promoResult.promo?.id ?? null,
         userId: analysis.userId
       }
@@ -367,7 +373,7 @@ export async function paymentRoutes(app: FastifyInstance) {
         properties: {
           checkoutSessionId: session.id,
           paymentIntentId,
-          originalAmount: env.PRICE_AMOUNT,
+          originalAmount: price.amount,
           discountAmount: promoResult.discountAmount,
           amount: finalAmount,
           promoCode: promoResult.promo?.code
@@ -379,9 +385,9 @@ export async function paymentRoutes(app: FastifyInstance) {
       url: session.url,
       sessionId: session.id,
       amount: finalAmount,
-      originalAmount: env.PRICE_AMOUNT,
+      originalAmount: price.amount,
       discountAmount: promoResult.discountAmount,
-      currency: env.PRICE_CURRENCY,
+      currency: price.currency,
       promoCode: promoResult.promo?.code ?? null
     };
   });

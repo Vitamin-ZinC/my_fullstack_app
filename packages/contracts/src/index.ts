@@ -57,18 +57,26 @@ export type RoleFit = {
   risks: string;
 };
 
+export type IkigaiScores = {
+  love: number;
+  good_at: number;
+  paid_for: number;
+  world_needs: number;
+};
+
 export type ReportFree = {
   profession: string;
   summary: string;
-  ikigai_scores: {
-    love: number;
-    good_at: number;
-    paid_for: number;
-    world_needs: number;
-  };
+  ikigai_scores: IkigaiScores;
+  key_insight?: string;
+  paid_report_teaser?: string;
+  paid_report_preview?: string[];
 };
 
-export type ReportFull = ReportFree & {
+export type ReportFull = {
+  profession: string;
+  summary: string;
+  ikigai_scores: IkigaiScores;
   voice_analysis: VoiceAnalysis;
   face_analysis: FaceAnalysis;
   top_roles: RoleFit[];
@@ -123,6 +131,8 @@ export type PromptTemplate = {
   content: string;
 };
 
+export type PromptTemplateInput = Omit<PromptTemplate, "id">;
+
 export type PromoCode = {
   id: string;
   code: string;
@@ -149,6 +159,12 @@ export type PaymentIntentResponse = {
   discountAmount: number;
   currency: string;
   promoCode?: string | null;
+};
+
+export type PaymentConfigResponse = {
+  amount: number;
+  currency: string;
+  priceLabel: string;
 };
 
 export type CheckoutSessionResponse = {

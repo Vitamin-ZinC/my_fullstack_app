@@ -4,8 +4,10 @@ import type {
   CheckoutSessionResponse,
   FeatureFlag,
   IkigaiAnswers,
+  PaymentConfigResponse,
   PaymentIntentResponse,
   PromoCode,
+  PromptTemplateInput,
   PromptTemplate,
   ReportFree,
   ReportFull
@@ -79,6 +81,8 @@ export async function ensureGuestSession() {
 }
 
 export const contentSettingKey = (locale: TextLocale) => `site_texts_${locale}`;
+export const reportPriceAmountSettingKey = "report_price_amount";
+export const reportPriceCurrencySettingKey = "report_price_currency";
 
 export const contentApi = {
   get: (locale: TextLocale) => request<{ locale: TextLocale; value: unknown | null }>(`/api/content/${locale}`)
@@ -100,6 +104,7 @@ export const api = {
   getStatus: (analysisId: string) => request<{ status: string; progress: number; jobId?: string; errorMessage?: string }>(`/api/analyses/${analysisId}/status`),
   getFreeReport: (analysisId: string) => request<{ reportFree: ReportFree }>(`/api/analyses/${analysisId}/report/free`),
   getFullReport: (analysisId: string) => request<{ reportFull: ReportFull }>(`/api/analyses/${analysisId}/report/full`),
+  getPaymentConfig: () => request<PaymentConfigResponse>("/api/payments/config"),
   createPaymentIntent: (analysisId: string, promoCode?: string) => request<PaymentIntentResponse>("/api/payments/create-intent", {
     method: "POST",
     body: JSON.stringify({ analysisId, promoCode: promoCode?.trim() || undefined })
@@ -180,7 +185,8 @@ export const adminApi = {
     body: JSON.stringify({ enabled, payload })
   }),
   prompts: () => adminRequest<PromptTemplate[]>("/api/admin/prompts"),
-  upsertPrompt: (prompt: Omit<PromptTemplate, "id">) => adminRequest<PromptTemplate>("/api/admin/prompts", {
+  promptDefaults: () => adminRequest<PromptTemplateInput[]>("/api/admin/prompts/defaults"),
+  upsertPrompt: (prompt: PromptTemplateInput) => adminRequest<PromptTemplate>("/api/admin/prompts", {
     method: "POST",
     body: JSON.stringify(prompt)
   }),

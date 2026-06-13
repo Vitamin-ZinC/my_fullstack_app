@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { IkigaiPremiumMap } from "@/components/IkigaiPremiumMap";
 import { api, getAnalysisDraft } from "@/lib/api";
 import { useSiteText } from "@/lib/useSiteText";
@@ -12,8 +12,13 @@ export default function IkigaiPage() {
   const faceText = siteText.flow.face;
   const router = useRouter();
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    setReady(true);
+  }, []);
 
   async function submit() {
     setError("");
@@ -77,7 +82,7 @@ export default function IkigaiPage() {
       </div>
 
       {error && <div className="card error-card">{error}</div>}
-      <button className="button" data-testid="ikigai-submit-button" onClick={submit} disabled={busy}>{busy ? text.busy : text.submit}</button>
+      <button className="button" data-testid="ikigai-submit-button" onClick={submit} disabled={!ready || busy}>{busy ? text.busy : text.submit}</button>
     </div>
   );
 }

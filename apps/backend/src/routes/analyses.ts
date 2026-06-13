@@ -8,7 +8,7 @@ import { analysisQueue } from "../lib/queue.js";
 import { subscribeProgress } from "../lib/progress.js";
 import { prisma } from "../lib/prisma.js";
 import { createMediaUploadUrls, verifyRequiredMedia } from "../services/media.js";
-import { buildFallbackReport } from "../services/report.js";
+import { buildFallbackFreeReport, buildFallbackReport } from "../services/report.js";
 
 const ikigaiAnswersSchema = z.object({
   love: z.array(z.string()),
@@ -191,11 +191,7 @@ export async function analysisRoutes(app: FastifyInstance) {
       where: { id: params.id },
       data: {
         status: "DONE",
-        reportFree: {
-          profession: report.profession,
-          summary: report.summary,
-          ikigai_scores: report.ikigai_scores
-        },
+        reportFree: buildFallbackFreeReport(report),
         reportFull: report,
         completedAt: new Date()
       }

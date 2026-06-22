@@ -230,7 +230,7 @@ const DEFAULT = {
   energyLevel: 7, clarityLevel: 6, stabilityLevel: 7,
   streakDays: 0, lastActivityDate: null, totalPoints: 0,
   joinDate: null, habits: {}, activeScreen: 'dashboard',
-  reminderTime: '09:00', reminderEnabled: true, geminiApiKey: '',
+  reminderTime: '09:00', reminderEnabled: true,
   lastMetricsUpdate: null,
   entryMode: 'direct', trialDays: 30, weeklyFreezes: 1, subscriptionPrice: '$8',
   diagnosticProfile: null, personalHabit: null,
@@ -241,6 +241,9 @@ const HABIT_STORAGE_KEY = 'levelup_ikigai_habits_state_v1';
 const DIAGNOSTIC_PROFILE_KEY = 'levelup_habit_profile';
 const urlParams = new URLSearchParams(window.location.search);
 const cameFromDiagnosis = urlParams.get('from') === 'ikigai';
+const BACKEND_API_BASE = window.location.hostname === 'localhost' && window.location.port === '3000'
+  ? 'http://localhost:3001'
+  : window.location.origin;
 
 function readJson(key) {
   try { return JSON.parse(localStorage.getItem(key) || 'null'); } catch(e) { return null; }
@@ -439,7 +442,6 @@ function useStore() {
 
     toggleReminder: useCallback(() => upd(s => ({ ...s, reminderEnabled: !s.reminderEnabled })), []),
 
-    setApiKey: useCallback((key) => upd(s => ({ ...s, geminiApiKey:key })), []),
     updateAvatar: useCallback((avatarDataUrl) => upd(s => ({ ...s, avatarDataUrl })), []),
     updatePaymentMethod: useCallback((status='ready_for_stripe') => upd(s => ({ ...s, paymentMethodStatus: status })), []),
 
@@ -544,24 +546,24 @@ function Onboarding({ onComplete }) {
         <div className="text-center mb-6">
           <div className="text-xs text-cyan-400 mb-2" style={{letterSpacing:2}}>НАСТРОЙКА ПЛАНА</div>
           <h2 className="text-2xl font-bold text-slate-100 mb-3" style={{fontFamily:'Space Grotesk'}}>
-            {name}, Вы уже проходили платную диагностику Икигай?
+            {name}, как продолжим?
           </h2>
           <p className="text-sm text-slate-500 leading-relaxed">
-            Если да, опрос не нужен: мы возьмем Ваш архетип, зону роста и выводы отчета, чтобы прокачивать именно найденный вектор.
+            Можно развивать навыки, которые предложил полный отчет диагностики, или пройти короткий опрос и собрать базовый маршрут привычек.
           </p>
         </div>
         <div className="grid gap-3">
           <button onClick={useDiagnosis} disabled={!hasDiagnosis}
             className="gc text-left p-4 rounded-2xl hover:border-cyan-500/40 transition-all disabled:opacity-45 disabled:cursor-not-allowed">
-            <div className="text-sm font-bold text-slate-100 mb-1">Да, использовать мой платный отчет</div>
+            <div className="text-sm font-bold text-slate-100 mb-1">Развивать навыки из полного отчета</div>
             <div className="text-xs text-slate-500 leading-relaxed">
               {hasDiagnosis
                 ? `Откроем 30 дней trial, затем подписка ${profile.subscriptionPrice || '$8'} в месяц. Фокус: ${profile.topRole}.`
-                : 'Отчет не найден в этом браузере. Откройте трекер через кнопку в конце платного отчета.'}
+                : 'Профиль отчета не найден в этом браузере. Откройте трекер кнопкой "Активировать трекер привычек" в полном отчете.'}
             </div>
           </button>
           <button onClick={startQuiz} className="gc text-left p-4 rounded-2xl hover:border-cyan-500/40 transition-all">
-            <div className="text-sm font-bold text-slate-100 mb-1">Нет, пройти короткий опрос</div>
+            <div className="text-sm font-bold text-slate-100 mb-1">Пройти короткий опрос</div>
             <div className="text-xs text-slate-500 leading-relaxed">
               4 вопроса помогут определить стартовую зону роста и подобрать базовый маршрут привычек.
             </div>
@@ -1832,18 +1834,29 @@ function Archive() {
 function AINavigator() {
   const { s } = useStore();
   const cycle = CYCLES[s.currentCycle-1];
-  const habit = cycle?.habits[s.currentWeek-1];
+  const cycleHabit = cycle?.habits[s.currentWeek-1];
+  const activeHabit = s.entryMode === 'diagnosis' && s.personalHabit ? s.personalHabit : cycleHabit;
+  const activeHabitState = activeHabit ? (s.habits[activeHabit.id] || {}) : {};
 
-  const sysPrompt = `Ты — Пингви, AI-наставник приложения ORKEN.LIFE. Ты умный, тёплый и чуть ироничный.
-Пользователь: ${s.name}. Цикл: ${cycle?.sub} — ${cycle?.title}. Неделя: ${s.currentWeek}.
-Текущая привычка: «${habit?.title}». Слабая зона Икигай: ${ZONES[s.ikigaiWeakZone]?.name}.
-Метрики: Энергия ${s.energyLevel}/10, Ясность ${s.clarityLevel}/10, Устойчивость ${s.stabilityLevel}/10. Стрик: ${s.streakDays} дней.
-Говори по-русски. Используй в ответах иногда. Ответы краткие (2–4 предложения), тёплые, поддерживающие.
-Задавай уточняющий вопрос в конце. Не раскрывай, что ты Gemini.`;
+  const navigatorContext = (mode='chat') => ({
+    name: s.name,
+    mode,
+    cycle: cycle ? `${cycle.sub} — ${cycle.title}` : '',
+    week: s.currentWeek,
+    habit: activeHabit?.title || '',
+    weakZone: ZONES[s.ikigaiWeakZone]?.name || s.ikigaiWeakZone,
+    topRole: s.diagnosticProfile?.topRole || s.personalHabit?.focus || '',
+    energy: s.energyLevel,
+    clarity: s.clarityLevel,
+    stability: s.stabilityLevel,
+    streakDays: s.streakDays,
+    careerAction: s.diagnosticProfile?.careerAction || s.personalHabit?.practice || '',
+    recentInsight: activeHabitState.insight || ''
+  });
 
   const [msgs, setMsgs] = useState([{
     id:'1', role:'assistant',
-    text:`Привет, ${s.name}! Я Пингви — твой наставник на пути Икигай.\n\nСейчас ты на ${cycle?.sub} — «${cycle?.title}», неделя ${s.currentWeek}. Задача недели — «${habit?.title}».\n\nО чём хочешь поговорить?`,
+    text:`Привет, ${s.name}! Я Пингви — твой AI-навигационный помощник ORKEN.LIFE.\n\nСейчас ты на ${cycle?.sub} — «${cycle?.title}», неделя ${s.currentWeek}. Задача недели — «${activeHabit?.title}».\n\nМогу помочь с состоянием, путем развития или просто поговорить.`,
     ts: new Date()
   }]);
   const [input, setInput] = useState('');
@@ -1873,15 +1886,15 @@ function AINavigator() {
 
   // Template conversations
   const TEMPLATES = [
-    { label: '🌅 Утренний чек-ин', msg: `Доброе утро! Сегодня ${new Date().toLocaleDateString('ru-RU', {weekday:'long'})}. Помоги мне настроиться на день.` },
-    { label: '😤 Трудно идти', msg: `Пингви, мне сейчас сложно продолжать. Кажется, что нет смысла. Поддержи меня.` },
-    { label: '🎯 Фокус на неделю', msg: `Какой главный фокус для меня на этой неделе, исходя из моей привычки и показателей?` },
-    { label: '📊 Разбор показателей', msg: `Мои показатели: Энергия ${s.energyLevel}/10, Ясность ${s.clarityLevel}/10, Устойчивость ${s.stabilityLevel}/10. Что это говорит о моём состоянии?` },
-    { label: '🌱 Про мой Икигай', msg: `Расскажи мне подробнее про зону "${ZONES[s.ikigaiWeakZone]?.name}" в Икигай. Почему это важно для меня?` },
-    { label: '🔥 Мотивационный заряд', msg: `Мне нужен мощный заряд мотивации прямо сейчас. Что скажешь, Пингви?` },
+    { label: '📊 Улучшить состояние', mode:'state', msg: `Мои показатели: энергия ${s.energyLevel}/10, ясность ${s.clarityLevel}/10, устойчивость ${s.stabilityLevel}/10. Что мне улучшить сегодня?` },
+    { label: '🧭 Путь развития', mode:'path', msg: `Помоги мне продолжить путь развития по моей диагностике и текущей привычке.` },
+    { label: '💬 Просто поболтать', mode:'chat', msg: `Хочу просто поговорить. Задай мне хороший вопрос.` },
+    { label: '🌅 Утренний чек-ин', mode:'state', msg: `Доброе утро! Сегодня ${new Date().toLocaleDateString('ru-RU', {weekday:'long'})}. Помоги мне настроиться на день.` },
+    { label: '🎯 Фокус на неделю', mode:'path', msg: `Какой главный фокус для меня на этой неделе, исходя из моей привычки и показателей?` },
+    { label: '🌱 Про мой Икигай', mode:'path', msg: `Расскажи мне подробнее про зону "${ZONES[s.ikigaiWeakZone]?.name}" в Икигай. Почему это важно для меня?` },
   ];
 
-  const send = async (text) => {
+  const send = async (text, mode='chat') => {
     if (!text.trim() || loading) return;
 
     const userMsg = { id: Date.now().toString(), role:'user', text: text.trim(), ts: new Date() };
@@ -1891,54 +1904,18 @@ function AINavigator() {
     setError('');
 
     try {
-      // If no API key, use built-in Pingvi responses
-      if (!s.geminiApiKey) {
-        const mockReplies = [
-          `Отличный вопрос, ${s.name}! Помни: маленький шаг каждый день важнее большого рывка раз в неделю. Как ты себя чувствуешь сегодня?`,
-          `Я слышу тебя! Это нормально — иногда нам нужна пауза. Попробуй сегодня сделать хотя бы одно маленькое действие из практики. Что тебя больше всего тормозит?`,
-          `Ты уже на правильном пути, ${s.name}! Стрик ${s.streakDays} дней — это не случайность, это твой выбор. Какая привычка этой недели даётся легче всего?`,
-          `Икигай — это не цель, это путь. Каждый день ты становишься чуть ближе к себе настоящему. Что из практики этой недели откликается тебе больше всего?`,
-          `Энергия ${s.energyLevel}/10 — это важный сигнал. Тело знает, что нужно. Когда ты последний раз делал(а) что-то просто для удовольствия?`,
-        ];
-        const reply = mockReplies[Math.floor(Math.random() * mockReplies.length)];
-        await new Promise(r => setTimeout(r, 800));
-        setMsgs(p => [...p, {id:(Date.now()+1).toString(),role:'assistant',text:reply,ts:new Date()}]);
-        setLoading(false);
-        return;
-      }
-      // Gemini requires conversation to start with 'user' role
-      const allMsgs = [...msgs, userMsg];
-      const firstUserIdx = allMsgs.findIndex(m => m.role === 'user');
-      // Limit to last 20 messages to avoid token limits
-      const trimmed = allMsgs.slice(firstUserIdx).slice(-20);
-      // Ensure starts with user
-      const startIdx = trimmed.findIndex(m => m.role === 'user');
-      const history = trimmed.slice(startIdx >= 0 ? startIdx : 0).map(m => ({
-        role: m.role === 'user' ? 'user' : 'model',
-        parts: [{ text: m.text }]
-      }));
-
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${s.geminiApiKey}`,
-        {
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({
-            system_instruction:{ parts:[{text:sysPrompt}] },
-            contents: history
-          })
-        }
-      );
+      const res = await fetch(`${BACKEND_API_BASE}/api/habits/navigator`, {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({
+          message: userMsg.text,
+          messages: msgs.slice(-10).map(m => ({ role:m.role, text:m.text })),
+          context: navigatorContext(mode)
+        })
+      });
       const data = await res.json();
-      if (data.error) {
-        const code = data.error.code || 0;
-        const msg = data.error.message || '';
-        if (code === 400 || msg.includes('API_KEY')) throw new Error('Неверный API ключ. Проверь в Настройках.');
-        if (code === 429) throw new Error('Превышен лимит запросов. Подожди минуту и попробуй снова.');
-        if (code === 403) throw new Error('API ключ не имеет доступа. Проверь разрешения в Google AI Studio.');
-        throw new Error('Ошибка API: ' + msg.slice(0, 80));
-      }
-      const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || 'Не смог ответить, попробуй ещё раз.';
+      if (!res.ok) throw new Error(data.error || 'AI Навигатор временно недоступен');
+      const reply = data.reply || 'Не смог ответить, попробуй ещё раз.';
       setMsgs(p => [...p, {id:(Date.now()+1).toString(),role:'assistant',text:reply,ts:new Date()}]);
     } catch(e) {
       setError('Ошибка: ' + e.message);
@@ -1979,7 +1956,7 @@ function AINavigator() {
         <div className="text-xs text-slate-500 mb-2">📝 Шаблоны разговора</div>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
           {TEMPLATES.map(t => (
-            <button key={t.label} onClick={() => send(t.msg)}
+            <button key={t.label} onClick={() => send(t.msg, t.mode)}
               className="text-left text-xs px-3 py-2.5 rounded-xl gc text-slate-400 hover:text-cyan-400 hover:border-cyan-500/30 transition-all leading-relaxed">
               {t.label}
             </button>
@@ -2045,7 +2022,7 @@ function AINavigator() {
           placeholder={`Напиши Пингви, ${s.name}...`}
           className="gi px-4 py-3 text-sm flex-1" />
         <button onClick={()=>send(input)} disabled={!input.trim()||loading}
-          className="bp px-5 py-3 text-sm" disabled={!input.trim()||loading}>→</button>
+          className="bp px-5 py-3 text-sm">→</button>
       </div>
 
       {/* Weekly check-in */}
@@ -2059,7 +2036,7 @@ function AINavigator() {
             </div>
           ))}
         </div>
-        <button onClick={()=>send('Как я справляюсь с этой неделей?')}
+        <button onClick={()=>send('Как я справляюсь с этой неделей?', 'state')}
           className="w-full mt-3 text-xs py-2 gc text-slate-400 hover:text-cyan-400 transition-colors">
           Получить фидбек от Пингви →
         </button>

@@ -42,39 +42,60 @@ const scoreSchema = z.object({
   world_needs: z.number().int().min(0).max(100)
 });
 
+const diagnosticTextSchema = z.string().min(20).refine((value) => {
+  const normalized = value.trim().toLowerCase();
+  return ![
+    "low",
+    "medium",
+    "high",
+    "unavailable",
+    "n/a",
+    "низкий",
+    "средний",
+    "высокий",
+    "недоступно"
+  ].includes(normalized);
+}, "diagnostic parameters must be explanatory text");
+
+const ikigaiZoneSchema = z.object({
+  title: z.string().min(2),
+  insight: z.string().min(20),
+  recommendation: z.string().min(20)
+});
+
 export const reportFullSchema = z.object({
   profession: z.string().min(2),
   summary: z.string().min(20),
   ikigai_scores: scoreSchema,
   voice_analysis: z.object({
-    timbre: z.string(),
-    emotionality: z.string(),
-    confidence: z.string(),
-    pace: z.string(),
-    energy: z.string(),
-    leadership: z.string(),
-    anxiety: z.string(),
-    communication: z.string(),
-    charisma: z.string(),
-    analytical: z.string(),
-    sociality: z.string(),
-    persuasion: z.string(),
-    motivation: z.string()
+    timbre: diagnosticTextSchema,
+    emotionality: diagnosticTextSchema,
+    confidence: diagnosticTextSchema,
+    pace: diagnosticTextSchema,
+    energy: diagnosticTextSchema,
+    leadership: diagnosticTextSchema,
+    anxiety: diagnosticTextSchema,
+    communication: diagnosticTextSchema,
+    charisma: diagnosticTextSchema,
+    analytical: diagnosticTextSchema,
+    sociality: diagnosticTextSchema,
+    persuasion: diagnosticTextSchema,
+    motivation: diagnosticTextSchema
   }),
   face_analysis: z.object({
-    emotionality: z.string(),
-    leadership: z.string(),
-    confidence: z.string(),
-    thinkingType: z.string(),
-    sociality: z.string(),
-    stressTolerance: z.string(),
-    analytical: z.string(),
-    motivation: z.string(),
-    empathy: z.string(),
-    openness: z.string(),
-    communication: z.string(),
-    discipline: z.string(),
-    ambition: z.string()
+    emotionality: diagnosticTextSchema,
+    leadership: diagnosticTextSchema,
+    confidence: diagnosticTextSchema,
+    thinkingType: diagnosticTextSchema,
+    sociality: diagnosticTextSchema,
+    stressTolerance: diagnosticTextSchema,
+    analytical: diagnosticTextSchema,
+    motivation: diagnosticTextSchema,
+    empathy: diagnosticTextSchema,
+    openness: diagnosticTextSchema,
+    communication: diagnosticTextSchema,
+    discipline: diagnosticTextSchema,
+    ambition: diagnosticTextSchema
   }),
   top_roles: z.array(z.object({
     name: z.string(),
@@ -85,6 +106,13 @@ export const reportFullSchema = z.object({
     strengths: z.string(),
     risks: z.string()
   })),
+  ikigai_zones: z.object({
+    passion: ikigaiZoneSchema,
+    mission: ikigaiZoneSchema,
+    profession: ikigaiZoneSchema,
+    vocation: ikigaiZoneSchema,
+    ikigai: ikigaiZoneSchema
+  }),
   career_action: z.string(),
   final_insight: z.string()
 });
@@ -107,6 +135,17 @@ const scoreJsonSchema = {
     good_at: { type: "integer" },
     paid_for: { type: "integer" },
     world_needs: { type: "integer" }
+  }
+} as const;
+
+const ikigaiZoneJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["title", "insight", "recommendation"],
+  properties: {
+    title: { type: "string" },
+    insight: { type: "string" },
+    recommendation: { type: "string" }
   }
 } as const;
 
@@ -144,6 +183,7 @@ const reportFullJsonSchema = {
     "voice_analysis",
     "face_analysis",
     "top_roles",
+    "ikigai_zones",
     "career_action",
     "final_insight"
   ],
@@ -196,6 +236,18 @@ const reportFullJsonSchema = {
           strengths: { type: "string" },
           risks: { type: "string" }
         }
+      }
+    },
+    ikigai_zones: {
+      type: "object",
+      additionalProperties: false,
+      required: ["passion", "mission", "profession", "vocation", "ikigai"],
+      properties: {
+        passion: ikigaiZoneJsonSchema,
+        mission: ikigaiZoneJsonSchema,
+        profession: ikigaiZoneJsonSchema,
+        vocation: ikigaiZoneJsonSchema,
+        ikigai: ikigaiZoneJsonSchema
       }
     },
     career_action: { type: "string" },

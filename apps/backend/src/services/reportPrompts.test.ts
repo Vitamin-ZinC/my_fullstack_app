@@ -26,7 +26,10 @@ test("premium default prompt requires safe profiling lens and Russian personaliz
   assert.match(system.content, /Ponomarenko|Ekman|Navarro|deception-research/);
   assert.match(system.content, /Do not.*lying|deceptive/i);
   assert.match(user.content, /Each voice_analysis and face_analysis value/);
+  assert.match(user.content, /ikigai_zones/);
+  assert.match(user.content, /похоже|может указывать/);
   assert.match(user.content, /Every visible value must be in Russian/);
+  assert.doesNotMatch(user.content, /Рї|Рј|РІ СЂ/);
 });
 
 test("renderPromptTemplate replaces known variables and keeps unknown placeholders", () => {

@@ -64,6 +64,12 @@ export type IkigaiScores = {
   world_needs: number;
 };
 
+export type IkigaiReportZone = {
+  title: string;
+  insight: string;
+  recommendation: string;
+};
+
 export type ReportFree = {
   profession: string;
   summary: string;
@@ -80,6 +86,13 @@ export type ReportFull = {
   voice_analysis: VoiceAnalysis;
   face_analysis: FaceAnalysis;
   top_roles: RoleFit[];
+  ikigai_zones?: {
+    passion: IkigaiReportZone;
+    mission: IkigaiReportZone;
+    profession: IkigaiReportZone;
+    vocation: IkigaiReportZone;
+    ikigai: IkigaiReportZone;
+  };
   career_action: string;
   final_insight: string;
 };

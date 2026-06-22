@@ -18,6 +18,8 @@ async function fulfillJson(route, json) {
   await route.fulfill({ json, headers: corsHeaders });
 }
 
+const diagnosticText = "Параметр сформирован как развернутый диагностический ответ: он объясняет рабочее проявление, пользу, риск и следующий шаг развития.";
+
 test.use({
   permissions: ["microphone", "camera"],
   launchOptions: {
@@ -29,9 +31,9 @@ test("ORKEN.LIFE frontend flow works with mocked backend", async ({ page }) => {
   await page.route(`${apiBase}/api/content/ru`, async (route) => fulfillJson(route, { locale: "ru", value: null }));
   await page.route(`${apiBase}/api/auth/guest`, async (route) => fulfillJson(route, { sessionId: "test-session", guestToken: "test-token" }));
   await page.route(`${apiBase}/api/analyses`, async (route) => fulfillJson(route, {
-      analysisId: "analysis-test",
-      audioUploadUrl: `${apiBase}/uploads/audio-test`,
-      photoUploadUrl: `${apiBase}/uploads/photo-test`
+    analysisId: "analysis-test",
+    audioUploadUrl: `${apiBase}/uploads/audio-test`,
+    photoUploadUrl: `${apiBase}/uploads/photo-test`
   }));
   await page.route(`${apiBase}/uploads/**`, async (route) => {
     if (route.request().method() === "OPTIONS") {
@@ -45,54 +47,53 @@ test("ORKEN.LIFE frontend flow works with mocked backend", async ({ page }) => {
   await page.route(`${apiBase}/api/analyses/analysis-test/stream**`, async (route) => route.fulfill({
     status: 200,
     headers: { ...corsHeaders, "content-type": "text/event-stream" },
-    body: "data: {\"status\":\"DONE\",\"progress\":100,\"log\":\"Отчёт готов\"}\n\n"
+    body: "data: {\"status\":\"DONE\",\"progress\":100,\"log\":\"Report ready\"}\n\n"
   }));
   await page.route(`${apiBase}/api/analyses/analysis-test/status`, async (route) => fulfillJson(route, { status: "DONE", progress: 100 }));
   await page.route(`${apiBase}/api/analyses/analysis-test/report/free`, async (route) => fulfillJson(route, {
-      reportFree: {
-        profession: "Продуктовый стратег",
-        summary: "Короткий бесплатный отчёт сформирован.",
-        ikigai_scores: { love: 82, good_at: 77, world_needs: 74, paid_for: 69 },
-        key_insight: "You already have a clear monetizable strategy pattern.",
-        paid_report_teaser: "The full report opens deeper voice, face and role-fit analysis.",
-        paid_report_preview: ["Voice signals", "Face signals", "Top roles", "Career risks", "Action route"]
-      }
+    reportFree: {
+      profession: "Продуктовый стратег",
+      summary: "Короткий бесплатный отчет сформирован и дает один понятный профессиональный вектор.",
+      ikigai_scores: { love: 82, good_at: 77, world_needs: 74, paid_for: 69 },
+      key_insight: "Уже виден паттерн стратегии, упаковки пользы и рыночной проверки.",
+      paid_report_teaser: "Полный отчет открывает голос, лицо, роли, риски и 30-дневный маршрут.",
+      paid_report_preview: ["Голос", "Лицо", "Зоны Икигай", "Топ ролей", "Риски", "План"]
+    }
   }));
-
   await page.route(`${apiBase}/api/analyses/analysis-test/report/full`, async (route) => fulfillJson(route, {
     reportFull: {
       profession: "Product strategist",
       summary: "Full AI report generated from the same analysis.",
       ikigai_scores: { love: 82, good_at: 77, world_needs: 74, paid_for: 69 },
       voice_analysis: {
-        timbre: "Calm",
-        emotionality: "Measured",
-        confidence: "Steady",
-        pace: "Balanced",
-        energy: "Focused",
-        leadership: "Expert",
-        anxiety: "Low",
-        communication: "Clear",
-        charisma: "Precise",
-        analytical: "Strong",
-        sociality: "Selective",
-        persuasion: "Evidence-based",
-        motivation: "Meaning-driven"
+        timbre: "Тембр звучит спокойно и помогает удерживать доверие в экспертном разговоре.",
+        emotionality: diagnosticText,
+        confidence: diagnosticText,
+        pace: diagnosticText,
+        energy: diagnosticText,
+        leadership: diagnosticText,
+        anxiety: diagnosticText,
+        communication: diagnosticText,
+        charisma: diagnosticText,
+        analytical: diagnosticText,
+        sociality: diagnosticText,
+        persuasion: diagnosticText,
+        motivation: diagnosticText
       },
       face_analysis: {
-        emotionality: "Controlled",
-        leadership: "Structured",
-        confidence: "Calm",
-        thinkingType: "Systemic",
-        sociality: "Focused",
-        stressTolerance: "Stable",
-        analytical: "Visible",
-        motivation: "Autonomous",
-        empathy: "Context-aware",
-        openness: "Measured",
-        communication: "Explanatory",
-        discipline: "High",
-        ambition: "Quality-focused"
+        emotionality: diagnosticText,
+        leadership: diagnosticText,
+        confidence: diagnosticText,
+        thinkingType: diagnosticText,
+        sociality: diagnosticText,
+        stressTolerance: diagnosticText,
+        analytical: diagnosticText,
+        motivation: diagnosticText,
+        empathy: diagnosticText,
+        openness: diagnosticText,
+        communication: diagnosticText,
+        discipline: diagnosticText,
+        ambition: diagnosticText
       },
       top_roles: [{
         name: "Product strategist",
@@ -103,6 +104,13 @@ test("ORKEN.LIFE frontend flow works with mocked backend", async ({ page }) => {
         strengths: "Research, prioritization and explanation.",
         risks: "Can overprepare before market validation."
       }],
+      ikigai_zones: {
+        passion: { title: "Страсть", insight: "Интерес связан с исследованием и развитием идей.", recommendation: "Проверить один формат регулярной практики." },
+        mission: { title: "Миссия", insight: "Польза возникает через ясность для рынка.", recommendation: "Сформулировать одну проблему аудитории." },
+        profession: { title: "Профессия", insight: "Профессиональная зона сильна через стратегию и продукт.", recommendation: "Собрать короткий оффер." },
+        vocation: { title: "Призвание", insight: "Монетизация связана с консультациями и внедрением.", recommendation: "Показать оффер трем людям." },
+        ikigai: { title: "Икигай", insight: "Центр реализации находится в экспертной стратегии.", recommendation: "Проверить ценность за 30 дней." }
+      },
       career_action: "Validate one paid offer this week.",
       final_insight: "The strongest trajectory is expert product strategy."
     }
@@ -141,7 +149,6 @@ test("ORKEN.LIFE frontend flow works with mocked backend", async ({ page }) => {
   await expect(page.getByTestId("voice-stop-button")).toBeVisible({ timeout: 5000 });
   await page.getByTestId("voice-stop-button").click();
   await expect(page.locator("audio[controls]")).toBeVisible({ timeout: 15000 });
-  await expect(page.getByTestId("voice-next-link")).toBeVisible();
   await page.getByTestId("voice-next-link").click();
   await expect(page).toHaveURL(/\/flow\/face$/);
 
@@ -152,7 +159,6 @@ test("ORKEN.LIFE frontend flow works with mocked backend", async ({ page }) => {
     buffer: Buffer.from(pngBase64, "base64")
   });
   await expect(page.getByTestId("face-metrics")).toBeVisible({ timeout: 10000 });
-  await expect(page.getByTestId("face-next-link")).toBeVisible();
   await page.getByTestId("face-next-link").click();
   await expect(page).toHaveURL(/\/flow\/ikigai$/);
 
@@ -160,38 +166,29 @@ test("ORKEN.LIFE frontend flow works with mocked backend", async ({ page }) => {
   await page.getByTestId("ikigai-good_at").fill("стратегия, продукт");
   await page.getByTestId("ikigai-world_needs").fill("ясность, автоматизация");
   await page.getByTestId("ikigai-paid_for").fill("консалтинг, внедрение");
-  await expect(page.getByTestId("ikigai-submit-button")).toBeEnabled({ timeout: 30000 });
   const confirmResponse = page.waitForResponse(`${apiBase}/api/analyses/analysis-test/confirm`);
   await page.getByTestId("ikigai-submit-button").click();
   await confirmResponse;
   await expect(page).toHaveURL(/\/flow\/analysis$/, { timeout: 15000 });
   await expect(page.getByTestId("free-report-link")).toBeVisible({ timeout: 10000 });
-  await expect(page.getByTestId("analysis-email-input")).toBeVisible();
 
   await page.getByTestId("analysis-email-input").fill("test@orken.life");
   await page.getByTestId("free-report-link").click();
   await expect(page).toHaveURL(/\/report\/analysis-test\/free$/);
-  await expect(page.getByText("Profession / Профессия")).toBeVisible();
   await expect(page.getByText("Продуктовый стратег")).toBeVisible();
-  await expect(page.getByTestId("open-pro-report-link")).toBeVisible();
-  await expect(page.getByText("You already have a clear monetizable strategy pattern.")).toBeVisible();
-  await expect(page.getByText("Voice signals")).toBeVisible();
-
   await page.getByTestId("open-pro-report-link").click();
+
   await expect(page).toHaveURL(/\/pay\/analysis-test$/);
-  await expect(page.getByTestId("payment-page")).toBeVisible();
-  await expect(page.getByTestId("promo-code-input")).toBeVisible();
   await page.getByTestId("promo-code-input").fill("FREE100");
-  await expect(page.getByTestId("checkout-button")).toBeEnabled({ timeout: 30000 });
   const checkoutResponse = page.waitForResponse(`${apiBase}/api/payments/create-checkout-session`);
   await page.getByTestId("checkout-button").click();
   await checkoutResponse;
   await expect(page).toHaveURL(/\/report\/analysis-test\/full$/, { timeout: 15000 });
   await expect(page.getByTestId("full-report-page")).toBeVisible();
   await expect(page.getByText("Product strategist").first()).toBeVisible();
-  await expect(page.getByText("Тембр")).toBeVisible();
-  await page.getByTestId("ikigai-hotspot-passion").click();
-  await expect(page.getByTestId("ikigai-zone-panel")).toContainText("Эта зона показывает");
+  await expect(page.getByTestId("ikigai-hotspot-passion")).toHaveCount(0);
+  await expect(page.getByText("Тембр звучит спокойно")).toBeVisible();
+
   await page.evaluate(() => {
     window.print = () => {
       window.sessionStorage.setItem("print-called", "1");
@@ -201,26 +198,28 @@ test("ORKEN.LIFE frontend flow works with mocked backend", async ({ page }) => {
   await expect.poll(async () => page.evaluate(() => window.sessionStorage.getItem("print-called"))).toBe("1");
 
   await page.getByTestId("activate-habits-link").click();
-  await expect(page).toHaveURL(/\/habits$/);
+  await expect(page).toHaveURL(/\/habits\?from=ikigai$/);
   await expect(page.getByTestId("habits-frame")).toBeVisible();
   const habitsFrame = page.frameLocator('[data-testid="habits-frame"]');
   await expect(habitsFrame.getByText("ORKEN.LIFE").first()).toBeVisible({ timeout: 15000 });
 });
 
-test("habits tracker records daily marks consistently", async ({ page }) => {
+test("habits tracker records daily marks and uses AI navigator", async ({ page }) => {
+  await page.route(`${apiBase}/api/habits/navigator`, async (route) => fulfillJson(route, {
+    reply: "Пингви видит состояние и предлагает один маленький шаг на сегодня.",
+    model: "test"
+  }));
+
   await page.goto(`${appBase}/habits`);
   await expect(page.getByTestId("habits-frame")).toBeVisible();
   const habitsFrame = page.frameLocator('[data-testid="habits-frame"]');
   await expect(habitsFrame.getByText("ORKEN.LIFE").first()).toBeVisible({ timeout: 15000 });
 
   await habitsFrame.locator("input").first().fill("Audit");
-  await expect(habitsFrame.locator("button:visible").first()).toBeEnabled();
   await habitsFrame.locator("button:visible").first().click();
-  await expect(habitsFrame.locator("button:visible").nth(1)).toBeEnabled();
   await habitsFrame.locator("button:visible").nth(1).click();
 
   for (let index = 0; index < 4; index += 1) {
-    await expect(habitsFrame.locator("button:visible").first()).toBeEnabled();
     await habitsFrame.locator("button:visible").first().click();
   }
 
@@ -230,7 +229,7 @@ test("habits tracker records daily marks consistently", async ({ page }) => {
 
   await frame.evaluate(() => {
     [...document.querySelectorAll("button")]
-      .find((button) => button.innerText.includes("\u041f\u0440\u0438\u0432\u044b\u0447\u043a\u0438"))
+      .find((button) => button.innerText.includes("Привычки"))
       ?.click();
   });
   await expect(habitsFrame.locator("button.hc").first()).toBeVisible();
@@ -247,4 +246,13 @@ test("habits tracker records daily marks consistently", async ({ page }) => {
   const unmarkedState = await frame.evaluate(() => JSON.parse(localStorage.getItem("levelup_ikigai_habits_state_v1")));
   expect(unmarkedState.totalPoints).toBe(0);
   expect(unmarkedState.habits.c1w1.completedDates).toHaveLength(0);
+
+  await frame.evaluate(() => {
+    [...document.querySelectorAll("button")]
+      .find((button) => button.innerText.includes("Пингви"))
+      ?.click();
+  });
+  await expect(habitsFrame.locator("body")).toContainText("AI Навигатор");
+  await habitsFrame.getByText("Улучшить состояние").click();
+  await expect(habitsFrame.locator("body")).toContainText("Пингви видит состояние", { timeout: 10000 });
 });

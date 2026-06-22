@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import type { ReportFull, RoleFit } from "@levelup/contracts";
-import { IkigaiPremiumMap, type IkigaiMapZone } from "@/components/IkigaiPremiumMap";
+import type { IkigaiScores, ReportFull } from "@levelup/contracts";
 import { api } from "@/lib/api";
 import { useSiteText } from "@/lib/useSiteText";
+
+type DiagnosticMapKey = keyof Pick<IkigaiScores, "love" | "good_at" | "paid_for" | "world_needs">;
 
 export default function FullReportPage() {
   const siteText = useSiteText();
@@ -15,12 +16,13 @@ export default function FullReportPage() {
   const { analysisId } = useParams<{ analysisId: string }>();
   const [report, setReport] = useState<ReportFull | null>(null);
   const [error, setError] = useState("");
-  const personalizedZones = report ? buildReportIkigaiZones(report) : undefined;
+  const visibleToc = text.toc.slice(1);
+  const visibleSections = text.sections.slice(1);
 
   useEffect(() => {
     api.getFullReport(analysisId)
       .then((result) => setReport(result.reportFull))
-      .catch((reason) => setError(reason instanceof Error ? reason.message : "Не удалось загрузить отчёт"));
+      .catch((reason) => setError(reason instanceof Error ? reason.message : "Не удалось загрузить отчет"));
   }, [analysisId]);
 
   if (error) {
@@ -43,48 +45,48 @@ export default function FullReportPage() {
         <h1 className="report-title">{text.title}</h1>
         <p className="report-lead">{report?.profession ?? text.loading}</p>
         <nav className="report-toc">
-          {text.toc.map((item, index) => (
+          {visibleToc.map((item, index) => (
             <a key={item} href={`#section-${index}`}>{item}</a>
           ))}
         </nav>
       </section>
 
-      <section id="section-0" className="report-section">
-        <h2>{text.sections[0]}</h2>
-        <p className="report-map-hint">{text.mapHint}</p>
-        <IkigaiPremiumMap zoneOverrides={personalizedZones} />
-      </section>
-
       {report && (
         <>
-          <section id="section-1" className="report-section">
-            <h2>{text.sections[1]}</h2>
+          <section id="section-0" className="report-section">
+            <h2>{visibleSections[0]}</h2>
             <p className="report-lead">{report.summary}</p>
           </section>
-          <section id="section-2" className="report-section">
-            <h2>{text.sections[2]}</h2>
+          <section id="section-1" className="report-section">
+            <h2>{visibleSections[1]}</h2>
             <div className="metric-grid">
-              {Object.entries(report.voice_analysis).map(([key, value]) => (
-                <div className="metric-card" key={key}>
-                  <h3>{getMetricLabel(text.voiceLabels, key)}</h3>
-                  <p>{value}</p>
-                </div>
-              ))}
+              {Object.entries(report.voice_analysis).map(([key, value]) => {
+                const label = getMetricLabel(text.voiceLabels, key);
+                return (
+                  <div className="metric-card" key={key}>
+                    <h3>{label}</h3>
+                    <p>{formatDiagnosticValue(label, value)}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+          <section id="section-2" className="report-section">
+            <h2>{visibleSections[2]}</h2>
+            <div className="metric-grid">
+              {Object.entries(report.face_analysis).map(([key, value]) => {
+                const label = getMetricLabel(text.faceLabels, key);
+                return (
+                  <div className="metric-card" key={key}>
+                    <h3>{label}</h3>
+                    <p>{formatDiagnosticValue(label, value)}</p>
+                  </div>
+                );
+              })}
             </div>
           </section>
           <section id="section-3" className="report-section">
-            <h2>{text.sections[3]}</h2>
-            <div className="metric-grid">
-              {Object.entries(report.face_analysis).map(([key, value]) => (
-                <div className="metric-card" key={key}>
-                  <h3>{getMetricLabel(text.faceLabels, key)}</h3>
-                  <p>{value}</p>
-                </div>
-              ))}
-            </div>
-          </section>
-          <section id="section-4" className="report-section">
-            <h2>{text.sections[4]}</h2>
+            <h2>{visibleSections[3]}</h2>
             <div className="roles-grid">
               {report.top_roles.map((role) => (
                 <div className="role-card" key={role.name}>
@@ -93,22 +95,24 @@ export default function FullReportPage() {
                     <span>{role.match}% {text.match}</span>
                   </div>
                   <p>{role.why}</p>
+                  <div className="reason-item">{role.voiceEvidence}</div>
+                  <div className="reason-item">{role.faceEvidence}</div>
                   <div className="reason-item">{role.strengths}</div>
                   <div className="reason-item">{role.risks}</div>
                 </div>
               ))}
             </div>
           </section>
-          <section id="section-5" className="report-section">
-            <h2>{text.sections[5]}</h2>
+          <section id="section-4" className="report-section">
+            <h2>{visibleSections[4]}</h2>
             <p className="report-lead">{report.top_roles.map((role) => role.risks).join(" ")}</p>
           </section>
-          <section id="section-6" className="report-section">
-            <h2>{text.sections[6]}</h2>
+          <section id="section-5" className="report-section">
+            <h2>{visibleSections[5]}</h2>
             <div className="highlight-box">{report.career_action}</div>
           </section>
-          <section id="section-7" className="report-section">
-            <h2>{text.sections[7]}</h2>
+          <section id="section-6" className="report-section">
+            <h2>{visibleSections[6]}</h2>
             <p className="report-lead">{report.final_insight}</p>
           </section>
           <section className="habit-bridge-card">
@@ -120,7 +124,14 @@ export default function FullReportPage() {
               <div className="habit-bridge-item"><strong>{habitsText.currentHabit.book}</strong>{habitsText.currentHabit.why}</div>
               <div className="habit-bridge-item"><strong>{habitsText.dashboardTitle}</strong>{habitsText.dashboardCopy}</div>
             </div>
-            <Link className="button" data-testid="activate-habits-link" href="/habits">{habitsText.trialButton}</Link>
+            <Link
+              className="button"
+              data-testid="activate-habits-link"
+              href="/habits?from=ikigai"
+              onClick={() => storeHabitProfile(report)}
+            >
+              {habitsText.trialButton}
+            </Link>
           </section>
           <div className="print-actions">
             <button className="button" data-testid="save-report-pdf-button" type="button" onClick={() => requestAnimationFrame(() => window.print())}>{text.savePdf}</button>
@@ -135,60 +146,51 @@ function getMetricLabel(labels: Record<string, string>, key: string) {
   return labels[key] ?? key;
 }
 
-function buildReportIkigaiZones(report: ReportFull): Record<"passion" | "mission" | "vocation" | "profession" | "ikigai", IkigaiMapZone> {
-  const topRole = report.top_roles[0];
-  const fallbackRole: RoleFit = {
-    name: report.profession,
-    match: Math.max(...Object.values(report.ikigai_scores)),
-    why: report.summary,
-    voiceEvidence: report.voice_analysis.communication,
-    faceEvidence: report.face_analysis.communication,
-    strengths: report.summary,
-    risks: report.final_insight
-  };
-  const role = topRole ?? fallbackRole;
+function formatDiagnosticValue(label: string, value: string) {
+  const trimmed = value.trim();
+  if (trimmed.length > 24 && trimmed.toLowerCase() !== label.toLowerCase()) return value;
 
-  return {
-    passion: {
-      title: "Passion / Страсть",
-      insight: [
-        "Эта зона показывает, где у вас появляется энергия и живой интерес.",
-        `По голосу: ${report.voice_analysis.energy}`,
-        `По мотивации: ${report.voice_analysis.motivation}`
-      ].join(" "),
-      recommendation: "Проверяйте задачи, где интерес не просто вдохновляет, а помогает держать фокус дольше обычного."
-    },
-    mission: {
-      title: "Mission / Миссия",
-      insight: [
-        "Эта зона описывает пользу, которую вы можете давать людям и рынку.",
-        `Коммуникационный сигнал: ${report.face_analysis.empathy}`,
-        `Как это проявляется в контакте: ${report.face_analysis.communication}`
-      ].join(" "),
-      recommendation: "Формулируйте пользу через проблему клиента и измеримый результат, а не через абстрактный потенциал."
-    },
-    profession: {
-      title: "Profession / Профессия",
-      insight: [
-        `Сейчас профессиональный вектор ближе всего к роли: ${report.profession}.`,
-        role.why,
-        `Сильная сторона: ${role.strengths}`
-      ].join(" "),
-      recommendation: `Начните с роли «${role.name}» и проверьте ее на маленьком платном или пилотном предложении.`
-    },
-    vocation: {
-      title: "Vocation / Призвание",
-      insight: [
-        `Зона монетизации сильнее всего проявляется через ${role.match}% совпадение с направлением «${role.name}».`,
-        `Голос: ${role.voiceEvidence}`,
-        `Визуальный сигнал: ${role.faceEvidence}`
-      ].join(" "),
-      recommendation: `Главный риск при переходе к монетизации: ${role.risks}`
-    },
-    ikigai: {
-      title: "Ikigai / Центр реализации",
-      insight: report.final_insight,
-      recommendation: report.career_action
-    }
+  return `По параметру "${label}" для старых отчетов не было сохранено развернутое пояснение. Новые диагностики ORKEN.LIFE формируют здесь персональную интерпретацию: что сигнал может означать в работе, где он помогает, какой риск создает и какой шаг развития выбрать.`;
+}
+
+function storeHabitProfile(report: ReportFull) {
+  if (typeof window === "undefined") return;
+
+  const topRole = report.top_roles[0];
+  const weakZone = weakestIkigaiZone(report.ikigai_scores);
+  const profile = {
+    source: "orken-life-full-report",
+    weakZone,
+    archetype: report.profession,
+    topRole: topRole?.name || report.profession,
+    strengths: splitStrengths(topRole?.strengths || report.summary),
+    faceInsight: topRole?.faceEvidence || report.face_analysis.communication,
+    voiceInsight: topRole?.voiceEvidence || report.voice_analysis.communication,
+    careerAction: report.career_action,
+    finalInsight: report.final_insight,
+    subscriptionPrice: "$8"
   };
+
+  window.localStorage.setItem("levelup_habit_profile", JSON.stringify(profile));
+}
+
+function weakestIkigaiZone(scores: IkigaiScores) {
+  const zoneByScore: Record<DiagnosticMapKey, "passion" | "mission" | "profession" | "vocation"> = {
+    love: "passion",
+    world_needs: "mission",
+    good_at: "profession",
+    paid_for: "vocation"
+  };
+  const weakest = (Object.entries(scores) as Array<[DiagnosticMapKey, number]>)
+    .sort((a, b) => a[1] - b[1])[0]?.[0] ?? "paid_for";
+  return zoneByScore[weakest];
+}
+
+function splitStrengths(value: string) {
+  const parts = value
+    .split(/[,.]/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 4);
+  return parts.length > 0 ? parts : ["ясность", "структурирование", "практическая польза"];
 }

@@ -206,3 +206,45 @@ test("ORKEN.LIFE frontend flow works with mocked backend", async ({ page }) => {
   const habitsFrame = page.frameLocator('[data-testid="habits-frame"]');
   await expect(habitsFrame.getByText("ORKEN.LIFE").first()).toBeVisible({ timeout: 15000 });
 });
+
+test("habits tracker records daily marks consistently", async ({ page }) => {
+  await page.goto(`${appBase}/habits`);
+  await expect(page.getByTestId("habits-frame")).toBeVisible();
+  const habitsFrame = page.frameLocator('[data-testid="habits-frame"]');
+  await expect(habitsFrame.getByText("ORKEN.LIFE").first()).toBeVisible({ timeout: 15000 });
+
+  await habitsFrame.locator("input").first().fill("Audit");
+  await expect(habitsFrame.locator("button:visible").first()).toBeEnabled();
+  await habitsFrame.locator("button:visible").first().click();
+  await expect(habitsFrame.locator("button:visible").nth(1)).toBeEnabled();
+  await habitsFrame.locator("button:visible").nth(1).click();
+
+  for (let index = 0; index < 4; index += 1) {
+    await expect(habitsFrame.locator("button:visible").first()).toBeEnabled();
+    await habitsFrame.locator("button:visible").first().click();
+  }
+
+  await expect(habitsFrame.locator("body")).toContainText("XP", { timeout: 10000 });
+  const frame = page.frame({ url: /habits-standalone/ });
+  expect(frame).toBeTruthy();
+
+  await frame.evaluate(() => {
+    [...document.querySelectorAll("button")]
+      .find((button) => button.innerText.includes("\u041f\u0440\u0438\u0432\u044b\u0447\u043a\u0438"))
+      ?.click();
+  });
+  await expect(habitsFrame.locator("button.hc").first()).toBeVisible();
+  await habitsFrame.locator("button.hc").first().click();
+  await expect(habitsFrame.locator("body")).toContainText("1/7");
+
+  const markedState = await frame.evaluate(() => JSON.parse(localStorage.getItem("levelup_ikigai_habits_state_v1")));
+  expect(markedState.totalPoints).toBe(10);
+  expect(markedState.streakDays).toBe(1);
+  expect(markedState.habits.c1w1.completed).toBe(false);
+  expect(markedState.habits.c1w1.completedDates).toHaveLength(1);
+
+  await habitsFrame.locator("button.hc").first().click();
+  const unmarkedState = await frame.evaluate(() => JSON.parse(localStorage.getItem("levelup_ikigai_habits_state_v1")));
+  expect(unmarkedState.totalPoints).toBe(0);
+  expect(unmarkedState.habits.c1w1.completedDates).toHaveLength(0);
+});

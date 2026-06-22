@@ -8,6 +8,7 @@ coverage
 *.log
 *.tsbuildinfo
 test-results/
+output/
 .runtime
 .start-frontend.cmd
 .start-frontend.ps1

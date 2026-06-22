@@ -1520,7 +1520,7 @@ function Journey() {
 
 /* ==================== HABITS SCREEN ==================== */
 function HabitsScreen() {
-  const { s, updateHabit } = useStore();
+  const { s, updateHabit, markHabitToday } = useStore();
   const [selCycle, setSelCycle] = useState(s.currentCycle);
   const [expanded, setExpanded] = useState(null);
   const cycle = CYCLES[selCycle-1];
@@ -1583,11 +1583,12 @@ function HabitsScreen() {
 
       <div className="space-y-2">
         {cycle.habits.map((habit, idx) => {
-          const he = s.habits[habit.id] || { completed:false, insight:'' };
+          const he = s.habits[habit.id] || { completed:false, insight:'', completedDates:[] };
           const isExp = expanded === habit.id;
           const isCur = selCycle === s.currentCycle && idx === s.currentWeek-1;
           const isFut = selCycle >= s.currentCycle && idx >= s.currentWeek;
           const zone = ZONES[habit.zone];
+          const markedToday = (he.completedDates || []).includes(todayStr());
 
           return (
             <div key={habit.id} className={`gc transition-all ${!isFut?'gc-h':''} ${isCur?'pg':''}`}
@@ -1619,9 +1620,9 @@ function HabitsScreen() {
                 <div className="flex items-center gap-2 flex-shrink-0">
                   <span title={zone.name}>{zone.icon}</span>
                   {!isFut && (
-                    <button onClick={e=>{e.stopPropagation();updateHabit(habit.id,{completed:!he.completed});}}
-                      className={`hc ${he.completed?'ck':''}`}>
-                      {he.completed && <span className="text-xs text-slate-900 font-bold">✓</span>}
+                    <button onClick={e=>{e.stopPropagation();markHabitToday(habit.id);}}
+                      className={`hc ${markedToday?'ck':''}`}>
+                      {markedToday && <span className="text-xs text-slate-900 font-bold">✓</span>}
                     </button>
                   )}
                   {!isFut && <span className="text-slate-600 text-sm">{isExp?'▲':'▼'}</span>}
@@ -1659,7 +1660,7 @@ function HabitsScreen() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
           {Object.entries(ZONES).map(([k,zone]) => {
             const cnt = cycle.habits.filter(h => h.zone === k).length;
-            const done = cycle.habits.filter(h => h.zone === k && s.habits[h.id]?.completed).length;
+            const done = cycle.habits.filter(h => h.zone === k && new Set(s.habits[h.id]?.completedDates || []).size >= 7).length;
             return (
               <div key={k} className="p-3 rounded-xl" style={{background:`${zone.color}08`,border:`1px solid ${zone.color}18`}}>
                 <div className="text-lg mb-1">{zone.icon}</div>

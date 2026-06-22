@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>IKIGAI by ORKEN.LIFE</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
 
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -11,7 +14,7 @@
   <!-- React 18 + Babel -->
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.28.5/babel.min.js"></script>
 
   <style>
     html, body { margin: 0; padding: 0; background: #020b18; overflow-x: hidden; }
@@ -21,14 +24,13 @@
 <body>
   <div id="root"></div>
 
-  <script type="text/babel">
+  <script type="text/babel" data-presets="env" data-plugins="transform-react-jsx">
     const { useState, useEffect, useCallback, useRef, useMemo } = React;
 
 // React loaded via CDN
 
 /* ==================== CSS ==================== */
 const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&display=swap');
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Inter',sans-serif;background:#020b18;color:#e2e8f0}
 .gc{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:16px}
@@ -1518,7 +1520,7 @@ function Journey() {
 
 /* ==================== HABITS SCREEN ==================== */
 function HabitsScreen() {
-  const { s, updateHabit } = useStore();
+  const { s, updateHabit, markHabitToday } = useStore();
   const [selCycle, setSelCycle] = useState(s.currentCycle);
   const [expanded, setExpanded] = useState(null);
   const cycle = CYCLES[selCycle-1];
@@ -1581,11 +1583,12 @@ function HabitsScreen() {
 
       <div className="space-y-2">
         {cycle.habits.map((habit, idx) => {
-          const he = s.habits[habit.id] || { completed:false, insight:'' };
+          const he = s.habits[habit.id] || { completed:false, insight:'', completedDates:[] };
           const isExp = expanded === habit.id;
           const isCur = selCycle === s.currentCycle && idx === s.currentWeek-1;
           const isFut = selCycle >= s.currentCycle && idx >= s.currentWeek;
           const zone = ZONES[habit.zone];
+          const markedToday = (he.completedDates || []).includes(todayStr());
 
           return (
             <div key={habit.id} className={`gc transition-all ${!isFut?'gc-h':''} ${isCur?'pg':''}`}
@@ -1617,9 +1620,9 @@ function HabitsScreen() {
                 <div className="flex items-center gap-2 flex-shrink-0">
                   <span title={zone.name}>{zone.icon}</span>
                   {!isFut && (
-                    <button onClick={e=>{e.stopPropagation();updateHabit(habit.id,{completed:!he.completed});}}
-                      className={`hc ${he.completed?'ck':''}`}>
-                      {he.completed && <span className="text-xs text-slate-900 font-bold">✓</span>}
+                    <button onClick={e=>{e.stopPropagation();markHabitToday(habit.id);}}
+                      className={`hc ${markedToday?'ck':''}`}>
+                      {markedToday && <span className="text-xs text-slate-900 font-bold">✓</span>}
                     </button>
                   )}
                   {!isFut && <span className="text-slate-600 text-sm">{isExp?'▲':'▼'}</span>}
@@ -1657,7 +1660,7 @@ function HabitsScreen() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
           {Object.entries(ZONES).map(([k,zone]) => {
             const cnt = cycle.habits.filter(h => h.zone === k).length;
-            const done = cycle.habits.filter(h => h.zone === k && s.habits[h.id]?.completed).length;
+            const done = cycle.habits.filter(h => h.zone === k && new Set(s.habits[h.id]?.completedDates || []).size >= 7).length;
             return (
               <div key={k} className="p-3 rounded-xl" style={{background:`${zone.color}08`,border:`1px solid ${zone.color}18`}}>
                 <div className="text-lg mb-1">{zone.icon}</div>
@@ -2701,7 +2704,7 @@ function WeekCompleteModal({ data, onDismiss, onShare }) {
     : pct >= 57 ? '💪 Нормальный темп адаптации'
     : '🌱 Начало пути — главное не бросать';
   const statusColor = pct === 100 ? '#f59e0b' : pct >= 85 ? '#10b981' : pct >= 57 ? '#00d4ff' : '#a855f7';
-  const shareText = `✦ IKIGAI by ORKEN.LIFE\nНеделя ${data.week}: ${data.title}\nВыполнено: ${pct}% · +${data.xpEarned} XP\n#ikigai #levelup #habits`;
+  const shareText = `✦ IKIGAI by ORKEN.LIFE\nНеделя ${data.week}: ${data.title}\nВыполнено: ${pct}% · +${data.xpEarned} XP\n#ikigai #orkenlife #habits`;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{background:'rgba(0,0,0,0.8)',backdropFilter:'blur(8px)'}}>

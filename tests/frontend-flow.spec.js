@@ -166,6 +166,11 @@ test("ORKEN.LIFE frontend flow works with mocked backend", async ({ page }) => {
   await expect(page).toHaveURL(/\/flow\/analysis$/, { timeout: 15000 });
   await expect(page.getByTestId("free-report-link")).toBeVisible({ timeout: 10000 });
 
+  await page.getByTestId("analysis-email-input").fill("random input");
+  await page.getByTestId("free-report-link").click();
+  await expect(page.getByText("Введите корректный email адрес")).toBeVisible();
+  await expect(page).toHaveURL(/\/flow\/analysis$/);
+
   await page.getByTestId("analysis-email-input").fill("test@orken.life");
   await page.getByTestId("free-report-link").click();
   await expect(page).toHaveURL(/\/report\/analysis-test\/free$/);

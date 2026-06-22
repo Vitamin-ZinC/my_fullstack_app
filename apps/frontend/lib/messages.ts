@@ -156,7 +156,8 @@ export const ruSiteText = {
       contactCopy: "Email нужен, чтобы сохранить результат, восстановить доступ к отчёту и связать оплату с вашей диагностикой.",
       contactPlaceholder: "твой@email.com",
       contactSubmit: "Сохранить email и открыть отчёт",
-      contactError: "Введите email"
+      contactError: "Введите email",
+      contactInvalid: "Введите корректный email адрес"
     }
   },
   ikigaiMap: {

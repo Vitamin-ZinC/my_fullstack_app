@@ -7,6 +7,7 @@ import { api, createProgressSource, getAnalysisDraft } from "@/lib/api";
 import { useSiteText } from "@/lib/useSiteText";
 
 const logThresholds = [5, 18, 32, 48, 64, 80, 94];
+const emailPattern = /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}$/;
 
 export default function AnalysisPage() {
   const text = useSiteText().flow.analysis;
@@ -81,8 +82,8 @@ export default function AnalysisPage() {
 
   function saveEmailAndOpen() {
     const trimmed = email.trim();
-    if (!trimmed) {
-      setEmailError(text.contactError);
+    if (!isValidEmail(trimmed)) {
+      setEmailError(text.contactInvalid);
       return;
     }
 
@@ -149,6 +150,8 @@ export default function AnalysisPage() {
             data-testid="analysis-email-input"
             inputMode="email"
             type="email"
+            autoComplete="email"
+            aria-invalid={Boolean(emailError)}
             value={email}
             onChange={(event) => {
               setEmail(event.target.value);
@@ -164,4 +167,12 @@ export default function AnalysisPage() {
       )}
     </div>
   );
+}
+
+function isValidEmail(value: string) {
+  if (!value || value.length > 254 || value.includes("..")) return false;
+  const [local, domain, extra] = value.split("@");
+  if (!local || !domain || extra) return false;
+  if (local.startsWith(".") || local.endsWith(".")) return false;
+  return emailPattern.test(value);
 }

@@ -157,7 +157,9 @@ export const ruSiteText = {
       contactPlaceholder: "твой@email.com",
       contactSubmit: "Сохранить email и открыть отчёт",
       contactError: "Введите email",
-      contactInvalid: "Введите корректный email адрес"
+      contactInvalid: "Введите корректный email адрес",
+      contactSaving: "Сохраняем email...",
+      contactSendError: "Не удалось сохранить email"
     }
   },
   ikigaiMap: {
@@ -318,7 +320,7 @@ export const ruSiteText = {
     promptVersion: "Version",
     promptTitleField: "Prompt title",
     promptPlaceholdersTitle: "Available placeholders",
-    promptPlaceholders: "{{language}}, {{analysisId}}, {{questionnaireJson}}, {{voiceTranscript}}, {{photoIncluded}}",
+    promptPlaceholders: "{{language}}, {{analysisId}}, {{questionnaireJson}}, {{voiceMetricsJson}}, {{voiceTranscript}}, {{photoIncluded}}",
     savePrompt: "Save prompt",
     savedPrompt: "Prompt saved",
     saveTexts: "Save texts",

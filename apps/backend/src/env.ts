@@ -29,6 +29,8 @@ const schema = z.object({
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
   PRICE_AMOUNT: z.coerce.number().default(300),
   PRICE_CURRENCY: z.string().default("usd"),
+  RESEND_API_KEY: z.string().optional(),
+  RESEND_FROM_EMAIL: z.string().default("ORKEN.LIFE <reports@orken.life>"),
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_MODEL: z.string().default("gpt-4o-mini"),
   OPENAI_TRANSCRIPTION_MODEL: z.string().default("whisper-1"),

@@ -189,3 +189,9 @@ export type CheckoutSessionResponse = {
   currency: string;
   promoCode?: string | null;
 };
+
+export type ReportContactResponse = {
+  ok: true;
+  emailSent: boolean;
+  emailId?: string;
+};

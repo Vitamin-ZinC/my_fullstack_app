@@ -55,7 +55,9 @@ const diagnosticTextSchema = z.string().min(20).refine((value) => {
     "высокий",
     "недоступно"
   ].includes(normalized);
-}, "diagnostic parameters must be explanatory text");
+}, "diagnostic parameters must be explanatory text").refine((value) => (
+  value.includes("Ваш результат:") && value.includes("Что это значит:") && value.includes("Рекомендация:")
+), "diagnostic parameters must use the required result/meaning/recommendation format");
 
 const ikigaiZoneSchema = z.object({
   title: z.string().min(2),

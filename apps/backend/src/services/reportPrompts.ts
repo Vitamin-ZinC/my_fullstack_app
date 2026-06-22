@@ -18,7 +18,11 @@ type PromptDraft = {
 type ReportPromptContext = {
   analysisId: string;
   locale: string;
-  answers: IkigaiAnswers;
+  answers: IkigaiAnswers & {
+    clientMetrics?: {
+      voiceDurationSeconds?: number;
+    };
+  };
 };
 
 type ResolvedPrompt = PromptDraft & {
@@ -68,7 +72,7 @@ export const defaultReportPromptTemplates: PromptDraft[] = [
   {
     key: REPORT_FULL_SYSTEM_PROMPT_KEY,
     locale: "ru",
-    version: 3,
+    version: 4,
     status: "ACTIVE",
     title: "ORKEN.LIFE PREMIUM report system prompt",
     content: [
@@ -78,13 +82,14 @@ export const defaultReportPromptTemplates: PromptDraft[] = [
       "Relevant lenses may include Viktor Ponomarenko's 7-radicals framing, Alexey Filatov's profiling approach, Aldert Vrij's caution around deception cues, Paul Ekman and Wallace Friesen's facial-action work, and Joe Navarro's nonverbal observation practice.",
       "Do not identify the person, infer sensitive attributes, diagnose health, claim deterministic traits from appearance or voice, or state that someone is lying or deceptive.",
       "Write as a senior career diagnostician: specific, practical, nuanced, and safe.",
-      "Every diagnostic parameter must be an interpretive answer about work behavior, not a raw label, score, or translation of the parameter name."
+      "Every diagnostic parameter must be an interpretive answer about work behavior, not a raw label, score, or translation of the parameter name.",
+      "Every voice_analysis and face_analysis value must use three labeled parts: 'Ваш результат:', 'Что это значит:', and 'Рекомендация:'."
     ].join("\n")
   },
   {
     key: REPORT_FULL_USER_PROMPT_KEY,
     locale: "ru",
-    version: 3,
+    version: 4,
     status: "ACTIVE",
     title: "ORKEN.LIFE PREMIUM report user prompt",
     content: [
@@ -94,7 +99,11 @@ export const defaultReportPromptTemplates: PromptDraft[] = [
       "If media evidence is unavailable or weak, still write useful sections, but ground them in the questionnaire and clearly phrase media parts as limited hypotheses.",
       "Return a practical premium report with detailed voice_analysis, face_analysis, 3 to 5 top_roles, personalized ikigai_zones, career_action, and final_insight.",
       "Sections 2 through 8 must be personalized. Do not output placeholders, one-word labels, English trait words, raw scores, or 'unavailable' as a value.",
-      "Each voice_analysis and face_analysis value must be a Russian short paragraph of 2 to 4 sentences with this logic: observed or available signal -> work meaning -> where it helps -> possible risk -> small growth action.",
+      "Each voice_analysis and face_analysis value must be a Russian short paragraph with exactly these three visible labeled parts: 'Ваш результат:', 'Что это значит:', and 'Рекомендация:'.",
+      "Use this style for every diagnostic parameter: 'Ваш результат: [конкретный результат по параметру]. Что это значит: [рабочая интерпретация, где это помогает и какой риск возникает]. Рекомендация: [одно конкретное действие развития]'.",
+      "For voice_analysis.pace, if voiceMetricsJson.speechRateWpm is not null, include it in 'Ваш результат' exactly as words per minute, for example: 'Ваш результат: Ускоренный темп (выше среднего) — 178 слов в минуту.'",
+      "Example style for voice_analysis.pace: 'Ваш результат: Ускоренный темп (выше среднего) — [Х] слов в минуту. Что это значит: в работе это проявляется как высокая динамика и гибкость. Вы быстро доносите мысли, но при избытке информации собеседник может терять фокус. Рекомендация: в сложных обсуждениях и на презентациях намеренно замедляйте темп на 15–20% и делайте паузы после ключевых тезисов для фиксации внимания.'",
+      "Do not copy the example for every field; adapt the same 'Ваш результат' / 'Что это значит' / 'Рекомендация' structure to each concrete parameter.",
       "Use cautious formulations: 'похоже', 'может указывать', 'в рабочем контексте это проявляется как'. Never present face or voice as proof of character, health, deception, or identity.",
       "For ikigai_zones, write personalized answers for passion, mission, profession, vocation, and ikigai. Each zone must have title, insight, and recommendation. These texts are shown when the user selects a zone, so they must be useful without extra context.",
       "Top roles must include role-specific why, voiceEvidence, faceEvidence, strengths, and risks. Match percentages must be realistic and internally consistent with ikigai_scores.",
@@ -106,6 +115,7 @@ export const defaultReportPromptTemplates: PromptDraft[] = [
       "",
       "Analysis ID: {{analysisId}}",
       "Questionnaire JSON: {{questionnaireJson}}",
+      "Voice metrics JSON: {{voiceMetricsJson}}",
       "Voice transcript: {{voiceTranscript}}",
       "Photo input included: {{photoIncluded}}"
     ].join("\n")
@@ -165,10 +175,12 @@ export async function buildReportPromptMessages(
     resolveActivePrompt(keys.userKey, context.locale)
   ]);
   const language = context.locale.startsWith("en") ? "English" : "Russian";
+  const questionnaire = stripClientMetrics(context.answers);
   const variables = {
     language,
     analysisId: context.analysisId,
-    questionnaireJson: JSON.stringify(context.answers),
+    questionnaireJson: JSON.stringify(questionnaire),
+    voiceMetricsJson: buildVoiceMetricsJson(context.answers, transcript),
     voiceTranscript: transcript || "unavailable",
     photoIncluded: photoIncluded ? "yes" : "no"
   };
@@ -182,4 +194,45 @@ export async function buildReportPromptMessages(
       user: userPrompt.source
     }
   };
+}
+
+function stripClientMetrics(answers: ReportPromptContext["answers"]): IkigaiAnswers {
+  return {
+    love: answers.love,
+    good_at: answers.good_at,
+    world_needs: answers.world_needs,
+    paid_for: answers.paid_for
+  };
+}
+
+function buildVoiceMetricsJson(answers: ReportPromptContext["answers"], transcript: string | null) {
+  const voiceDurationSeconds = normalizePositiveNumber(answers.clientMetrics?.voiceDurationSeconds);
+  const transcriptWordCount = transcript ? countWords(transcript) : null;
+  const speechRateWpm = voiceDurationSeconds && transcriptWordCount
+    ? Math.round(transcriptWordCount / (voiceDurationSeconds / 60))
+    : null;
+
+  return JSON.stringify({
+    voiceDurationSeconds,
+    transcriptWordCount,
+    speechRateWpm,
+    speechRateLabel: speechRateWpm === null ? null : labelSpeechRate(speechRateWpm)
+  });
+}
+
+function countWords(value: string) {
+  const words = value.match(/[\p{L}\p{N}]+(?:[-'][\p{L}\p{N}]+)?/gu);
+  return words?.length ?? 0;
+}
+
+function normalizePositiveNumber(value: unknown) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? number : null;
+}
+
+function labelSpeechRate(wordsPerMinute: number) {
+  if (wordsPerMinute >= 170) return "ускоренный темп (выше среднего)";
+  if (wordsPerMinute >= 125) return "умеренно быстрый темп";
+  if (wordsPerMinute >= 90) return "сбалансированный темп";
+  return "замедленный темп";
 }

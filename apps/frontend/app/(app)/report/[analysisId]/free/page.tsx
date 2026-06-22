@@ -4,7 +4,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { ReportFree } from "@levelup/contracts";
 import { IkigaiPremiumMap } from "@/components/IkigaiPremiumMap";
-import { api } from "@/lib/api";
+import { api, restoreSessionFromUrl } from "@/lib/api";
 import { useSiteText } from "@/lib/useSiteText";
 
 export default function FreeReportPage() {
@@ -14,6 +14,7 @@ export default function FreeReportPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
+    restoreSessionFromUrl();
     api.getFreeReport(analysisId)
       .then((result) => setReport(result.reportFree))
       .catch((reason) => setError(reason instanceof Error ? reason.message : text.loadError));

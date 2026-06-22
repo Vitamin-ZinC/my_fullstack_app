@@ -25,7 +25,7 @@ export default function IkigaiPage() {
     }
 
     window.sessionStorage.setItem("levelup_ikigai_answers", JSON.stringify(emptyIkigaiAnswers));
-    api.confirmAnalysis(draft.analysisId, emptyIkigaiAnswers)
+    api.confirmAnalysis(draft.analysisId, emptyIkigaiAnswers, getStoredVoiceMetrics())
       .then(() => router.replace("/flow/analysis"))
       .catch((reason) => {
         setError(reason instanceof Error ? reason.message : text.flow.ikigai.launchError);
@@ -40,4 +40,9 @@ export default function IkigaiPage() {
       {error && <div className="card error-card">{error}</div>}
     </div>
   );
+}
+
+function getStoredVoiceMetrics() {
+  const voiceDurationSeconds = Number(window.sessionStorage.getItem("levelup_voice_duration_seconds"));
+  return Number.isFinite(voiceDurationSeconds) && voiceDurationSeconds > 0 ? { voiceDurationSeconds } : undefined;
 }

@@ -121,6 +121,7 @@ export default function VoicePage() {
       setAudioUrl(nextUrl);
       setMetrics({ duration, mime, size: blob.size });
       window.sessionStorage.setItem("levelup_voice_ready", "1");
+      window.sessionStorage.setItem("levelup_voice_duration_seconds", String(duration));
       setDone(true);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : text.failed);
@@ -147,6 +148,7 @@ export default function VoicePage() {
     secondsRef.current = 0;
     setSeconds(0);
     setUploading(false);
+    window.sessionStorage.removeItem("levelup_voice_duration_seconds");
     if (clearError) setError("");
   }
 

@@ -7,6 +7,7 @@ import type {
   PaymentConfigResponse,
   PaymentIntentResponse,
   PromoCode,
+  ReportContactResponse,
   PromptTemplateInput,
   PromptTemplate,
   ReportFree,
@@ -19,6 +20,9 @@ const GUEST_TOKEN_KEY = "levelup_guest_token";
 const LOCALE_KEY = "levelup_locale";
 
 export type TextLocale = "ru" | "en";
+export type AnalysisClientMetrics = {
+  voiceDurationSeconds?: number;
+};
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
@@ -97,13 +101,17 @@ export const api = {
       body: JSON.stringify({ locale: getStoredLocale() })
     });
   },
-  confirmAnalysis: (analysisId: string, ikigaiAnswers: IkigaiAnswers) => request<{ status: string; jobId: string }>(`/api/analyses/${analysisId}/confirm`, {
+  confirmAnalysis: (analysisId: string, ikigaiAnswers: IkigaiAnswers, clientMetrics?: AnalysisClientMetrics) => request<{ status: string; jobId: string }>(`/api/analyses/${analysisId}/confirm`, {
     method: "POST",
-    body: JSON.stringify({ ikigaiAnswers })
+    body: JSON.stringify({ ikigaiAnswers, ...(clientMetrics ? { clientMetrics } : {}) })
   }),
   getStatus: (analysisId: string) => request<{ status: string; progress: number; jobId?: string; errorMessage?: string }>(`/api/analyses/${analysisId}/status`),
   getFreeReport: (analysisId: string) => request<{ reportFree: ReportFree }>(`/api/analyses/${analysisId}/report/free`),
   getFullReport: (analysisId: string) => request<{ reportFull: ReportFull }>(`/api/analyses/${analysisId}/report/full`),
+  saveReportContact: (analysisId: string, email: string) => request<ReportContactResponse>(`/api/analyses/${analysisId}/contact`, {
+    method: "POST",
+    body: JSON.stringify({ email })
+  }),
   getPaymentConfig: () => request<PaymentConfigResponse>("/api/payments/config"),
   createPaymentIntent: (analysisId: string, promoCode?: string) => request<PaymentIntentResponse>("/api/payments/create-intent", {
     method: "POST",
@@ -148,6 +156,21 @@ export function getAnalysisDraft() {
   const photoUploadUrl = window.sessionStorage.getItem("levelup_photo_upload_url");
   if (!analysisId || !audioUploadUrl || !photoUploadUrl) return null;
   return { analysisId, audioUploadUrl, photoUploadUrl };
+}
+
+export function restoreSessionFromUrl() {
+  if (!hasWindow()) return false;
+  const url = new URL(window.location.href);
+  const sessionId = url.searchParams.get("x-session-id");
+  const guestToken = url.searchParams.get("x-guest-token");
+  if (!sessionId || !guestToken) return false;
+
+  window.sessionStorage.setItem(SESSION_ID_KEY, sessionId);
+  window.sessionStorage.setItem(GUEST_TOKEN_KEY, guestToken);
+  url.searchParams.delete("x-session-id");
+  url.searchParams.delete("x-guest-token");
+  window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  return true;
 }
 
 async function adminRequest<T>(path: string, init?: RequestInit): Promise<T> {

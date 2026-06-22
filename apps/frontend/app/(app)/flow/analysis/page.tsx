@@ -17,6 +17,7 @@ export default function AnalysisPage() {
   const [analysisId, setAnalysisId] = useState("");
   const [email, setEmail] = useState("");
   const [emailError, setEmailError] = useState("");
+  const [contactBusy, setContactBusy] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -80,15 +81,24 @@ export default function AnalysisPage() {
     return "";
   }
 
-  function saveEmailAndOpen() {
+  async function saveEmailAndOpen() {
     const trimmed = email.trim();
     if (!isValidEmail(trimmed)) {
       setEmailError(text.contactInvalid);
       return;
     }
 
-    window.sessionStorage.setItem("levelup_contact_email", trimmed);
-    window.location.assign(`/report/${analysisId}/free`);
+    setContactBusy(true);
+    setEmailError("");
+    try {
+      window.sessionStorage.setItem("levelup_contact_email", trimmed);
+      await api.saveReportContact(analysisId, trimmed);
+      window.location.assign(`/report/${analysisId}/free`);
+    } catch (reason) {
+      setEmailError(reason instanceof Error ? reason.message : text.contactSendError);
+    } finally {
+      setContactBusy(false);
+    }
   }
 
   const done = status === "DONE";
@@ -160,8 +170,8 @@ export default function AnalysisPage() {
             placeholder={text.contactPlaceholder}
           />
           {emailError && <div className="form-error">{emailError}</div>}
-          <button className="button" data-testid="free-report-link" onClick={saveEmailAndOpen}>
-            {text.contactSubmit}
+          <button className="button" data-testid="free-report-link" onClick={saveEmailAndOpen} disabled={contactBusy}>
+            {contactBusy ? text.contactSaving : text.contactSubmit}
           </button>
         </div>
       )}

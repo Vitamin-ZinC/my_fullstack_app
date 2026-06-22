@@ -8,6 +8,7 @@ import { analysisQueue } from "../lib/queue.js";
 import { subscribeProgress } from "../lib/progress.js";
 import { prisma } from "../lib/prisma.js";
 import { createMediaUploadUrls, verifyRequiredMedia } from "../services/media.js";
+import { sendReportEmail } from "../services/email.js";
 import { buildFallbackFreeReport, buildFallbackReport } from "../services/report.js";
 
 const ikigaiAnswersSchema = z.object({
@@ -15,6 +16,14 @@ const ikigaiAnswersSchema = z.object({
   good_at: z.array(z.string()),
   world_needs: z.array(z.string()),
   paid_for: z.array(z.string())
+});
+
+const clientMetricsSchema = z.object({
+  voiceDurationSeconds: z.number().positive().max(300).optional()
+}).optional();
+
+const contactEmailSchema = z.object({
+  email: z.string().trim().email().max(254)
 });
 
 export async function analysisRoutes(app: FastifyInstance) {
@@ -60,14 +69,17 @@ export async function analysisRoutes(app: FastifyInstance) {
     const params = z.object({ id: z.string() }).parse(request.params);
     const access = await requireAnalysisAccess(request, reply, params.id);
     if (!access) return;
-    const body = z.object({ ikigaiAnswers: ikigaiAnswersSchema }).parse(request.body);
+    const body = z.object({ ikigaiAnswers: ikigaiAnswersSchema, clientMetrics: clientMetricsSchema }).parse(request.body);
+    const answersWithMetrics = body.clientMetrics
+      ? { ...body.ikigaiAnswers, clientMetrics: body.clientMetrics }
+      : body.ikigaiAnswers;
     const mediaStatus = await verifyRequiredMedia(params.id);
     if (!mediaStatus.ok) return reply.code(409).send({ error: mediaStatus.reason });
     const job = await analysisQueue.add("generate-report", { analysisId: params.id });
     await prisma.analysis.update({
       where: { id: params.id },
       data: {
-        ikigaiAnswers: body.ikigaiAnswers,
+        ikigaiAnswers: answersWithMetrics,
         status: "QUEUED",
         jobId: job.id
       }
@@ -127,6 +139,82 @@ export async function analysisRoutes(app: FastifyInstance) {
       }
     });
     return { reportFull: analysis.reportFull };
+  });
+
+  app.post("/api/analyses/:id/contact", async (request, reply) => {
+    const params = z.object({ id: z.string() }).parse(request.params);
+    const access = await requireAnalysisAccess(request, reply, params.id);
+    if (!access) return;
+    const analysis = access.analysis;
+    if (analysis.status !== "DONE") return reply.code(400).send({ error: "Analysis not ready" });
+
+    const body = contactEmailSchema.parse(request.body);
+    const email = body.email.toLowerCase();
+    const emailDomain = email.split("@")[1] ?? "";
+
+    const user = await prisma.$transaction(async (tx) => {
+      const nextUser = await tx.user.upsert({
+        where: { email },
+        update: { locale: analysis.locale },
+        create: { email, locale: analysis.locale }
+      });
+      await tx.session.update({
+        where: { id: access.session.id },
+        data: { userId: nextUser.id }
+      });
+      await tx.analysis.update({
+        where: { id: analysis.id },
+        data: { userId: nextUser.id }
+      });
+      await tx.payment.updateMany({
+        where: { analysisId: analysis.id },
+        data: { userId: nextUser.id }
+      });
+      await tx.analyticsEvent.create({
+        data: {
+          name: "contact_email_saved",
+          locale: analysis.locale,
+          sessionId: access.session.id,
+          userId: nextUser.id,
+          analysisId: analysis.id,
+          properties: { emailDomain }
+        }
+      });
+      return nextUser;
+    });
+
+    const freeReportUrl = buildAccessUrl(`/report/${analysis.id}/free`, access.session);
+    const paymentUrl = buildAccessUrl(`/pay/${analysis.id}`, access.session);
+    const reportFree = analysis.reportFree as { profession?: string } | null;
+    const emailResult = await sendReportEmail({
+      analysisId: analysis.id,
+      email,
+      freeReportUrl,
+      paymentUrl,
+      locale: analysis.locale,
+      profession: reportFree?.profession
+    });
+
+    await prisma.analyticsEvent.create({
+      data: {
+        name: emailResult.emailSent ? "report_email_sent" : "report_email_failed",
+        locale: analysis.locale,
+        sessionId: access.session.id,
+        userId: user.id,
+        analysisId: analysis.id,
+        properties: JSON.parse(JSON.stringify({
+          emailDomain,
+          emailId: emailResult.emailId,
+          error: emailResult.error
+        }))
+      }
+    });
+
+    return {
+      ok: true,
+      emailSent: emailResult.emailSent,
+      emailId: emailResult.emailId
+    };
   });
 
   app.get("/api/analyses/:id/stream", async (request, reply) => {
@@ -198,4 +286,11 @@ export async function analysisRoutes(app: FastifyInstance) {
     });
     return { ok: true };
   });
+}
+
+function buildAccessUrl(path: string, session: { id: string; guestToken: string }) {
+  const url = new URL(path, env.APP_ORIGIN);
+  url.searchParams.set("x-session-id", session.id);
+  url.searchParams.set("x-guest-token", session.guestToken);
+  return url.toString();
 }

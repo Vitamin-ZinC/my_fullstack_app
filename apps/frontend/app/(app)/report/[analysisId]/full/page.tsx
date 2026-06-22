@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { IkigaiScores, ReportFull } from "@levelup/contracts";
-import { api } from "@/lib/api";
+import { api, restoreSessionFromUrl } from "@/lib/api";
 import { useSiteText } from "@/lib/useSiteText";
 
 type DiagnosticMapKey = keyof Pick<IkigaiScores, "love" | "good_at" | "paid_for" | "world_needs">;
@@ -20,6 +20,7 @@ export default function FullReportPage() {
   const visibleSections = text.sections.slice(1);
 
   useEffect(() => {
+    restoreSessionFromUrl();
     api.getFullReport(analysisId)
       .then((result) => setReport(result.reportFull))
       .catch((reason) => setError(reason instanceof Error ? reason.message : "Не удалось загрузить отчет"));

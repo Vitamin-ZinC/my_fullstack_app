@@ -28,6 +28,7 @@ test.use({
 });
 
 test("ORKEN.LIFE frontend flow works with mocked backend", async ({ page }) => {
+  let contactRequests = 0;
   await page.route(`${apiBase}/api/content/ru`, async (route) => fulfillJson(route, { locale: "ru", value: null }));
   await page.route(`${apiBase}/api/auth/guest`, async (route) => fulfillJson(route, { sessionId: "test-session", guestToken: "test-token" }));
   await page.route(`${apiBase}/api/analyses`, async (route) => fulfillJson(route, {
@@ -43,13 +44,23 @@ test("ORKEN.LIFE frontend flow works with mocked backend", async ({ page }) => {
     expect(route.request().method()).toBe("PUT");
     await route.fulfill({ status: 200, body: "ok", headers: corsHeaders });
   });
-  await page.route(`${apiBase}/api/analyses/analysis-test/confirm`, async (route) => fulfillJson(route, { status: "QUEUED", jobId: "job-test" }));
+  await page.route(`${apiBase}/api/analyses/analysis-test/confirm`, async (route) => {
+    const body = route.request().postDataJSON();
+    expect(body.ikigaiAnswers).toEqual({ love: [], good_at: [], world_needs: [], paid_for: [] });
+    expect(body.clientMetrics.voiceDurationSeconds).toBeGreaterThanOrEqual(30);
+    await fulfillJson(route, { status: "QUEUED", jobId: "job-test" });
+  });
   await page.route(`${apiBase}/api/analyses/analysis-test/stream**`, async (route) => route.fulfill({
     status: 200,
     headers: { ...corsHeaders, "content-type": "text/event-stream" },
     body: "data: {\"status\":\"DONE\",\"progress\":100,\"log\":\"Report ready\"}\n\n"
   }));
   await page.route(`${apiBase}/api/analyses/analysis-test/status`, async (route) => fulfillJson(route, { status: "DONE", progress: 100 }));
+  await page.route(`${apiBase}/api/analyses/analysis-test/contact`, async (route) => {
+    contactRequests += 1;
+    expect(route.request().postDataJSON()).toEqual({ email: "test@orken.life" });
+    await fulfillJson(route, { ok: true, emailSent: true, emailId: "email-test" });
+  });
   await page.route(`${apiBase}/api/analyses/analysis-test/report/free`, async (route) => fulfillJson(route, {
     reportFree: {
       profession: "Продуктовый стратег",
@@ -170,14 +181,19 @@ test("ORKEN.LIFE frontend flow works with mocked backend", async ({ page }) => {
   await page.getByTestId("free-report-link").click();
   await expect(page.getByText("Введите корректный email адрес")).toBeVisible();
   await expect(page).toHaveURL(/\/flow\/analysis$/);
+  expect(contactRequests).toBe(0);
 
   await page.getByTestId("analysis-email-input").fill("test@orken.life");
+  const contactResponse = page.waitForResponse(`${apiBase}/api/analyses/analysis-test/contact`);
   await page.getByTestId("free-report-link").click();
+  await contactResponse;
+  expect(contactRequests).toBe(1);
   await expect(page).toHaveURL(/\/report\/analysis-test\/free$/);
   await expect(page.getByText("Продуктовый стратег")).toBeVisible();
   await page.getByTestId("open-pro-report-link").click();
 
   await expect(page).toHaveURL(/\/pay\/analysis-test$/);
+  await expect(page.locator(".card-art")).toHaveCount(0);
   await page.getByTestId("promo-code-input").fill("FREE100");
   const checkoutResponse = page.waitForResponse(`${apiBase}/api/payments/create-checkout-session`);
   await page.getByTestId("checkout-button").click();

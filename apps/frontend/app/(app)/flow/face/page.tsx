@@ -137,7 +137,7 @@ export default function FacePage() {
 
     try {
       window.sessionStorage.setItem("levelup_ikigai_answers", JSON.stringify(ikigaiAnswers));
-      await api.confirmAnalysis(draft.analysisId, ikigaiAnswers);
+      await api.confirmAnalysis(draft.analysisId, ikigaiAnswers, getStoredVoiceMetrics());
       window.location.assign("/flow/analysis");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Не удалось запустить анализ");
@@ -300,4 +300,9 @@ function loadImage(src: string) {
 
 function clamp(value: number) {
   return Math.max(0, Math.min(100, value));
+}
+
+function getStoredVoiceMetrics() {
+  const voiceDurationSeconds = Number(window.sessionStorage.getItem("levelup_voice_duration_seconds"));
+  return Number.isFinite(voiceDurationSeconds) && voiceDurationSeconds > 0 ? { voiceDurationSeconds } : undefined;
 }

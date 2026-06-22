@@ -399,6 +399,18 @@ svg {
   font-weight: 900;
 }
 
+.voice-minimum-hint {
+  min-height: 46px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  border: 1px solid rgba(0, 212, 255, 0.22);
+  background: rgba(0, 212, 255, 0.07);
+  color: rgba(255, 255, 255, 0.74);
+  font-size: 12px;
+  text-align: center;
+}
+
 .voice-status {
   width: 100%;
   display: grid;
@@ -432,6 +444,28 @@ svg {
   margin-bottom: 10px;
 }
 
+.voice-topic-current {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 10px;
+  border-radius: 16px;
+  border: 1px solid rgba(0, 212, 255, 0.2);
+  background: linear-gradient(135deg, rgba(0, 212, 255, 0.11), rgba(155, 93, 229, 0.08));
+  padding: 12px 14px;
+}
+
+.voice-topic-current span {
+  font-size: 10px;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.voice-topic-current strong {
+  color: #fff;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
 .chip-row {
   display: flex;
   flex-wrap: wrap;
@@ -449,6 +483,13 @@ svg {
   color: rgba(255, 255, 255, 0.66);
   font-size: 11px;
   line-height: 1.2;
+}
+
+.chip.active {
+  border-color: rgba(0, 212, 255, 0.55);
+  background: rgba(0, 212, 255, 0.12);
+  color: #fff;
+  box-shadow: 0 0 18px rgba(0, 212, 255, 0.14);
 }
 
 .error-card {
@@ -734,6 +775,62 @@ svg {
   display: block;
   background: transparent;
   overflow: visible;
+}
+
+.ikigai-click-layer {
+  position: absolute;
+  z-index: 6;
+  inset: 0 0 auto;
+  aspect-ratio: 400 / 430;
+  pointer-events: none;
+}
+
+.ikigai-hotspot {
+  position: absolute;
+  width: 26%;
+  height: 24%;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.ikigai-hotspot:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+}
+
+.ikigai-hotspot.passion {
+  left: 36.25%;
+  top: 38.37%;
+  transform: translate(-50%, -50%);
+}
+
+.ikigai-hotspot.mission {
+  left: 63.75%;
+  top: 38.37%;
+  transform: translate(-50%, -50%);
+}
+
+.ikigai-hotspot.profession {
+  left: 36.25%;
+  top: 63.95%;
+  transform: translate(-50%, -50%);
+}
+
+.ikigai-hotspot.vocation {
+  left: 63.75%;
+  top: 63.95%;
+  transform: translate(-50%, -50%);
+}
+
+.ikigai-hotspot.ikigai {
+  left: 50%;
+  top: 51.16%;
+  width: 20%;
+  height: 18%;
+  transform: translate(-50%, -50%);
 }
 
 .ikigai-premium-map.landing-mode {
@@ -1736,6 +1833,13 @@ svg {
   filter: drop-shadow(0 20px 38px rgba(0, 0, 0, 0.35));
 }
 
+.report-map-hint {
+  margin: 0 0 14px;
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
 .metric-grid,
 .roles-grid {
   display: grid;
@@ -2093,7 +2197,10 @@ p {
   .app-nav,
   .btn-back,
   .button,
-  .btn-primary {
+  .btn-primary,
+  .print-actions,
+  .glow-tl,
+  .glow-br {
     display: none !important;
   }
 
@@ -2107,19 +2214,55 @@ p {
     color: #111 !important;
   }
 
-  #app {
-    max-width: none !important;
+  body {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
   }
 
+  #app {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+
+  .report-page,
+  .report-hero,
+  .report-section,
+  .habit-bridge-card,
+  .metric-card,
+  .role-card,
+  .ikigai-analysis-panel,
   .card {
     break-inside: avoid;
     color: #111 !important;
     border-color: #ddd !important;
     background: #fff !important;
+    box-shadow: none !important;
   }
 
+  .report-title,
+  .report-section h2,
+  .metric-card h3,
+  .role-head h3,
+  .ikigai-analysis-panel h3,
+  .habit-bridge-title {
+    color: #111 !important;
+  }
+
+  .report-lead,
+  .metric-card p,
+  .role-card p,
+  .reason-item,
+  .highlight-box,
+  .habit-bridge-text,
+  .habit-bridge-item,
+  .ikigai-analysis-panel p,
   .muted,
   .very-muted {
     color: #333 !important;
+  }
+
+  .report-toc,
+  .ikigai-premium-map svg {
+    break-inside: avoid;
   }
 }

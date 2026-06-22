@@ -6,6 +6,8 @@ dist
 .env.*.local
 coverage
 *.log
+*.tsbuildinfo
+test-results/
 .runtime
 .start-frontend.cmd
 .start-frontend.ps1

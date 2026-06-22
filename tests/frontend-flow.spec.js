@@ -132,8 +132,13 @@ test("ORKEN.LIFE frontend flow works with mocked backend", async ({ page }) => {
 
   await expect(page.getByTestId("voice-record-button")).toBeEnabled({ timeout: 30000 });
   await page.getByTestId("voice-record-button").click();
-  await expect(page.getByTestId("voice-stop-button")).toBeVisible();
-  await page.waitForTimeout(6200);
+  await expect(page.getByTestId("voice-stop-locked")).toBeVisible();
+  await expect(page.getByTestId("voice-stop-button")).toHaveCount(0);
+  const firstTopic = await page.getByTestId("voice-active-topic").innerText();
+  await page.waitForTimeout(7600);
+  await expect.poll(async () => page.getByTestId("voice-active-topic").innerText()).not.toBe(firstTopic);
+  await page.waitForTimeout(23100);
+  await expect(page.getByTestId("voice-stop-button")).toBeVisible({ timeout: 5000 });
   await page.getByTestId("voice-stop-button").click();
   await expect(page.locator("audio[controls]")).toBeVisible({ timeout: 15000 });
   await expect(page.getByTestId("voice-next-link")).toBeVisible();
@@ -184,8 +189,19 @@ test("ORKEN.LIFE frontend flow works with mocked backend", async ({ page }) => {
   await expect(page).toHaveURL(/\/report\/analysis-test\/full$/, { timeout: 15000 });
   await expect(page.getByTestId("full-report-page")).toBeVisible();
   await expect(page.getByText("Product strategist").first()).toBeVisible();
+  await expect(page.getByText("Тембр")).toBeVisible();
+  await page.getByTestId("ikigai-hotspot-passion").click();
+  await expect(page.getByTestId("ikigai-zone-panel")).toContainText("Эта зона показывает");
+  await page.evaluate(() => {
+    window.print = () => {
+      window.sessionStorage.setItem("print-called", "1");
+    };
+  });
+  await page.getByTestId("save-report-pdf-button").click();
+  await expect.poll(async () => page.evaluate(() => window.sessionStorage.getItem("print-called"))).toBe("1");
 
-  await page.goto(`${appBase}/habits`);
+  await page.getByTestId("activate-habits-link").click();
+  await expect(page).toHaveURL(/\/habits$/);
   await expect(page.getByTestId("habits-frame")).toBeVisible();
   const habitsFrame = page.frameLocator('[data-testid="habits-frame"]');
   await expect(habitsFrame.getByText("ORKEN.LIFE").first()).toBeVisible({ timeout: 15000 });

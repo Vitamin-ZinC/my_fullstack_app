@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import type { ReportFull } from "@levelup/contracts";
-import { IkigaiPremiumMap } from "@/components/IkigaiPremiumMap";
+import type { ReportFull, RoleFit } from "@levelup/contracts";
+import { IkigaiPremiumMap, type IkigaiMapZone } from "@/components/IkigaiPremiumMap";
 import { api } from "@/lib/api";
 import { useSiteText } from "@/lib/useSiteText";
 
@@ -15,6 +15,7 @@ export default function FullReportPage() {
   const { analysisId } = useParams<{ analysisId: string }>();
   const [report, setReport] = useState<ReportFull | null>(null);
   const [error, setError] = useState("");
+  const personalizedZones = report ? buildReportIkigaiZones(report) : undefined;
 
   useEffect(() => {
     api.getFullReport(analysisId)
@@ -50,8 +51,8 @@ export default function FullReportPage() {
 
       <section id="section-0" className="report-section">
         <h2>{text.sections[0]}</h2>
-        <img className="report-visual" src="/assets/ikigai-cones-transparent.png" alt="" />
-        <IkigaiPremiumMap />
+        <p className="report-map-hint">{text.mapHint}</p>
+        <IkigaiPremiumMap zoneOverrides={personalizedZones} />
       </section>
 
       {report && (
@@ -65,7 +66,7 @@ export default function FullReportPage() {
             <div className="metric-grid">
               {Object.entries(report.voice_analysis).map(([key, value]) => (
                 <div className="metric-card" key={key}>
-                  <h3>{key}</h3>
+                  <h3>{getMetricLabel(text.voiceLabels, key)}</h3>
                   <p>{value}</p>
                 </div>
               ))}
@@ -76,7 +77,7 @@ export default function FullReportPage() {
             <div className="metric-grid">
               {Object.entries(report.face_analysis).map(([key, value]) => (
                 <div className="metric-card" key={key}>
-                  <h3>{key}</h3>
+                  <h3>{getMetricLabel(text.faceLabels, key)}</h3>
                   <p>{value}</p>
                 </div>
               ))}
@@ -119,13 +120,75 @@ export default function FullReportPage() {
               <div className="habit-bridge-item"><strong>{habitsText.currentHabit.book}</strong>{habitsText.currentHabit.why}</div>
               <div className="habit-bridge-item"><strong>{habitsText.dashboardTitle}</strong>{habitsText.dashboardCopy}</div>
             </div>
-            <Link className="button" href="/habits">{habitsText.trialButton}</Link>
+            <Link className="button" data-testid="activate-habits-link" href="/habits">{habitsText.trialButton}</Link>
           </section>
           <div className="print-actions">
-            <button className="button" onClick={() => window.print()}>{text.savePdf}</button>
+            <button className="button" data-testid="save-report-pdf-button" type="button" onClick={() => requestAnimationFrame(() => window.print())}>{text.savePdf}</button>
           </div>
         </>
       )}
     </article>
   );
+}
+
+function getMetricLabel(labels: Record<string, string>, key: string) {
+  return labels[key] ?? key;
+}
+
+function buildReportIkigaiZones(report: ReportFull): Record<"passion" | "mission" | "vocation" | "profession" | "ikigai", IkigaiMapZone> {
+  const topRole = report.top_roles[0];
+  const fallbackRole: RoleFit = {
+    name: report.profession,
+    match: Math.max(...Object.values(report.ikigai_scores)),
+    why: report.summary,
+    voiceEvidence: report.voice_analysis.communication,
+    faceEvidence: report.face_analysis.communication,
+    strengths: report.summary,
+    risks: report.final_insight
+  };
+  const role = topRole ?? fallbackRole;
+
+  return {
+    passion: {
+      title: "Passion / Страсть",
+      insight: [
+        "Эта зона показывает, где у вас появляется энергия и живой интерес.",
+        `По голосу: ${report.voice_analysis.energy}`,
+        `По мотивации: ${report.voice_analysis.motivation}`
+      ].join(" "),
+      recommendation: "Проверяйте задачи, где интерес не просто вдохновляет, а помогает держать фокус дольше обычного."
+    },
+    mission: {
+      title: "Mission / Миссия",
+      insight: [
+        "Эта зона описывает пользу, которую вы можете давать людям и рынку.",
+        `Коммуникационный сигнал: ${report.face_analysis.empathy}`,
+        `Как это проявляется в контакте: ${report.face_analysis.communication}`
+      ].join(" "),
+      recommendation: "Формулируйте пользу через проблему клиента и измеримый результат, а не через абстрактный потенциал."
+    },
+    profession: {
+      title: "Profession / Профессия",
+      insight: [
+        `Сейчас профессиональный вектор ближе всего к роли: ${report.profession}.`,
+        role.why,
+        `Сильная сторона: ${role.strengths}`
+      ].join(" "),
+      recommendation: `Начните с роли «${role.name}» и проверьте ее на маленьком платном или пилотном предложении.`
+    },
+    vocation: {
+      title: "Vocation / Призвание",
+      insight: [
+        `Зона монетизации сильнее всего проявляется через ${role.match}% совпадение с направлением «${role.name}».`,
+        `Голос: ${role.voiceEvidence}`,
+        `Визуальный сигнал: ${role.faceEvidence}`
+      ].join(" "),
+      recommendation: `Главный риск при переходе к монетизации: ${role.risks}`
+    },
+    ikigai: {
+      title: "Ikigai / Центр реализации",
+      insight: report.final_insight,
+      recommendation: report.career_action
+    }
+  };
 }

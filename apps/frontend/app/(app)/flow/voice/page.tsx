@@ -11,6 +11,10 @@ type VoiceMetrics = {
   size: number;
 };
 
+const MIN_RECORDING_SECONDS = 30;
+const MAX_RECORDING_SECONDS = 60;
+const TOPIC_ROTATION_SECONDS = 7;
+
 export default function VoicePage() {
   const text = useSiteText().flow.voice;
   const recorder = useRef<MediaRecorder | null>(null);
@@ -88,6 +92,11 @@ export default function VoicePage() {
   }
 
   function stop() {
+    if (secondsRef.current < MIN_RECORDING_SECONDS) return;
+    stopRecording();
+  }
+
+  function stopRecording() {
     stopTimer();
     setRecording(false);
     setUploading(true);
@@ -147,7 +156,7 @@ export default function VoicePage() {
       setSeconds((value) => {
         const next = value + 1;
         secondsRef.current = next;
-        if (next >= 60) window.setTimeout(stop, 0);
+        if (next >= MAX_RECORDING_SECONDS) window.setTimeout(stopRecording, 0);
         return next;
       });
     }, 1000);
@@ -163,9 +172,15 @@ export default function VoicePage() {
     stream.current = null;
   }
 
-  const progress = Math.min(100, (seconds / 60) * 100);
+  const progress = Math.min(100, (seconds / MAX_RECORDING_SECONDS) * 100);
   const sizeKb = metrics ? Math.round(metrics.size / 1024) : 0;
   const canContinue = done && !uploading;
+  const canStop = recording && seconds >= MIN_RECORDING_SECONDS;
+  const secondsUntilStop = Math.max(0, MIN_RECORDING_SECONDS - seconds);
+  const activeTopicIndex = text.topics.length
+    ? (recording ? Math.floor(seconds / TOPIC_ROTATION_SECONDS) % text.topics.length : 0)
+    : -1;
+  const activeTopic = activeTopicIndex >= 0 ? text.topics[activeTopicIndex] : "";
 
   return (
     <div className="flow-inner" data-testid="voice-page">
@@ -189,6 +204,9 @@ export default function VoicePage() {
             <div className="progress-bg">
               <div className="progress-fill" style={{ width: `${progress}%` }} />
             </div>
+            <div className="very-muted">
+              {canStop ? text.stopAvailable : text.minimumHint.replace("{seconds}", String(secondsUntilStop))}
+            </div>
           </div>
         )}
         {done && metrics && (
@@ -211,8 +229,18 @@ export default function VoicePage() {
 
       <div>
         <div className="very-muted topics-title">{text.topicsTitle}</div>
+        {activeTopic && (
+          <div className="voice-topic-current" data-testid="voice-active-topic">
+            <span>{text.topicNow}</span>
+            <strong>{activeTopic}</strong>
+          </div>
+        )}
         <div className="chip-row">
-          {text.topics.map((topic) => <span className="chip" key={topic}>{topic}</span>)}
+          {text.topics.map((topic, index) => (
+            <span className={`chip ${index === activeTopicIndex ? "active" : ""}`} key={topic}>
+              {topic}
+            </span>
+          ))}
         </div>
       </div>
 
@@ -223,7 +251,12 @@ export default function VoicePage() {
           <Mic size={18} /> {uploading ? text.busy : text.start}
         </button>
       )}
-      {recording && (
+      {recording && !canStop && (
+        <div className="voice-minimum-hint" data-testid="voice-stop-locked">
+          {text.minimumHint.replace("{seconds}", String(secondsUntilStop))}
+        </div>
+      )}
+      {recording && canStop && (
         <button className="button btn-danger" data-testid="voice-stop-button" onClick={stop}>
           <Square size={18} /> {text.stop}
         </button>
@@ -247,7 +280,7 @@ function getRecorderMimeType() {
 
 function validateVoiceRecording(blob: Blob, duration: number) {
   if (!blob || blob.size < 2500) return { ok: false, message: "Голос не распознан: запись слишком короткая или пустая. Запишите фразу голосом, а не тишину." };
-  if (duration < 5) return { ok: false, message: "Для анализа нужно минимум 5 секунд речи. Скажите 2-3 предложения о себе и повторите запись." };
+  if (duration < MIN_RECORDING_SECONDS) return { ok: false, message: "Для анализа нужно минимум 30 секунд речи. Расскажите о себе по подсказкам и повторите запись." };
   return { ok: true, message: "" };
 }
 

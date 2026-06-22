@@ -3,7 +3,7 @@
 import { Camera, ImagePlus, Upload } from "lucide-react";
 import type { ChangeEvent } from "react";
 import { useEffect, useRef, useState } from "react";
-import { getAnalysisDraft, uploadMedia } from "@/lib/api";
+import { api, getAnalysisDraft, uploadMedia } from "@/lib/api";
 import { useSiteText } from "@/lib/useSiteText";
 
 type FaceMetrics = {
@@ -119,6 +119,33 @@ export default function FacePage() {
     }
   }
 
+  async function launchAnalysis() {
+    const draft = getAnalysisDraft();
+    if (!draft) {
+      setError(text.noVoice);
+      return;
+    }
+
+    setBusy(true);
+    setError("");
+    const ikigaiAnswers = {
+      love: [],
+      good_at: [],
+      world_needs: [],
+      paid_for: []
+    };
+
+    try {
+      window.sessionStorage.setItem("levelup_ikigai_answers", JSON.stringify(ikigaiAnswers));
+      await api.confirmAnalysis(draft.analysisId, ikigaiAnswers);
+      window.location.assign("/flow/analysis");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Не удалось запустить анализ");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function stopCamera() {
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
@@ -193,7 +220,11 @@ export default function FacePage() {
         </button>
       </div>
 
-      {uploaded && <button className="button" data-testid="face-next-link" onClick={() => window.location.assign("/flow/ikigai")}>{text.next}</button>}
+      {uploaded && (
+        <button className="button" data-testid="face-next-link" type="button" onClick={launchAnalysis} disabled={busy}>
+          {busy ? "Запускаем анализ..." : "Узнать результат"}
+        </button>
+      )}
     </div>
   );
 }

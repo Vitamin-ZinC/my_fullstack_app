@@ -2,91 +2,42 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { IkigaiPremiumMap } from "@/components/IkigaiPremiumMap";
 import { api, getAnalysisDraft } from "@/lib/api";
 import { useSiteText } from "@/lib/useSiteText";
 
+const emptyIkigaiAnswers = {
+  love: [],
+  good_at: [],
+  world_needs: [],
+  paid_for: []
+};
+
 export default function IkigaiPage() {
-  const siteText = useSiteText();
-  const text = siteText.flow.ikigai;
-  const faceText = siteText.flow.face;
   const router = useRouter();
-  const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [ready, setReady] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const text = useSiteText();
   const [error, setError] = useState("");
 
   useEffect(() => {
-    setReady(true);
-  }, []);
-
-  async function submit() {
-    setError("");
     const draft = getAnalysisDraft();
     if (!draft) {
-      setError(faceText.noVoice);
+      router.replace("/flow/face");
       return;
     }
 
-    const ikigaiAnswers = {
-      love: split(answers.love),
-      good_at: split(answers.good_at),
-      world_needs: split(answers.world_needs),
-      paid_for: split(answers.paid_for)
-    };
-
-    try {
-      setBusy(true);
-      window.sessionStorage.setItem("levelup_ikigai_answers", JSON.stringify(ikigaiAnswers));
-      await api.confirmAnalysis(draft.analysisId, ikigaiAnswers);
-      router.push("/flow/analysis");
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : text.launchError);
-    } finally {
-      setBusy(false);
-    }
-  }
+    window.sessionStorage.setItem("levelup_ikigai_answers", JSON.stringify(emptyIkigaiAnswers));
+    api.confirmAnalysis(draft.analysisId, emptyIkigaiAnswers)
+      .then(() => router.replace("/flow/analysis"))
+      .catch((reason) => {
+        setError(reason instanceof Error ? reason.message : text.flow.ikigai.launchError);
+      });
+  }, [router, text.flow.ikigai.launchError]);
 
   return (
-    <div className="flow-inner" data-testid="ikigai-page">
-      <div className="stepbar">
-        <div className="step-done" />
-        <div className="step-done" />
-        <div className="step-done" />
-        <span>{text.step}</span>
-      </div>
-
-      <h1 className="ub flow-title">{text.title}</h1>
-      <p className="muted flow-copy">{text.copy}</p>
-
-      <div className="card cyan-border ikigai-flow-card">
-        <IkigaiPremiumMap showPanel={false} />
-        <div className="ikigai-factor-list">
-          {siteText.landing.modelFactors.map((factor) => <div key={factor}>{factor}</div>)}
-        </div>
-      </div>
-
-      <div className="ikigai-question-grid">
-        {text.questions.map(([id, label]) => (
-          <label className="card ikigai-question" key={id}>
-            <div className="eyebrow">{label}</div>
-            <input
-              className="input"
-              data-testid={`ikigai-${id}`}
-              value={answers[id] ?? ""}
-              onChange={(event) => setAnswers({ ...answers, [id]: event.target.value })}
-              placeholder={text.placeholder}
-            />
-          </label>
-        ))}
-      </div>
-
+    <div className="flow-inner" data-testid="ikigai-redirect-page">
+      <div className="ub very-muted analysis-kicker">{text.flow.analysis.eyebrow}</div>
+      <h1 className="ub flow-title">Запускаем анализ</h1>
+      <p className="muted flow-copy">Собираем голос и фото в единый отчет.</p>
       {error && <div className="card error-card">{error}</div>}
-      <button className="button" data-testid="ikigai-submit-button" onClick={submit} disabled={!ready || busy}>{busy ? text.busy : text.submit}</button>
     </div>
   );
-}
-
-function split(value = "") {
-  return value.split(",").map((item) => item.trim()).filter(Boolean);
 }

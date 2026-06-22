@@ -159,15 +159,9 @@ test("ORKEN.LIFE frontend flow works with mocked backend", async ({ page }) => {
     buffer: Buffer.from(pngBase64, "base64")
   });
   await expect(page.getByTestId("face-metrics")).toBeVisible({ timeout: 10000 });
-  await page.getByTestId("face-next-link").click();
-  await expect(page).toHaveURL(/\/flow\/ikigai$/);
-
-  await page.getByTestId("ikigai-love").fill("исследования, обучение");
-  await page.getByTestId("ikigai-good_at").fill("стратегия, продукт");
-  await page.getByTestId("ikigai-world_needs").fill("ясность, автоматизация");
-  await page.getByTestId("ikigai-paid_for").fill("консалтинг, внедрение");
+  await expect(page.getByTestId("face-next-link")).toHaveText("Узнать результат");
   const confirmResponse = page.waitForResponse(`${apiBase}/api/analyses/analysis-test/confirm`);
-  await page.getByTestId("ikigai-submit-button").click();
+  await page.getByTestId("face-next-link").click();
   await confirmResponse;
   await expect(page).toHaveURL(/\/flow\/analysis$/, { timeout: 15000 });
   await expect(page.getByTestId("free-report-link")).toBeVisible({ timeout: 10000 });
@@ -202,6 +196,36 @@ test("ORKEN.LIFE frontend flow works with mocked backend", async ({ page }) => {
   await expect(page.getByTestId("habits-frame")).toBeVisible();
   const habitsFrame = page.frameLocator('[data-testid="habits-frame"]');
   await expect(habitsFrame.getByText("ORKEN.LIFE").first()).toBeVisible({ timeout: 15000 });
+});
+
+test("legacy ikigai flow route launches analysis instead of showing the map step", async ({ page }) => {
+  await page.route(`${apiBase}/api/content/ru`, async (route) => fulfillJson(route, { locale: "ru", value: null }));
+  await page.route(`${apiBase}/api/analyses/analysis-test/confirm`, async (route) => {
+    expect(route.request().postDataJSON()).toEqual({
+      ikigaiAnswers: { love: [], good_at: [], world_needs: [], paid_for: [] }
+    });
+    await fulfillJson(route, { status: "QUEUED", jobId: "job-test" });
+  });
+  await page.route(`${apiBase}/api/analyses/analysis-test/stream**`, async (route) => route.fulfill({
+    status: 200,
+    headers: { ...corsHeaders, "content-type": "text/event-stream" },
+    body: "data: {\"status\":\"DONE\",\"progress\":100,\"log\":\"Report ready\"}\n\n"
+  }));
+  await page.route(`${apiBase}/api/analyses/analysis-test/status`, async (route) => fulfillJson(route, { status: "DONE", progress: 100 }));
+
+  await page.addInitScript(({ apiUrl }) => {
+    window.sessionStorage.setItem("levelup_session_id", "test-session");
+    window.sessionStorage.setItem("levelup_guest_token", "test-token");
+    window.sessionStorage.setItem("levelup_analysis_id", "analysis-test");
+    window.sessionStorage.setItem("levelup_audio_upload_url", `${apiUrl}/uploads/audio-test`);
+    window.sessionStorage.setItem("levelup_photo_upload_url", `${apiUrl}/uploads/photo-test`);
+  }, { apiUrl: apiBase });
+
+  const confirmResponse = page.waitForResponse(`${apiBase}/api/analyses/analysis-test/confirm`);
+  await page.goto(`${appBase}/flow/ikigai`);
+  await confirmResponse;
+  await expect(page).toHaveURL(/\/flow\/analysis$/, { timeout: 15000 });
+  await expect(page.getByText("Карта Икигай")).toHaveCount(0);
 });
 
 test("habits tracker records daily marks and uses AI navigator", async ({ page }) => {

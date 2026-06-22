@@ -123,7 +123,7 @@ test("ORKEN.LIFE frontend flow works with mocked backend", async ({ page }) => {
         ikigai: { title: "Икигай", insight: "Центр реализации находится в экспертной стратегии.", recommendation: "Проверить ценность за 30 дней." }
       },
       career_action: "Validate one paid offer this week.",
-      final_insight: "The strongest trajectory is expert product strategy."
+      final_insight: "Комплексный AI-анализ показывает синхронизацию внешнего проявления и внутреннего потенциала. Уверенность в голосе и собранный визуальный сигнал создают фундамент для продуктовой стратегии, управления и обучения других."
     }
   }));
   await page.route(`${apiBase}/api/payments/config`, async (route) => fulfillJson(route, {
@@ -201,8 +201,14 @@ test("ORKEN.LIFE frontend flow works with mocked backend", async ({ page }) => {
   await expect(page).toHaveURL(/\/report\/analysis-test\/full$/, { timeout: 15000 });
   await expect(page.getByTestId("full-report-page")).toBeVisible();
   await expect(page.getByText("Product strategist").first()).toBeVisible();
-  await expect(page.getByTestId("ikigai-hotspot-passion")).toHaveCount(0);
+  await expect(page.getByText("8. Итоговое аналитическое заключение")).toBeVisible();
+  await expect(page.getByText("Нажмите на один из разделов диаграммы Икигай")).toBeVisible();
+  await expect(page.getByTestId("ikigai-hotspot-passion")).toBeVisible();
+  await page.getByTestId("ikigai-hotspot-passion").click();
+  await expect(page.getByTestId("ikigai-zone-panel")).toContainText("Страсть");
+  await expect(page.getByTestId("ikigai-zone-panel")).toContainText("Интерес связан");
   await expect(page.getByText("Тембр звучит спокойно")).toBeVisible();
+  await expect(page.getByText("Комплексный AI-анализ показывает")).toBeVisible();
 
   await page.evaluate(() => {
     window.print = () => {

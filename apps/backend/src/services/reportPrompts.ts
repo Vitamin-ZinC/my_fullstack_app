@@ -72,7 +72,7 @@ export const defaultReportPromptTemplates: PromptDraft[] = [
   {
     key: REPORT_FULL_SYSTEM_PROMPT_KEY,
     locale: "ru",
-    version: 4,
+    version: 5,
     status: "ACTIVE",
     title: "ORKEN.LIFE PREMIUM report system prompt",
     content: [
@@ -89,7 +89,7 @@ export const defaultReportPromptTemplates: PromptDraft[] = [
   {
     key: REPORT_FULL_USER_PROMPT_KEY,
     locale: "ru",
-    version: 4,
+    version: 5,
     status: "ACTIVE",
     title: "ORKEN.LIFE PREMIUM report user prompt",
     content: [
@@ -107,7 +107,9 @@ export const defaultReportPromptTemplates: PromptDraft[] = [
       "Use cautious formulations: 'похоже', 'может указывать', 'в рабочем контексте это проявляется как'. Never present face or voice as proof of character, health, deception, or identity.",
       "For ikigai_zones, write personalized answers for passion, mission, profession, vocation, and ikigai. Each zone must have title, insight, and recommendation. These texts are shown when the user selects a zone, so they must be useful without extra context.",
       "Top roles must include role-specific why, voiceEvidence, faceEvidence, strengths, and risks. Match percentages must be realistic and internally consistent with ikigai_scores.",
-      "career_action must be a 30-day implementation route with Week 1, Week 2, Week 3, and Week 4 steps. final_insight must synthesize questionnaire, voice, face, and ikigai into one practical conclusion.",
+      "career_action must be a 30-day implementation route with Week 1, Week 2, Week 3, and Week 4 steps.",
+      "final_insight is section 8, titled 'Итоговое аналитическое заключение'. Write it as one cohesive analytical paragraph, not a list. It must synthesize the visible presentation, voice signal, facial/micromimic signal, inner potential, leadership/learning vector, and the user's deeper Ikigai direction.",
+      "Use this final_insight format and level of specificity: 'Комплексный AI-анализ показывает [главная синхронизация или рассинхронизация внешнего проявления и внутреннего потенциала]. [Как уверенность в голосе, мимика и/или визуальная собранность создают фундамент для конкретных профессиональных сфер]. Однако ваш истинный Икигай лежит глубже: [какие качества или компетенции нужно развивать, чтобы получать больше удовлетворения от деятельности]. [Какой фокус с личных результатов на пользу людям, команду, обучение, продукт или рынок позволит раскрыть потенциал и найти баланс в профессии].'",
       "Keep every field specific, useful, and safe. Avoid generic coaching filler.",
       "Every visible value must be in Russian when Output language is Russian.",
       "Before returning JSON, check that every voice_analysis and face_analysis value is a real diagnostic answer, not just a translation or value of the parameter name.",

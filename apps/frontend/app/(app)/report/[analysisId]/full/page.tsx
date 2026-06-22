@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { IkigaiScores, ReportFull } from "@levelup/contracts";
+import { IkigaiPremiumMap } from "@/components/IkigaiPremiumMap";
 import { api, restoreSessionFromUrl } from "@/lib/api";
 import { useSiteText } from "@/lib/useSiteText";
 
@@ -16,8 +17,8 @@ export default function FullReportPage() {
   const { analysisId } = useParams<{ analysisId: string }>();
   const [report, setReport] = useState<ReportFull | null>(null);
   const [error, setError] = useState("");
-  const visibleToc = text.toc.slice(1);
-  const visibleSections = text.sections.slice(1);
+  const visibleToc = text.toc;
+  const visibleSections = text.sections;
 
   useEffect(() => {
     restoreSessionFromUrl();
@@ -54,12 +55,17 @@ export default function FullReportPage() {
 
       {report && (
         <>
-          <section id="section-0" className="report-section">
+          <section id="section-0" className="report-section report-map-section">
             <h2>{visibleSections[0]}</h2>
-            <p className="report-lead">{report.summary}</p>
+            <p className="report-map-hint">{text.mapHint}</p>
+            <IkigaiPremiumMap zoneOverrides={report.ikigai_zones} />
           </section>
           <section id="section-1" className="report-section">
             <h2>{visibleSections[1]}</h2>
+            <p className="report-lead">{report.summary}</p>
+          </section>
+          <section id="section-2" className="report-section">
+            <h2>{visibleSections[2]}</h2>
             <div className="metric-grid">
               {Object.entries(report.voice_analysis).map(([key, value]) => {
                 const label = getMetricLabel(text.voiceLabels, key);
@@ -72,8 +78,8 @@ export default function FullReportPage() {
               })}
             </div>
           </section>
-          <section id="section-2" className="report-section">
-            <h2>{visibleSections[2]}</h2>
+          <section id="section-3" className="report-section">
+            <h2>{visibleSections[3]}</h2>
             <div className="metric-grid">
               {Object.entries(report.face_analysis).map(([key, value]) => {
                 const label = getMetricLabel(text.faceLabels, key);
@@ -86,8 +92,8 @@ export default function FullReportPage() {
               })}
             </div>
           </section>
-          <section id="section-3" className="report-section">
-            <h2>{visibleSections[3]}</h2>
+          <section id="section-4" className="report-section">
+            <h2>{visibleSections[4]}</h2>
             <div className="roles-grid">
               {report.top_roles.map((role) => (
                 <div className="role-card" key={role.name}>
@@ -104,16 +110,16 @@ export default function FullReportPage() {
               ))}
             </div>
           </section>
-          <section id="section-4" className="report-section">
-            <h2>{visibleSections[4]}</h2>
-            <p className="report-lead">{report.top_roles.map((role) => role.risks).join(" ")}</p>
-          </section>
           <section id="section-5" className="report-section">
             <h2>{visibleSections[5]}</h2>
-            <div className="highlight-box">{report.career_action}</div>
+            <p className="report-lead">{report.top_roles.map((role) => role.risks).join(" ")}</p>
           </section>
           <section id="section-6" className="report-section">
             <h2>{visibleSections[6]}</h2>
+            <div className="highlight-box">{report.career_action}</div>
+          </section>
+          <section id="section-7" className="report-section">
+            <h2>{visibleSections[7]}</h2>
             <p className="report-lead">{report.final_insight}</p>
           </section>
           <section className="habit-bridge-card">

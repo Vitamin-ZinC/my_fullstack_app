@@ -31,6 +31,8 @@ test("premium default prompt requires safe profiling lens and Russian personaliz
   assert.match(user.content, /voiceMetricsJson/);
   assert.match(user.content, /слов в минуту/);
   assert.match(user.content, /ikigai_zones/);
+  assert.match(user.content, /Итоговое аналитическое заключение/);
+  assert.match(user.content, /Комплексный AI-анализ показывает/);
   assert.match(user.content, /похоже|может указывать/);
   assert.match(user.content, /Every visible value must be in Russian/);
   assert.doesNotMatch(user.content, /Рї|Рј|РІ СЂ/);

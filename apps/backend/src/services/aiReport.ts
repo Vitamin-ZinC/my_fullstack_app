@@ -493,11 +493,15 @@ async function createChatCompletionWithJsonMode(
     return await openai.chat.completions.create({
       ...params,
       response_format: responseFormat
+    }, {
+      timeout: env.OPENAI_REQUEST_TIMEOUT_MS
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (!isResponseFormatUnsupportedError(message)) throw error;
-    return openai.chat.completions.create(params);
+    return openai.chat.completions.create(params, {
+      timeout: env.OPENAI_REQUEST_TIMEOUT_MS
+    });
   }
 }
 
@@ -558,7 +562,7 @@ async function requestReportJsonRepair(
     {
       model: env.OPENAI_MODEL,
       temperature: 0,
-      max_tokens: 7000,
+      max_tokens: env.OPENAI_MAX_OUTPUT_TOKENS,
       messages: repairMessages
     },
     responseFormat
@@ -621,7 +625,7 @@ async function requestReportCompletion<TReport>(
       {
         model: env.OPENAI_MODEL,
         temperature: 0.25,
-        max_tokens: 7000,
+        max_tokens: env.OPENAI_MAX_OUTPUT_TOKENS,
         messages
       },
       responseFormat

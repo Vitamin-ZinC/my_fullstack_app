@@ -125,12 +125,13 @@ export const worker = new Worker("analysis", async (job) => {
   emitProgress(analysisId, { status: "DONE", progress: 100, log: "Report is ready" });
 }, {
   connection: redis,
-  concurrency: 3
+  concurrency: env.ANALYSIS_WORKER_CONCURRENCY
 });
 
 worker.on("failed", async (job, error) => {
   if (!job) return;
-  if (job.attemptsMade >= 3) {
+  const maxAttempts = job.opts.attempts ?? 1;
+  if (job.attemptsMade >= maxAttempts) {
     await prisma.analysis.update({
       where: { id: job.data.analysisId },
       data: { status: "FAILED", errorMessage: error.message }

@@ -35,6 +35,9 @@ const schema = z.object({
   OPENAI_BASE_URL: z.string().url().default("https://api.enchantstartup.com/v1"),
   OPENAI_MODEL: z.string().default("gpt-4o-mini"),
   OPENAI_TRANSCRIPTION_MODEL: z.string().default("whisper-1"),
+  OPENAI_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(120000),
+  OPENAI_MAX_OUTPUT_TOKENS: z.coerce.number().int().positive().default(5000),
+  ANALYSIS_WORKER_CONCURRENCY: z.coerce.number().int().positive().default(1),
   ORKEN_API_KEY_FILE: z.string().default("C:\\Users\\User\\Documents\\API Gate\\.secrets\\orken-key.json"),
   ANTHROPIC_API_KEY: z.string().optional(),
   ANTHROPIC_MODEL: z.string().default("claude-opus-4-6")

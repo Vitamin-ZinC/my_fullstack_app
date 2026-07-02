@@ -447,7 +447,7 @@ async function buildCompletionInput(
 }
 
 function isImageInputError(body: string) {
-  return /image_parse_error|unsupported image|invalid image|invalid_image|400 status code \(no body\)|status code 400/i.test(body);
+  return /image_parse_error|unsupported image|invalid image|invalid_image|400 status code \(no body\)|status code 400|timed out|gateway time-out|gateway timeout|status code 504|504 /i.test(body);
 }
 
 type ReportCompletionRequest<TReport> = {

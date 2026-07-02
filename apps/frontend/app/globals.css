@@ -2266,7 +2266,7 @@ svg {
 
 .habits-main {
   padding: 24px;
-  max-width: 920px;
+  max-width: 1120px;
 }
 
 .habits-topbar {
@@ -2600,6 +2600,178 @@ svg {
   width: 100%;
 }
 
+.habits-form-row,
+.habits-wellness-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.habits-wellness-row {
+  align-items: stretch;
+  margin: 14px 0;
+}
+
+.habits-progress-ring {
+  --progress: 0%;
+  min-height: 132px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle at center, #020b18 0 54%, transparent 55%),
+    conic-gradient(var(--cyan) var(--progress), rgba(255, 255, 255, 0.09) 0);
+  border: 1px solid rgba(0, 212, 255, 0.18);
+  box-shadow: 0 0 24px rgba(0, 212, 255, 0.1);
+  text-align: center;
+}
+
+.habits-progress-ring strong {
+  display: block;
+  color: #fff;
+  font-family: "Unbounded", sans-serif;
+  font-size: 26px;
+}
+
+.habits-progress-ring span {
+  color: rgba(255, 255, 255, 0.52);
+  font-size: 11px;
+}
+
+.habits-rank-card,
+.habits-week-card {
+  display: grid;
+  gap: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 14px;
+}
+
+.habits-rank-card span {
+  color: var(--cyan);
+  font-family: "Unbounded", sans-serif;
+  font-size: 12px;
+}
+
+.habits-rank-card strong {
+  color: #fff;
+  font-size: 18px;
+}
+
+.habits-action-stack,
+.habits-guide-list {
+  display: grid;
+  gap: 12px;
+}
+
+.habits-week-dots {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.habits-week-dots span {
+  min-height: 34px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.42);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.habits-week-dots span.done {
+  border-color: rgba(0, 255, 136, 0.32);
+  color: var(--green);
+  background: rgba(0, 255, 136, 0.08);
+}
+
+.habits-cycle-tabs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 8px 0 14px;
+}
+
+.habits-cycle-tabs .btn-back {
+  flex: none;
+}
+
+.habits-habit-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.habits-card.active {
+  border-color: rgba(0, 212, 255, 0.42);
+  background: rgba(0, 212, 255, 0.08);
+}
+
+.habits-rank-ladder {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.habits-rank-step {
+  display: grid;
+  gap: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 14px;
+}
+
+.habits-rank-step span {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 12px;
+}
+
+.habits-rank-step.active {
+  border-color: rgba(255, 184, 0, 0.36);
+  background: rgba(255, 184, 0, 0.08);
+}
+
+.habits-rank-step.active span {
+  background: rgba(255, 184, 0, 0.2);
+  color: var(--gold);
+}
+
+.habits-field {
+  display: grid;
+  gap: 7px;
+  margin-top: 12px;
+  color: rgba(255, 255, 255, 0.64);
+  font-size: 12px;
+}
+
+.habits-field span,
+.habits-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.habits-toggle {
+  min-height: 44px;
+  margin: 14px 0;
+  color: rgba(255, 255, 255, 0.72);
+  cursor: pointer;
+}
+
+.habits-toggle input {
+  accent-color: var(--cyan);
+}
+
 h1,
 h2,
 h3,
@@ -2628,16 +2800,27 @@ p {
 @media (max-width: 900px) {
   .habits-app {
     grid-template-columns: 1fr;
+    min-width: 0;
+    overflow-x: clip;
   }
 
   .habits-sidebar {
     position: static;
     height: auto;
+    width: 100%;
+    min-width: 0;
+    max-width: 100vw;
   }
 
   .habits-main {
     padding: 16px;
     max-width: none;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .habits-habit-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -2674,10 +2857,27 @@ p {
     position: static;
     height: auto;
     padding-bottom: 10px;
+    width: 100%;
+    min-width: 0;
+    max-width: 100vw;
+    border-right: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   }
 
   .habits-main {
-    padding: 16px 16px 96px;
+    padding: 16px 16px 32px;
+    width: 100%;
+    min-width: 0;
+    max-width: 100vw;
+  }
+
+  .habits-sidebar .habits-nav,
+  .habits-sidebar .habits-account-link {
+    display: none;
+  }
+
+  .habits-sidebar .habits-brand {
+    padding: 0;
   }
 
   .habits-topbar {
@@ -2687,7 +2887,11 @@ p {
 
   .habits-grid,
   .habits-stats,
-  .habits-chat-form {
+  .habits-chat-form,
+  .habits-form-row,
+  .habits-wellness-row,
+  .habits-habit-grid,
+  .habits-rank-ladder {
     grid-template-columns: 1fr;
   }
 
@@ -2701,21 +2905,25 @@ p {
 
   .habits-bottom-nav {
     position: sticky;
-    bottom: 0;
+    top: 0;
     z-index: 5;
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    max-width: 100vw;
+    overflow-x: auto;
     gap: 4px;
     border-top: 1px solid rgba(255, 255, 255, 0.08);
     background: rgba(2, 11, 24, 0.96);
     padding: 8px;
-    order: 3;
+    order: 0;
   }
 
   .habits-bottom-nav button {
     display: grid;
     place-items: center;
     gap: 4px;
+    min-width: 76px;
     border: 0;
     border-radius: 12px;
     background: transparent;

@@ -5,4 +5,5 @@ import { formatPriceLabel } from "./pricing.js";
 test("formatPriceLabel renders whole and fractional major currency amounts", () => {
   assert.equal(formatPriceLabel(300, "usd"), "$3");
   assert.equal(formatPriceLabel(350, "usd"), "$3.50");
+  assert.equal(formatPriceLabel(800, "usd"), "$8");
 });

@@ -1,12 +1,21 @@
-import { env } from "../env.js";
-import { prisma } from "../lib/prisma.js";
-
 export const REPORT_PRICE_AMOUNT_KEY = "report_price_amount";
 export const REPORT_PRICE_CURRENCY_KEY = "report_price_currency";
+export const HABIT_PRICE_AMOUNT_KEY = "habit_subscription_price_amount";
+export const HABIT_PRICE_CURRENCY_KEY = "habit_subscription_price_currency";
+export const HABIT_TRIAL_DAYS_KEY = "habit_trial_days";
+
+const DEFAULT_HABIT_PRICE_AMOUNT = 800;
+const DEFAULT_HABIT_PRICE_CURRENCY = "usd";
+const DEFAULT_HABIT_TRIAL_DAYS = 30;
 
 function readPositiveInteger(value: unknown, fallback: number) {
   const numberValue = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
   return Number.isInteger(numberValue) && numberValue > 0 ? numberValue : fallback;
+}
+
+function readNonNegativeInteger(value: unknown, fallback: number) {
+  const numberValue = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  return Number.isInteger(numberValue) && numberValue >= 0 ? numberValue : fallback;
 }
 
 function readCurrency(value: unknown, fallback: string) {
@@ -28,6 +37,10 @@ export function formatPriceLabel(amount: number, currency: string) {
 }
 
 export async function getReportPriceConfig() {
+  const [{ env }, { prisma }] = await Promise.all([
+    import("../env.js"),
+    import("../lib/prisma.js")
+  ]);
   const settings = await prisma.appSetting.findMany({
     where: { key: { in: [REPORT_PRICE_AMOUNT_KEY, REPORT_PRICE_CURRENCY_KEY] } }
   });
@@ -39,5 +52,23 @@ export async function getReportPriceConfig() {
     amount,
     currency,
     priceLabel: formatPriceLabel(amount, currency)
+  };
+}
+
+export async function getHabitSubscriptionConfig() {
+  const { prisma } = await import("../lib/prisma.js");
+  const settings = await prisma.appSetting.findMany({
+    where: { key: { in: [HABIT_PRICE_AMOUNT_KEY, HABIT_PRICE_CURRENCY_KEY, HABIT_TRIAL_DAYS_KEY] } }
+  });
+  const values = new Map(settings.map((setting) => [setting.key, setting.value]));
+  const amount = readPositiveInteger(values.get(HABIT_PRICE_AMOUNT_KEY), DEFAULT_HABIT_PRICE_AMOUNT);
+  const currency = readCurrency(values.get(HABIT_PRICE_CURRENCY_KEY), DEFAULT_HABIT_PRICE_CURRENCY);
+  const trialDays = readNonNegativeInteger(values.get(HABIT_TRIAL_DAYS_KEY), DEFAULT_HABIT_TRIAL_DAYS);
+
+  return {
+    amount,
+    currency,
+    priceLabel: formatPriceLabel(amount, currency),
+    trialDays
   };
 }

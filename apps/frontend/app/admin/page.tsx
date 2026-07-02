@@ -2,7 +2,16 @@
 
 import { useEffect, useState } from "react";
 import type { AdminStats, AppSetting, FeatureFlag, PromoCode, PromptTemplate, PromptTemplateInput } from "@levelup/contracts";
-import { adminApi, contentSettingKey, reportPriceAmountSettingKey, reportPriceCurrencySettingKey, type TextLocale } from "@/lib/api";
+import {
+  adminApi,
+  contentSettingKey,
+  habitPriceAmountSettingKey,
+  habitPriceCurrencySettingKey,
+  habitTrialDaysSettingKey,
+  reportPriceAmountSettingKey,
+  reportPriceCurrencySettingKey,
+  type TextLocale
+} from "@/lib/api";
 import { defaultSiteText } from "@/lib/messages";
 
 const textLocales: TextLocale[] = ["ru", "en"];
@@ -35,6 +44,11 @@ export default function AdminPage() {
   const [priceForm, setPriceForm] = useState({
     amount: "300",
     currency: "usd"
+  });
+  const [habitPriceForm, setHabitPriceForm] = useState({
+    amount: "800",
+    currency: "usd",
+    trialDays: "30"
   });
   const [promoForm, setPromoForm] = useState({
     code: "",
@@ -77,6 +91,7 @@ export default function AdminPage() {
       setPromoCodes(nextPromoCodes);
       hydrateTextDrafts(nextSettings);
       hydratePriceForm(nextSettings);
+      hydrateHabitPriceForm(nextSettings);
       hydratePromptForm(nextPrompts, nextPromptDefaults);
     } catch (reason) {
       setAuthenticated(false);
@@ -103,6 +118,17 @@ export default function AdminPage() {
     setPriceForm({
       amount: typeof amount === "number" || typeof amount === "string" ? String(amount) : "300",
       currency: typeof currency === "string" ? currency : "usd"
+    });
+  }
+
+  function hydrateHabitPriceForm(nextSettings: AppSetting[]) {
+    const amount = nextSettings.find((item) => item.key === habitPriceAmountSettingKey)?.value;
+    const currency = nextSettings.find((item) => item.key === habitPriceCurrencySettingKey)?.value;
+    const trialDays = nextSettings.find((item) => item.key === habitTrialDaysSettingKey)?.value;
+    setHabitPriceForm({
+      amount: typeof amount === "number" || typeof amount === "string" ? String(amount) : "800",
+      currency: typeof currency === "string" ? currency : "usd",
+      trialDays: typeof trialDays === "number" || typeof trialDays === "string" ? String(trialDays) : "30"
     });
   }
 
@@ -251,6 +277,31 @@ export default function AdminPage() {
     await refresh();
   }
 
+  async function saveHabitPrice() {
+    setMessage("");
+    const amount = Number(habitPriceForm.amount);
+    const currency = habitPriceForm.currency.trim().toLowerCase();
+    const trialDays = Number(habitPriceForm.trialDays);
+    if (!Number.isInteger(amount) || amount <= 0) {
+      setMessage("Amount must be a positive integer in cents");
+      return;
+    }
+    if (!/^[a-z]{3}$/.test(currency)) {
+      setMessage("Currency must be a 3-letter ISO code");
+      return;
+    }
+    if (!Number.isInteger(trialDays) || trialDays < 0) {
+      setMessage("Trial days must be a non-negative integer");
+      return;
+    }
+
+    await adminApi.upsertSetting(habitPriceAmountSettingKey, amount);
+    await adminApi.upsertSetting(habitPriceCurrencySettingKey, currency);
+    await adminApi.upsertSetting(habitTrialDaysSettingKey, trialDays);
+    setMessage(adminText.savedHabitPrice);
+    await refresh();
+  }
+
   function resetTexts(locale: TextLocale) {
     setTextDrafts((current) => ({
       ...current,
@@ -337,6 +388,19 @@ export default function AdminPage() {
               <input className="input" value={priceForm.amount} onChange={(event) => setPriceForm({ ...priceForm, amount: event.target.value })} placeholder={adminText.priceAmount} inputMode="numeric" />
               <input className="input" value={priceForm.currency} onChange={(event) => setPriceForm({ ...priceForm, currency: event.target.value.toLowerCase() })} placeholder={adminText.priceCurrency} />
               <button className="button" onClick={saveReportPrice}>{adminText.savePrice}</button>
+            </div>
+          </section>
+
+          <section className="card stack">
+            <div>
+              <h2>{adminText.habitPriceTitle}</h2>
+              <p className="muted">{adminText.habitPriceCopy}</p>
+            </div>
+            <div className="grid grid-3">
+              <input className="input" value={habitPriceForm.amount} onChange={(event) => setHabitPriceForm({ ...habitPriceForm, amount: event.target.value })} placeholder={adminText.priceAmount} inputMode="numeric" />
+              <input className="input" value={habitPriceForm.currency} onChange={(event) => setHabitPriceForm({ ...habitPriceForm, currency: event.target.value.toLowerCase() })} placeholder={adminText.priceCurrency} />
+              <input className="input" value={habitPriceForm.trialDays} onChange={(event) => setHabitPriceForm({ ...habitPriceForm, trialDays: event.target.value })} placeholder={adminText.habitTrialDays} inputMode="numeric" />
+              <button className="button" onClick={saveHabitPrice}>{adminText.saveHabitPrice}</button>
             </div>
           </section>
 

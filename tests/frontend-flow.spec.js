@@ -7,7 +7,7 @@ const corsHeaders = {
   "access-control-allow-origin": appBase,
   "access-control-allow-credentials": "true",
   "access-control-allow-headers": "content-type,x-session-id,x-guest-token,x-locale",
-  "access-control-allow-methods": "GET,POST,PUT,OPTIONS"
+  "access-control-allow-methods": "GET,POST,PUT,PATCH,OPTIONS"
 };
 
 async function fulfillJson(route, json) {
@@ -19,6 +19,18 @@ async function fulfillJson(route, json) {
 }
 
 const diagnosticText = "Параметр сформирован как развернутый диагностический ответ: он объясняет рабочее проявление, пользу, риск и следующий шаг развития.";
+const habitConfig = {
+  amount: 800,
+  currency: "usd",
+  priceLabel: "$8",
+  trialDays: 30
+};
+const habitCycles = [
+  { id: 1, code: "foundation", title: "ОСНОВА", label: "Цикл 1", areas: ["Энергия", "Ясность", "Устойчивость"], goal: "Собрать опору.", weeks: 12 },
+  { id: 2, code: "realization", title: "РЕАЛИЗАЦИЯ", label: "Цикл 2", areas: ["Роль", "Формат", "Ценность"], goal: "Перевести выводы в действия.", weeks: 12 },
+  { id: 3, code: "growth", title: "РОСТ", label: "Цикл 3", areas: ["Масштаб", "Влияние", "Выбор"], goal: "Усилить рабочее.", weeks: 12 },
+  { id: 4, code: "integration", title: "ИНТЕГРАЦИЯ", label: "Цикл 4", areas: ["Смысл", "Баланс", "Долгосрочность"], goal: "Интегрировать путь.", weeks: 12 }
+];
 
 function createHabitProgram(overrides = {}) {
   const activeEnrollment = {
@@ -36,7 +48,8 @@ function createHabitProgram(overrides = {}) {
     status: "ACTIVE",
     sortOrder: 1,
     checkinsDone: 0,
-    lastCheckinAt: null
+    lastCheckinAt: null,
+    checkins: []
   };
   const base = {
     id: "habit-program-1",
@@ -48,14 +61,42 @@ function createHabitProgram(overrides = {}) {
     topRole: "Продуктовый стратег",
     careerAction: "Неделя 1: собрать один маленький шаг и проверить его в реальности.",
     finalInsight: "Комплексный AI-анализ показывает сильный вектор к структурной коммуникации.",
+    profile: { name: "Client", onboardingWeakZone: "profession" },
+    currentCycle: 1,
+    currentWeek: 1,
+    currentSortOrder: 1,
     startedAt: "2026-07-02T00:00:00.000Z",
     createdAt: "2026-07-02T00:00:00.000Z",
     activeEnrollment,
     enrollments: [activeEnrollment],
+    cycles: habitCycles,
     insights: [],
     metrics: [],
     rewards: [{ id: "reward-1", type: "start", label: "Старт программы", xp: 10, createdAt: "2026-07-02T00:00:00.000Z" }],
-    stats: { xp: 10, daysInProgram: 1, checkinsDone: 0, insightsCount: 0, streakDays: 0, currentWeek: 1 }
+    settings: {
+      reminderEnabled: true,
+      reminderTime: "09:00",
+      weeklyFreezes: 1,
+      subscriptionStatus: "TRIAL",
+      trialStartedAt: "2026-07-02T00:00:00.000Z",
+      trialEndsAt: "2026-08-01T00:00:00.000Z",
+      trialDaysLeft: 30
+    },
+    stats: {
+      xp: 10,
+      daysInProgram: 1,
+      checkinsDone: 0,
+      insightsCount: 0,
+      streakDays: 0,
+      currentCycle: 1,
+      currentWeek: 1,
+      currentSortOrder: 1,
+      totalWeeks: 48,
+      completedWeekCheckins: 0,
+      weekProgress: 0,
+      wellnessScore: null,
+      rank: { title: "Начало пути", level: 1, nextTitle: "Практик Икигай", nextAtXp: 420, progress: 2, currentSortOrder: 1 }
+    }
   };
 
   return {
@@ -192,7 +233,7 @@ test("ORKEN.LIFE frontend flow works with mocked backend", async ({ page }) => {
   });
   await page.route(`${apiBase}/api/habits/enroll-from-report/analysis-test`, async (route) => {
     expect(route.request().method()).toBe("POST");
-    await fulfillJson(route, { program: createHabitProgram() });
+    await fulfillJson(route, { program: createHabitProgram(), config: habitConfig });
   });
 
   await page.goto(`${appBase}/`);
@@ -310,7 +351,8 @@ test("habits tracker records daily marks and uses AI navigator", async ({ page }
   await page.route(`${apiBase}/api/auth/guest`, async (route) => fulfillJson(route, { sessionId: "habit-session", guestToken: "habit-token" }));
   await page.route(`${apiBase}/api/habits/me`, async (route) => fulfillJson(route, {
     program,
-    latestReport: null
+    latestReport: null,
+    config: habitConfig
   }));
   await page.route(`${apiBase}/api/habits/metrics`, async (route) => {
     expect(route.request().postDataJSON()).toMatchObject({
@@ -322,7 +364,8 @@ test("habits tracker records daily marks and uses AI navigator", async ({ page }
     await fulfillJson(route, {
       program: createHabitProgram({
         metrics: [{ id: "metric-1", date: "2026-07-02", energy: 6, clarity: 6, stability: 6 }]
-      })
+      }),
+      config: habitConfig
     });
   });
   await page.route(`${apiBase}/api/habits/checkins`, async (route) => {
@@ -334,12 +377,17 @@ test("habits tracker records daily marks and uses AI navigator", async ({ page }
     await fulfillJson(route, {
       program: createHabitProgram({
         stats: { xp: 20, checkinsDone: 1, streakDays: 1 },
-        activeEnrollment: { ...program.activeEnrollment, checkinsDone: 1 },
+        activeEnrollment: {
+          ...program.activeEnrollment,
+          checkinsDone: 1,
+          checkins: [{ id: "checkin-1", date: "2026-07-02", completed: true, note: "Audit", energy: 6, clarity: 6, stability: 6, createdAt: "2026-07-02T00:02:00.000Z" }]
+        },
         rewards: [
           ...program.rewards,
           { id: "reward-2", type: "checkin", label: "Шаг отмечен", xp: 10, createdAt: "2026-07-02T00:02:00.000Z" }
         ]
-      })
+      }),
+      config: habitConfig
     });
   });
   await page.route(`${apiBase}/api/habits/navigator`, async (route) => fulfillJson(route, {
@@ -360,8 +408,8 @@ test("habits tracker records daily marks and uses AI navigator", async ({ page }
   await page.getByRole("button", { name: /Сохранить мягкий шаг/ }).click();
   await expect(page.getByText("Шаг отмечен, награда добавлена")).toBeVisible();
 
-  await page.getByRole("button", { name: /^Навигатор$/ }).click();
-  await expect(page.getByText("AI Навигатор")).toBeVisible();
+  await page.getByRole("button", { name: /^Пингви$/ }).click();
+  await expect(page.getByText("Пингви").first()).toBeVisible();
   await page.getByRole("button", { name: "Что сделать сегодня?" }).click();
   await expect(page.getByText("Пингви видит состояние")).toBeVisible({ timeout: 10000 });
 });
@@ -417,6 +465,11 @@ test("password registration opens account with report history", async ({ page })
     amountPaid: 0,
     currency: "usd"
   }]));
+  await page.route(`${apiBase}/api/habits/me`, async (route) => fulfillJson(route, {
+    program: createHabitProgram(),
+    latestReport: null,
+    config: habitConfig
+  }));
 
   await page.goto(`${appBase}/login`);
   await page.getByText("Пароль").click();

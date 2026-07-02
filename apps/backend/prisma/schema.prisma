@@ -264,6 +264,14 @@ model HabitProgram {
   careerAction String?
   finalInsight String?
   profile     Json?
+  currentCycle Int              @default(1)
+  currentWeek  Int              @default(1)
+  reminderEnabled Boolean       @default(true)
+  reminderTime String           @default("09:00")
+  weeklyFreezes Int             @default(1)
+  trialStartedAt DateTime?
+  trialEndsAt DateTime?
+  subscriptionStatus String     @default("TRIAL")
   startedAt   DateTime           @default(now())
   createdAt   DateTime           @default(now())
   updatedAt   DateTime           @updatedAt
@@ -277,6 +285,7 @@ model HabitProgram {
   @@index([userId, status, createdAt])
   @@index([sessionId, status, createdAt])
   @@index([analysisId])
+  @@index([status, currentCycle, currentWeek])
 }
 
 model HabitEnrollment {

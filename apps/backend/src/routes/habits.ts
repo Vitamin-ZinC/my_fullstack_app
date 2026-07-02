@@ -1,9 +1,12 @@
 import type { FastifyInstance } from "fastify";
+import type { Prisma } from "@prisma/client";
 import { z } from "zod";
 import { env } from "../env.js";
 import { requireAnalysisAccess, requireSession, type SessionContext } from "../lib/auth.js";
 import { prisma } from "../lib/prisma.js";
+import { HABIT_CYCLES, HABIT_DEFINITIONS, HABIT_PROGRAM_TOTAL_WEEKS, HABIT_WEEKS_PER_CYCLE } from "../services/habitCatalog.js";
 import { getOpenAiClient, hasOpenAiClient } from "../services/openaiClient.js";
+import { getHabitSubscriptionConfig } from "../services/pricing.js";
 
 const navigatorMessageSchema = z.object({
   role: z.enum(["user", "assistant"]),
@@ -60,172 +63,53 @@ const insightSchema = z.object({
   source: z.string().trim().max(40).default("user")
 });
 
+const weakZoneSchema = z.enum(["passion", "mission", "profession", "vocation", "resource", "clarity", "stability", "ikigai"]);
+
 const startProgramSchema = z.object({
-  focus: z.enum(["energy", "focus", "career", "rhythm"]).default("rhythm")
+  focus: z.enum(["energy", "focus", "career", "rhythm"]).default("rhythm"),
+  name: z.string().trim().max(120).optional(),
+  weakZone: weakZoneSchema.optional(),
+  reminderTime: z.string().regex(/^\d{2}:\d{2}$/).optional()
+});
+
+const settingsSchema = z.object({
+  programId: z.string(),
+  name: z.string().trim().max(120).optional(),
+  weakZone: weakZoneSchema.optional(),
+  reminderEnabled: z.boolean().optional(),
+  reminderTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+  avatar: z.string().trim().max(24).optional()
+});
+
+const advanceProgramSchema = z.object({
+  programId: z.string(),
+  force: z.boolean().default(false)
+});
+
+const freezeProgramSchema = z.object({
+  programId: z.string()
 });
 
 type NavigatorContext = z.infer<typeof navigatorContextSchema>;
 
-const DEFAULT_HABITS = [
-  {
-    slug: "sleep-foundation",
-    cycle: 1,
-    week: 1,
-    title: "Сон как фундамент",
-    focus: "Вернуть базовый ресурс без давления на продуктивность",
-    essence: "Устойчивость начинается с восстановления, а не с новой нагрузки.",
-    practice: "Выбери один вечерний якорь на 10 минут: экран в сторону, вода, короткая запись мыслей.",
-    why: "Когда ресурс стабилен, решения по работе становятся спокойнее и точнее.",
-    book: "Атомные привычки — Джеймс Клир",
-    zone: "resource"
-  },
-  {
-    slug: "morning-focus",
-    cycle: 1,
-    week: 2,
-    title: "Утренний фокус",
-    focus: "Выбрать одно главное действие дня",
-    essence: "Фокус снижает шум и помогает видеть реальный прогресс.",
-    practice: "До сообщений сформулируй одну задачу, которая продвинет тебя к профессиональному вектору.",
-    why: "Один ясный шаг лучше длинного списка, который создает ощущение долга.",
-    book: "Эссенциализм — Грег МакКеон",
-    zone: "clarity"
-  },
-  {
-    slug: "energy-log",
-    cycle: 1,
-    week: 3,
-    title: "Лог энергии",
-    focus: "Понять, какие задачи дают и забирают ресурс",
-    essence: "Икигай проявляется там, где энергия не только тратится, но и возвращается.",
-    practice: "После одной рабочей задачи отметь: +, 0 или - по энергии и коротко почему.",
-    why: "Через неделю появится карта задач, на которую можно опереться без догадок.",
-    book: "Designing Your Life — Билл Бернетт и Дэйв Эванс",
-    zone: "passion"
-  },
-  {
-    slug: "value-packaging",
-    cycle: 1,
-    week: 4,
-    title: "Упаковка ценности",
-    focus: "Сформулировать, за какой конкретный результат тебе могут платить",
-    essence: "Потенциал становится стратегией, когда его можно объяснить конкретному человеку.",
-    practice: "Запиши одну фразу: кому ты помогаешь, с какой болью и к какому результату.",
-    why: "Рынок реагирует не на общий талант, а на понятное обещание результата.",
-    book: "Obviously Awesome — Эйприл Данфорд",
-    zone: "vocation"
-  },
-  {
-    slug: "small-proof",
-    cycle: 1,
-    week: 5,
-    title: "Малое доказательство",
-    focus: "Проверить идею маленьким действием",
-    essence: "Уверенность растет от контакта с реальностью, а не от идеального плана.",
-    practice: "Покажи формулировку ценности одному человеку и спроси, что в ней понятно и что нет.",
-    why: "Обратная связь помогает отличить живой вектор от красивой гипотезы.",
-    book: "Lean Startup — Эрик Рис",
-    zone: "profession"
-  },
-  {
-    slug: "conversation-bridge",
-    cycle: 1,
-    week: 6,
-    title: "Разговор без продажи",
-    focus: "Услышать язык людей, которым может быть полезна твоя роль",
-    essence: "Сильный профессиональный вектор говорит словами реальных людей.",
-    practice: "Проведи 15-минутный разговор и зафиксируй 3 фразы собеседника дословно.",
-    why: "Так появляется эмпатия к рынку без ощущения, что надо срочно продавать.",
-    book: "The Mom Test — Роб Фитцпатрик",
-    zone: "mission"
-  },
-  {
-    slug: "portfolio-signal",
-    cycle: 1,
-    week: 7,
-    title: "Сигнал портфолио",
-    focus: "Собрать один видимый артефакт компетенции",
-    essence: "Компетенция становится заметной, когда у нее есть форма.",
-    practice: "Опиши один кейс, схему, чек-лист или мини-разбор, который показывает твой способ мышления.",
-    why: "Даже небольшой артефакт снижает разрыв между внутренним потенциалом и внешним доверием.",
-    book: "Show Your Work — Остин Клеон",
-    zone: "profession"
-  },
-  {
-    slug: "weekly-review",
-    cycle: 1,
-    week: 8,
-    title: "Мягкий обзор недели",
-    focus: "Собрать выводы без самокритики",
-    essence: "Ритм держится лучше, когда обзор помогает, а не оценивает.",
-    practice: "Ответь на три вопроса: что дало ресурс, что прояснилось, что стоит упростить.",
-    why: "Так программа остается живой и адаптируется под реальную неделю.",
-    book: "Getting Things Done — Дэвид Аллен",
-    zone: "stability"
-  },
-  {
-    slug: "skill-rep",
-    cycle: 1,
-    week: 9,
-    title: "Повтор ключевого навыка",
-    focus: "Укрепить один навык, который поддерживает выбранный вектор",
-    essence: "Рост чаще похож на короткие повторения, чем на редкие рывки.",
-    practice: "Выдели 20 минут на один повтор: объяснить, написать, показать или посчитать.",
-    why: "Малые повторы создают ощущение владения без перегруза.",
-    book: "Peak — Андерс Эрикссон",
-    zone: "profession"
-  },
-  {
-    slug: "boundary-reset",
-    cycle: 1,
-    week: 10,
-    title: "Граница нагрузки",
-    focus: "Найти один лишний источник напряжения",
-    essence: "Икигай не раскрывается, если вся энергия уходит на компенсацию перегруза.",
-    practice: "Выбери одно обязательство, которое можно уменьшить, перенести или сказать по нему честное нет.",
-    why: "Свободный ресурс нужен не меньше, чем мотивация.",
-    book: "Essentialism — Грег МакКеон",
-    zone: "resource"
-  },
-  {
-    slug: "offer-draft",
-    cycle: 1,
-    week: 11,
-    title: "Черновик предложения",
-    focus: "Собрать первый вариант профессионального оффера",
-    essence: "Черновик делает направление обсуждаемым и улучшаемым.",
-    practice: "Собери 4 строки: для кого, какая проблема, какой результат, почему тебе можно доверять.",
-    why: "Это переводит отчет из идеи в рабочий контур.",
-    book: "Building a StoryBrand — Дональд Миллер",
-    zone: "vocation"
-  },
-  {
-    slug: "integration-day",
-    cycle: 1,
-    week: 12,
-    title: "День интеграции",
-    focus: "Собрать целостный вывод по циклу",
-    essence: "Смысл появляется, когда отдельные наблюдения связываются в картину.",
-    practice: "Запиши один абзац: что я понял о себе, о рынке и о следующем шаге.",
-    why: "Так программа не превращается в список галочек, а сохраняет личный смысл.",
-    book: "The Practice — Сет Годин",
-    zone: "ikigai"
-  }
-] as const;
-
 export async function habitsRoutes(app: FastifyInstance) {
+  app.get("/api/habits/config", async () => getHabitSubscriptionConfig());
+
   app.get("/api/habits/me", async (request, reply) => {
     const session = await requireSession(request, reply);
     if (!session) return;
 
-    const [program, latestReport] = await Promise.all([
+    const [program, latestReport, config] = await Promise.all([
       findActiveProgram(session),
-      findLatestReport(session)
+      findLatestReport(session),
+      getHabitSubscriptionConfig()
     ]);
+    const syncedProgram = program ? await ensureProgramEnrollments(program.id, program.weakZone) : null;
 
     return {
-      program: program ? serializeProgram(program) : null,
-      latestReport
+      program: syncedProgram ? serializeProgram(syncedProgram) : null,
+      latestReport,
+      config
     };
   });
 
@@ -245,13 +129,14 @@ export async function habitsRoutes(app: FastifyInstance) {
       },
       include: programInclude()
     });
-    if (existing) return { program: serializeProgram(existing) };
+    if (existing) return buildProgramResponse(await ensureProgramEnrollments(existing.id, existing.weakZone));
 
     await ensureHabitDefinitions();
     const definitions = await prisma.habitDefinition.findMany({
       where: { active: true },
       orderBy: [{ cycle: "asc" }, { week: "asc" }]
     });
+    const config = await getHabitSubscriptionConfig();
 
     const profile = buildProgramProfile(access.analysis.reportFull ?? access.analysis.reportFree);
     const activeProgram = await findActiveProgram(access.session);
@@ -298,7 +183,7 @@ export async function habitsRoutes(app: FastifyInstance) {
         }
       });
 
-      return { program: serializeProgram(merged) };
+      return buildProgramResponse(await ensureProgramEnrollments(merged.id, merged.weakZone));
     }
 
     const program = await prisma.habitProgram.create({
@@ -314,6 +199,7 @@ export async function habitsRoutes(app: FastifyInstance) {
         careerAction: profile.careerAction,
         finalInsight: profile.finalInsight,
         profile: profile.raw,
+        ...buildProgramTrialData(config),
         enrollments: {
           create: definitions.map((definition, index) => ({
             habitDefinitionId: definition.id,
@@ -358,7 +244,7 @@ export async function habitsRoutes(app: FastifyInstance) {
       }
     });
 
-    return { program: serializeProgram(program) };
+    return buildProgramResponse(program);
   });
 
   app.post("/api/habits/start", async (request, reply) => {
@@ -367,15 +253,16 @@ export async function habitsRoutes(app: FastifyInstance) {
     const body = startProgramSchema.parse(request.body ?? {});
 
     const existing = await findActiveProgram(session);
-    if (existing) return { program: serializeProgram(existing) };
+    if (existing) return buildProgramResponse(await ensureProgramEnrollments(existing.id, existing.weakZone));
 
     await ensureHabitDefinitions();
     const definitions = await prisma.habitDefinition.findMany({
       where: { active: true },
       orderBy: [{ cycle: "asc" }, { week: "asc" }]
     });
+    const config = await getHabitSubscriptionConfig();
 
-    const profile = buildManualProgramProfile(body.focus);
+    const profile = buildManualProgramProfile(body.focus, { name: body.name, weakZone: body.weakZone });
     const program = await prisma.habitProgram.create({
       data: {
         userId: session.userId,
@@ -388,6 +275,8 @@ export async function habitsRoutes(app: FastifyInstance) {
         careerAction: profile.careerAction,
         finalInsight: profile.finalInsight,
         profile: profile.raw,
+        reminderTime: body.reminderTime ?? "09:00",
+        ...buildProgramTrialData(config),
         enrollments: {
           create: definitions.map((definition, index) => ({
             habitDefinitionId: definition.id,
@@ -438,7 +327,7 @@ export async function habitsRoutes(app: FastifyInstance) {
       }
     });
 
-    return { program: serializeProgram(program) };
+    return buildProgramResponse(program);
   });
 
   app.post("/api/habits/metrics", async (request, reply) => {
@@ -449,11 +338,25 @@ export async function habitsRoutes(app: FastifyInstance) {
     if (!program) return;
     const date = dayFromInput(body.date);
 
+    const existingMetric = await prisma.habitDailyMetric.findUnique({
+      where: { programId_date: { programId: body.programId, date } }
+    });
+
     await prisma.habitDailyMetric.upsert({
       where: { programId_date: { programId: body.programId, date } },
       update: { energy: body.energy, clarity: body.clarity, stability: body.stability },
       create: { programId: body.programId, date, energy: body.energy, clarity: body.clarity, stability: body.stability }
     });
+    if (!existingMetric) {
+      await prisma.habitRewardEvent.create({
+        data: {
+          programId: body.programId,
+          type: "daily_metric",
+          label: "Метрика дня сохранена",
+          xp: 5
+        }
+      });
+    }
     await prisma.analyticsEvent.create({
       data: {
         name: "daily_metric_saved",
@@ -464,7 +367,7 @@ export async function habitsRoutes(app: FastifyInstance) {
       }
     });
 
-    return { program: serializeProgram(await loadProgram(body.programId)) };
+    return buildProgramResponse(await loadProgram(body.programId));
   });
 
   app.post("/api/habits/checkins", async (request, reply) => {
@@ -533,7 +436,7 @@ export async function habitsRoutes(app: FastifyInstance) {
       }
     });
 
-    return { program: serializeProgram(await loadProgram(body.programId)) };
+    return buildProgramResponse(await loadProgram(body.programId));
   });
 
   app.post("/api/habits/insights", async (request, reply) => {
@@ -576,7 +479,161 @@ export async function habitsRoutes(app: FastifyInstance) {
       }
     });
 
-    return { program: serializeProgram(await loadProgram(body.programId)) };
+    return buildProgramResponse(await loadProgram(body.programId));
+  });
+
+  app.patch("/api/habits/settings", async (request, reply) => {
+    const session = await requireSession(request, reply);
+    if (!session) return;
+    const body = settingsSchema.parse(request.body ?? {});
+    const programAccess = await requireHabitProgram(session, reply, body.programId);
+    if (!programAccess) return;
+
+    const current = await prisma.habitProgram.findUniqueOrThrow({
+      where: { id: body.programId },
+      select: { id: true, profile: true }
+    });
+    const profilePatch = {
+      ...(body.name !== undefined ? { name: body.name } : {}),
+      ...(body.weakZone !== undefined ? { onboardingWeakZone: body.weakZone } : {}),
+      ...(body.avatar !== undefined ? { avatar: body.avatar } : {})
+    };
+
+    const updated = await prisma.habitProgram.update({
+      where: { id: body.programId },
+      data: {
+        ...(body.weakZone !== undefined ? { weakZone: body.weakZone } : {}),
+        ...(body.reminderEnabled !== undefined ? { reminderEnabled: body.reminderEnabled } : {}),
+        ...(body.reminderTime !== undefined ? { reminderTime: body.reminderTime } : {}),
+        ...(Object.keys(profilePatch).length > 0 ? { profile: mergeProgramProfile(current.profile, profilePatch) } : {})
+      },
+      include: programInclude()
+    });
+
+    if (session.userId && body.name !== undefined) {
+      await prisma.user.update({
+        where: { id: session.userId },
+        data: { name: body.name || null }
+      });
+    }
+
+    await prisma.analyticsEvent.create({
+      data: {
+        name: "habit_settings_saved",
+        locale: session.locale,
+        sessionId: session.id,
+        userId: session.userId,
+        properties: { programId: body.programId }
+      }
+    });
+
+    return buildProgramResponse(updated);
+  });
+
+  app.post("/api/habits/advance", async (request, reply) => {
+    const session = await requireSession(request, reply);
+    if (!session) return;
+    const body = advanceProgramSchema.parse(request.body ?? {});
+    const programAccess = await requireHabitProgram(session, reply, body.programId);
+    if (!programAccess) return;
+
+    const program = await loadProgram(body.programId);
+    const snapshot = serializeProgram(program);
+    const activeEnrollment = snapshot.activeEnrollment;
+    if (!activeEnrollment) return reply.code(404).send({ error: "Active habit not found" });
+    if (!body.force && activeEnrollment.checkinsDone < 7) {
+      return reply.code(409).send({ error: "Mark 7 days or use a soft advance" });
+    }
+
+    const currentSortOrder = snapshot.stats.currentSortOrder;
+    const nextSortOrder = currentSortOrder + 1;
+    const isComplete = nextSortOrder > snapshot.stats.totalWeeks;
+    const nextCycle = isComplete ? snapshot.stats.currentCycle : Math.ceil(nextSortOrder / HABIT_WEEKS_PER_CYCLE);
+    const nextWeek = isComplete ? snapshot.stats.currentWeek : ((nextSortOrder - 1) % HABIT_WEEKS_PER_CYCLE) + 1;
+
+    await prisma.$transaction([
+      prisma.habitEnrollment.update({
+        where: { id: activeEnrollment.id },
+        data: { status: "COMPLETED", completedAt: new Date() }
+      }),
+      prisma.habitProgram.update({
+        where: { id: body.programId },
+        data: {
+          currentCycle: nextCycle,
+          currentWeek: nextWeek,
+          status: isComplete ? "COMPLETED" : "ACTIVE"
+        }
+      }),
+      ...(isComplete ? [] : [
+        prisma.habitEnrollment.updateMany({
+          where: { programId: body.programId, sortOrder: nextSortOrder },
+          data: { status: "ACTIVE", startedAt: new Date() }
+        })
+      ]),
+      prisma.habitRewardEvent.create({
+        data: {
+          programId: body.programId,
+          type: isComplete ? "program_completed" : body.force ? "week_soft_advanced" : "week_completed",
+          label: isComplete ? "Годовая программа завершена" : body.force ? "Мягкий переход к следующей неделе" : "Неделя завершена",
+          xp: isComplete ? 120 : body.force ? 10 : 35
+        }
+      })
+    ]);
+
+    await prisma.analyticsEvent.create({
+      data: {
+        name: isComplete ? "habit_program_completed" : "habit_week_advanced",
+        locale: session.locale,
+        sessionId: session.id,
+        userId: session.userId,
+        properties: { programId: body.programId, currentSortOrder, nextSortOrder, force: body.force }
+      }
+    });
+
+    return buildProgramResponse(await loadProgram(body.programId));
+  });
+
+  app.post("/api/habits/freeze", async (request, reply) => {
+    const session = await requireSession(request, reply);
+    if (!session) return;
+    const body = freezeProgramSchema.parse(request.body ?? {});
+    const programAccess = await requireHabitProgram(session, reply, body.programId);
+    if (!programAccess) return;
+
+    const current = await prisma.habitProgram.findUniqueOrThrow({
+      where: { id: body.programId },
+      select: { weeklyFreezes: true }
+    });
+    if (current.weeklyFreezes <= 0) {
+      return reply.code(409).send({ error: "No freezes left" });
+    }
+
+    await prisma.$transaction([
+      prisma.habitProgram.update({
+        where: { id: body.programId },
+        data: { weeklyFreezes: { decrement: 1 } }
+      }),
+      prisma.habitRewardEvent.create({
+        data: {
+          programId: body.programId,
+          type: "weekly_freeze_used",
+          label: "Неделя заморожена без потери ритма",
+          xp: 5
+        }
+      })
+    ]);
+
+    await prisma.analyticsEvent.create({
+      data: {
+        name: "habit_week_freeze_used",
+        locale: session.locale,
+        sessionId: session.id,
+        userId: session.userId,
+        properties: { programId: body.programId, freezesLeft: current.weeklyFreezes - 1 }
+      }
+    });
+
+    return buildProgramResponse(await loadProgram(body.programId));
   });
 
   app.post("/api/habits/navigator", async (request, reply) => {
@@ -666,7 +723,10 @@ function programInclude() {
   return {
     enrollments: {
       orderBy: { sortOrder: "asc" as const },
-      include: { checkins: { orderBy: { date: "desc" as const } } }
+      include: {
+        habitDefinition: { select: { slug: true } },
+        checkins: { orderBy: { date: "desc" as const } }
+      }
     },
     insights: {
       orderBy: { createdAt: "desc" as const },
@@ -730,18 +790,86 @@ async function loadProgram(programId: string) {
 }
 
 async function ensureHabitDefinitions() {
-  await Promise.all(DEFAULT_HABITS.map((habit) => prisma.habitDefinition.upsert({
+  await Promise.all(HABIT_DEFINITIONS.map((habit) => prisma.habitDefinition.upsert({
     where: { slug: habit.slug },
     update: { ...habit, active: true },
     create: habit
   })));
 }
 
+async function ensureProgramEnrollments(programId: string, weakZone: string | null | undefined) {
+  await ensureHabitDefinitions();
+  const [program, definitions] = await Promise.all([
+    loadProgram(programId),
+    prisma.habitDefinition.findMany({
+      where: { active: true },
+      orderBy: [{ cycle: "asc" }, { week: "asc" }]
+    })
+  ]);
+
+  const existingSortOrders = new Set(program.enrollments.map((enrollment: any) => enrollment.sortOrder));
+  const missingDefinitions = definitions.filter((_, index) => !existingSortOrders.has(index + 1));
+  if (missingDefinitions.length === 0) return program;
+
+  await prisma.habitEnrollment.createMany({
+    data: missingDefinitions.map((definition) => {
+      const sortOrder = definitions.findIndex((item) => item.id === definition.id) + 1;
+      return {
+        programId,
+        habitDefinitionId: definition.id,
+        title: personalizeHabitTitle(definition.title, weakZone ?? null, sortOrder - 1),
+        focus: definition.focus,
+        essence: definition.essence,
+        practice: definition.practice,
+        why: definition.why,
+        book: definition.book,
+        zone: definition.zone,
+        week: definition.week,
+        sortOrder,
+        status: "ACTIVE"
+      };
+    })
+  });
+
+  return loadProgram(programId);
+}
+
+async function buildProgramResponse(program: any) {
+  return {
+    program: serializeProgram(program),
+    config: await getHabitSubscriptionConfig()
+  };
+}
+
+function buildProgramTrialData(config: Awaited<ReturnType<typeof getHabitSubscriptionConfig>>) {
+  const now = new Date();
+  return {
+    trialStartedAt: now,
+    trialEndsAt: new Date(now.getTime() + config.trialDays * 86400000),
+    subscriptionStatus: config.trialDays > 0 ? "TRIAL" : "ACTIVE"
+  };
+}
+
 function serializeProgram(program: any) {
+  const currentCycle = clampInteger(program.currentCycle, 1, HABIT_CYCLES.length);
+  const currentWeek = clampInteger(program.currentWeek, 1, HABIT_WEEKS_PER_CYCLE);
+  const currentSortOrder = Math.min(((currentCycle - 1) * HABIT_WEEKS_PER_CYCLE) + currentWeek, program.enrollments.length || 1);
   const enrollments = program.enrollments.map((enrollment: any) => {
-    const doneCheckins = enrollment.checkins.filter((checkin: any) => checkin.completed);
+    const checkins = enrollment.checkins.map((checkin: any) => ({
+      id: checkin.id,
+      date: checkin.date.toISOString().slice(0, 10),
+      completed: checkin.completed,
+      note: checkin.note,
+      energy: checkin.energy,
+      clarity: checkin.clarity,
+      stability: checkin.stability,
+      createdAt: checkin.createdAt.toISOString()
+    }));
+    const doneCheckins = checkins.filter((checkin: any) => checkin.completed);
     return {
       id: enrollment.id,
+      slug: enrollment.habitDefinition?.slug,
+      cycle: Math.ceil(enrollment.sortOrder / HABIT_WEEKS_PER_CYCLE),
       week: enrollment.week,
       title: enrollment.title,
       focus: enrollment.focus,
@@ -753,16 +881,26 @@ function serializeProgram(program: any) {
       status: enrollment.status,
       sortOrder: enrollment.sortOrder,
       checkinsDone: doneCheckins.length,
-      lastCheckinAt: doneCheckins[0]?.date?.toISOString() ?? null
+      lastCheckinAt: doneCheckins[0]?.date ?? null,
+      checkins
     };
   });
   const checkins = program.enrollments.flatMap((enrollment: any) => enrollment.checkins);
   const completedCheckins = checkins.filter((checkin: any) => checkin.completed);
-  const currentWeek = Math.min(Math.max(1, Math.ceil(daysBetween(program.startedAt, new Date()) / 7)), enrollments.length || 1);
-  const activeEnrollment = enrollments.find((enrollment: any) => enrollment.sortOrder === currentWeek)
+  const activeEnrollment = enrollments.find((enrollment: any) => enrollment.sortOrder === currentSortOrder)
     ?? enrollments.find((enrollment: any) => enrollment.status === "ACTIVE")
     ?? enrollments[0]
     ?? null;
+  const xp = program.rewards.reduce((sum: number, reward: any) => sum + reward.xp, 0);
+  const latestMetric = program.dailyMetrics[0];
+  const wellnessScore = latestMetric
+    ? Math.round(((latestMetric.energy + latestMetric.clarity + latestMetric.stability) / 3) * 10)
+    : null;
+  const now = new Date();
+  const trialDaysLeft = program.trialEndsAt
+    ? Math.max(0, Math.ceil((program.trialEndsAt.getTime() - now.getTime()) / 86400000))
+    : null;
+  const completedWeekCheckins = activeEnrollment?.checkinsDone ?? 0;
 
   return {
     id: program.id,
@@ -774,10 +912,18 @@ function serializeProgram(program: any) {
     topRole: program.topRole,
     careerAction: program.careerAction,
     finalInsight: program.finalInsight,
+    profile: serializeProfile(program.profile),
+    currentCycle,
+    currentWeek,
+    currentSortOrder,
     startedAt: program.startedAt.toISOString(),
     createdAt: program.createdAt.toISOString(),
     activeEnrollment,
     enrollments,
+    cycles: HABIT_CYCLES.map((cycle) => ({
+      ...cycle,
+      areas: [...cycle.areas]
+    })),
     insights: program.insights.map((insight: any) => ({
       id: insight.id,
       enrollmentId: insight.enrollmentId,
@@ -800,15 +946,77 @@ function serializeProgram(program: any) {
       xp: reward.xp,
       createdAt: reward.createdAt.toISOString()
     })),
+    settings: {
+      reminderEnabled: program.reminderEnabled ?? true,
+      reminderTime: program.reminderTime ?? "09:00",
+      weeklyFreezes: program.weeklyFreezes ?? 0,
+      subscriptionStatus: program.subscriptionStatus ?? "TRIAL",
+      trialStartedAt: program.trialStartedAt?.toISOString() ?? null,
+      trialEndsAt: program.trialEndsAt?.toISOString() ?? null,
+      trialDaysLeft
+    },
     stats: {
-      xp: program.rewards.reduce((sum: number, reward: any) => sum + reward.xp, 0),
+      xp,
       daysInProgram: Math.max(1, daysBetween(program.startedAt, new Date())),
       checkinsDone: completedCheckins.length,
       insightsCount: program.insights.length,
       streakDays: calculateStreak(completedCheckins.map((checkin: any) => checkin.date)),
-      currentWeek
+      currentCycle,
+      currentWeek,
+      currentSortOrder,
+      totalWeeks: Math.max(HABIT_PROGRAM_TOTAL_WEEKS, enrollments.length),
+      completedWeekCheckins,
+      weekProgress: Math.min(100, Math.round((completedWeekCheckins / 7) * 100)),
+      wellnessScore,
+      rank: getHabitRank(xp, currentSortOrder)
     }
   };
+}
+
+const HABIT_RANKS = [
+  { minXp: 0, title: "Начало пути" },
+  { minXp: 420, title: "Практик Икигай" },
+  { minXp: 1260, title: "Исследователь вектора" },
+  { minXp: 2520, title: "Архитектор привычек" },
+  { minXp: 3780, title: "Проводник Икигай" },
+  { minXp: 5040, title: "Мастер Икигай" }
+] as const;
+
+function getHabitRank(xp: number, currentSortOrder: number) {
+  let index = 0;
+  for (let rankIndex = HABIT_RANKS.length - 1; rankIndex >= 0; rankIndex -= 1) {
+    if (xp >= HABIT_RANKS[rankIndex].minXp) {
+      index = rankIndex;
+      break;
+    }
+  }
+  const current = HABIT_RANKS[index];
+  const next = HABIT_RANKS[index + 1] ?? null;
+  return {
+    title: current.title,
+    level: index + 1,
+    nextTitle: next?.title ?? null,
+    nextAtXp: next?.minXp ?? null,
+    progress: next ? Math.min(100, Math.round(((xp - current.minXp) / (next.minXp - current.minXp)) * 100)) : 100,
+    currentSortOrder
+  };
+}
+
+function clampInteger(value: unknown, min: number, max: number) {
+  const numberValue = typeof value === "number" ? value : Number(value);
+  if (!Number.isInteger(numberValue)) return min;
+  return Math.min(max, Math.max(min, numberValue));
+}
+
+function serializeProfile(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function mergeProgramProfile(current: unknown, patch: Record<string, unknown>) {
+  return {
+    ...serializeProfile(current),
+    ...Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined))
+  } as Prisma.InputJsonObject;
 }
 
 function buildProgramProfile(report: unknown) {
@@ -835,7 +1043,10 @@ function buildProgramProfile(report: unknown) {
   };
 }
 
-function buildManualProgramProfile(focus: z.infer<typeof startProgramSchema>["focus"]) {
+function buildManualProgramProfile(
+  focus: z.infer<typeof startProgramSchema>["focus"],
+  options: { name?: string; weakZone?: z.infer<typeof weakZoneSchema> } = {}
+) {
   const variants = {
     energy: {
       title: "Базовый путь: энергия",
@@ -873,9 +1084,10 @@ function buildManualProgramProfile(focus: z.infer<typeof startProgramSchema>["fo
     finalInsight: string;
   }>;
   const variant = variants[focus];
+  const weakZone = options.weakZone ?? variant.weakZone;
   return {
-    title: variant.title,
-    weakZone: variant.weakZone,
+    title: options.name ? `${variant.title}: ${options.name}` : variant.title,
+    weakZone,
     archetype: "Старт без диагностики",
     topRole: variant.topRole,
     careerAction: variant.careerAction,
@@ -884,7 +1096,9 @@ function buildManualProgramProfile(focus: z.infer<typeof startProgramSchema>["fo
       source: "manual-start",
       summary: "Базовая программа привычек без привязки к диагностике",
       mode: "no-report",
-      focus
+      focus,
+      name: options.name,
+      onboardingWeakZone: weakZone
     }
   };
 }
@@ -1019,6 +1233,7 @@ function summarizeProgramForNavigator(program: any) {
     finalInsight: serialized.finalInsight,
     activeHabit: serialized.activeEnrollment
       ? {
+        cycle: serialized.activeEnrollment.cycle,
         week: serialized.activeEnrollment.week,
         title: serialized.activeEnrollment.title,
         focus: serialized.activeEnrollment.focus,
@@ -1028,6 +1243,7 @@ function summarizeProgramForNavigator(program: any) {
       }
       : null,
     habitMap: serialized.enrollments.map((habit: any) => ({
+      cycle: habit.cycle,
       week: habit.week,
       title: habit.title,
       focus: habit.focus,
@@ -1098,13 +1314,13 @@ function formatNavigatorMemory(memory: Awaited<ReturnType<typeof buildNavigatorP
     `Источник программы: ${memory.program.source}`,
     `Профессиональный вектор: ${memory.program.topRole || "не указан"}`,
     `Зона роста: ${memory.program.weakZone || "не указана"}`,
-    `Статистика: ${memory.program.stats.checkinsDone} шагов, ${memory.program.stats.insightsCount} инсайтов, ${memory.program.stats.xp} XP, стрик ${memory.program.stats.streakDays} дней`,
+    `Статистика: цикл ${memory.program.stats.currentCycle}, неделя ${memory.program.stats.currentWeek}, ${memory.program.stats.checkinsDone} шагов, ${memory.program.stats.insightsCount} инсайтов, ${memory.program.stats.xp} XP, стрик ${memory.program.stats.streakDays} дней`,
     memory.program.activeHabit
-      ? `Текущая привычка: неделя ${memory.program.activeHabit.week}, ${memory.program.activeHabit.title}. Практика: ${memory.program.activeHabit.practice}`
+      ? `Текущая привычка: цикл ${memory.program.activeHabit.cycle}, неделя ${memory.program.activeHabit.week}, ${memory.program.activeHabit.title}. Практика: ${memory.program.activeHabit.practice}`
       : "Текущая привычка не выбрана",
     "",
     "Карта всех привычек программы:",
-    ...memory.program.habitMap.map((habit: any) => `- Неделя ${habit.week}: ${habit.title}; фокус: ${habit.focus}; отметок: ${habit.checkinsDone}`),
+    ...memory.program.habitMap.map((habit: any) => `- Цикл ${habit.cycle}, неделя ${habit.week}: ${habit.title}; фокус: ${habit.focus}; отметок: ${habit.checkinsDone}`),
     ""
   );
 

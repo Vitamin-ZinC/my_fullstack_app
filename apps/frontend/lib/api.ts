@@ -5,6 +5,7 @@ import type {
   AuthSessionResponse,
   CheckoutSessionResponse,
   FeatureFlag,
+  HabitConfigResponse,
   HabitMeResponse,
   HabitNavigatorResponse,
   HabitProgramResponse,
@@ -119,6 +120,9 @@ export async function ensureGuestSession() {
 export const contentSettingKey = (locale: TextLocale) => `site_texts_${locale}`;
 export const reportPriceAmountSettingKey = "report_price_amount";
 export const reportPriceCurrencySettingKey = "report_price_currency";
+export const habitPriceAmountSettingKey = "habit_subscription_price_amount";
+export const habitPriceCurrencySettingKey = "habit_subscription_price_currency";
+export const habitTrialDaysSettingKey = "habit_trial_days";
 
 export const contentApi = {
   get: (locale: TextLocale) => request<{ locale: TextLocale; value: unknown | null }>(`/api/content/${locale}`)
@@ -171,6 +175,7 @@ export const api = {
     await ensureGuestSession();
     return request<HabitMeResponse>("/api/habits/me");
   },
+  habitConfig: () => request<HabitConfigResponse>("/api/habits/config"),
   activateHabitsFromReport: async (analysisId: string) => {
     await ensureGuestSession();
     return request<HabitProgramResponse>(`/api/habits/enroll-from-report/${encodeURIComponent(analysisId)}`, {
@@ -183,6 +188,18 @@ export const api = {
     return request<HabitProgramResponse>("/api/habits/start", {
       method: "POST",
       body: JSON.stringify({ focus })
+    });
+  },
+  startHabitProgramWithProfile: async (payload: {
+    focus?: "energy" | "focus" | "career" | "rhythm";
+    name?: string;
+    weakZone?: string;
+    reminderTime?: string;
+  }) => {
+    await ensureGuestSession();
+    return request<HabitProgramResponse>("/api/habits/start", {
+      method: "POST",
+      body: JSON.stringify(payload)
     });
   },
   saveHabitMetric: (payload: { programId: string; date?: string; energy: number; clarity: number; stability: number }) => request<HabitProgramResponse>("/api/habits/metrics", {
@@ -205,6 +222,25 @@ export const api = {
   saveHabitInsight: (payload: { programId: string; enrollmentId?: string; text: string; source?: string }) => request<HabitProgramResponse>("/api/habits/insights", {
     method: "POST",
     body: JSON.stringify(payload)
+  }),
+  updateHabitSettings: (payload: {
+    programId: string;
+    name?: string;
+    weakZone?: string;
+    reminderEnabled?: boolean;
+    reminderTime?: string;
+    avatar?: string;
+  }) => request<HabitProgramResponse>("/api/habits/settings", {
+    method: "PATCH",
+    body: JSON.stringify(payload)
+  }),
+  advanceHabitWeek: (payload: { programId: string; force?: boolean }) => request<HabitProgramResponse>("/api/habits/advance", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  }),
+  freezeHabitWeek: (programId: string) => request<HabitProgramResponse>("/api/habits/freeze", {
+    method: "POST",
+    body: JSON.stringify({ programId })
   }),
   askHabitNavigator: (payload: {
     programId?: string;

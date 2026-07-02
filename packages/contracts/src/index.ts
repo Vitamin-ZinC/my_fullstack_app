@@ -237,6 +237,10 @@ export type PaymentConfigResponse = {
   priceLabel: string;
 };
 
+export type HabitConfigResponse = PaymentConfigResponse & {
+  trialDays: number;
+};
+
 export type CheckoutSessionResponse = {
   url: string;
   sessionId: string;
@@ -267,11 +271,33 @@ export type HabitDefinitionSummary = {
   zone?: string | null;
 };
 
+export type HabitCycleSummary = {
+  id: number;
+  code: string;
+  title: string;
+  label: string;
+  areas: string[];
+  goal: string;
+  weeks: number;
+};
+
+export type HabitCheckinSummary = {
+  id: string;
+  date: string;
+  completed: boolean;
+  note?: string | null;
+  energy?: number | null;
+  clarity?: number | null;
+  stability?: number | null;
+  createdAt: string;
+};
+
 export type HabitEnrollmentSummary = HabitDefinitionSummary & {
   status: HabitEnrollmentStatus;
   sortOrder: number;
   checkinsDone: number;
   lastCheckinAt?: string | null;
+  checkins: HabitCheckinSummary[];
 };
 
 export type HabitInsightSummary = {
@@ -309,20 +335,48 @@ export type HabitProgramSummary = {
   topRole?: string | null;
   careerAction?: string | null;
   finalInsight?: string | null;
+  profile: Record<string, unknown>;
+  currentCycle: number;
+  currentWeek: number;
+  currentSortOrder: number;
   startedAt: string;
   createdAt: string;
   activeEnrollment?: HabitEnrollmentSummary | null;
   enrollments: HabitEnrollmentSummary[];
+  cycles: HabitCycleSummary[];
   insights: HabitInsightSummary[];
   metrics: HabitDailyMetricSummary[];
   rewards: HabitRewardSummary[];
+  settings: {
+    reminderEnabled: boolean;
+    reminderTime: string;
+    weeklyFreezes: number;
+    subscriptionStatus: string;
+    trialStartedAt?: string | null;
+    trialEndsAt?: string | null;
+    trialDaysLeft?: number | null;
+  };
   stats: {
     xp: number;
     daysInProgram: number;
     checkinsDone: number;
     insightsCount: number;
     streakDays: number;
+    currentCycle: number;
     currentWeek: number;
+    currentSortOrder: number;
+    totalWeeks: number;
+    completedWeekCheckins: number;
+    weekProgress: number;
+    wellnessScore?: number | null;
+    rank: {
+      title: string;
+      level: number;
+      nextTitle?: string | null;
+      nextAtXp?: number | null;
+      progress: number;
+      currentSortOrder: number;
+    };
   };
 };
 
@@ -336,10 +390,12 @@ export type HabitLatestReport = {
 export type HabitMeResponse = {
   program: HabitProgramSummary | null;
   latestReport: HabitLatestReport | null;
+  config: HabitConfigResponse;
 };
 
 export type HabitProgramResponse = {
   program: HabitProgramSummary;
+  config: HabitConfigResponse;
 };
 
 export type HabitNavigatorResponse = {

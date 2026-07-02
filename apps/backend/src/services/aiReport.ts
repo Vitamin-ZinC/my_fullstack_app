@@ -484,24 +484,44 @@ function isResponseFormatUnsupportedError(message: string) {
   return /response_format|json_schema|json_object|unsupported.*format|invalid.*parameter|unknown field|extra field/i.test(message);
 }
 
+async function withOpenAiDeadline<T>(callback: (signal: AbortSignal) => Promise<T>) {
+  const controller = new AbortController();
+  let timeout: NodeJS.Timeout | null = null;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeout = setTimeout(() => {
+      controller.abort();
+      reject(new Error(`OpenAI-compatible chat completion timed out after ${env.OPENAI_REQUEST_TIMEOUT_MS}ms`));
+    }, env.OPENAI_REQUEST_TIMEOUT_MS);
+  });
+
+  try {
+    return await Promise.race([callback(controller.signal), timeoutPromise]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
 async function createChatCompletionWithJsonMode(
   openai: OpenAiClient,
   params: Omit<ChatCompletionCreateParamsNonStreaming, "response_format">,
   responseFormat: ResponseFormat
 ) {
   try {
-    return await openai.chat.completions.create({
-      ...params,
-      response_format: responseFormat
-    }, {
-      timeout: env.OPENAI_REQUEST_TIMEOUT_MS
-    });
+    return await withOpenAiDeadline((signal) => openai.chat.completions.create({
+        ...params,
+        response_format: responseFormat
+      }, {
+        timeout: env.OPENAI_REQUEST_TIMEOUT_MS,
+        signal
+      })
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (!isResponseFormatUnsupportedError(message)) throw error;
-    return openai.chat.completions.create(params, {
-      timeout: env.OPENAI_REQUEST_TIMEOUT_MS
-    });
+    return withOpenAiDeadline((signal) => openai.chat.completions.create(params, {
+      timeout: env.OPENAI_REQUEST_TIMEOUT_MS,
+      signal
+    }));
   }
 }
 

@@ -10,6 +10,11 @@ datasource db {
 model User {
   id          String          @id @default(cuid())
   email       String          @unique
+  name        String?
+  passwordHash String?
+  emailVerifiedAt DateTime?
+  lastLoginAt DateTime?
+  avatarUrl   String?
   role        UserRole        @default(USER)
   locale      String          @default("ru")
   status      UserStatus      @default(ACTIVE)
@@ -20,6 +25,20 @@ model User {
   payments    Payment[]
   events      AnalyticsEvent[]
   adminEvents AdminAuditLog[] @relation("AdminAuditActor")
+  habitPrograms HabitProgram[]
+  habitThreads  HabitNavigatorThread[]
+}
+
+model LoginToken {
+  id         String           @id @default(cuid())
+  email      String
+  tokenHash  String           @unique
+  purpose    AuthTokenPurpose @default(MAGIC_LOGIN)
+  createdAt  DateTime         @default(now())
+  expiresAt  DateTime
+  consumedAt DateTime?
+
+  @@index([email, expiresAt])
 }
 
 model Session {
@@ -34,6 +53,8 @@ model Session {
   expiresAt  DateTime
   analyses   Analysis[]
   events     AnalyticsEvent[]
+  habitPrograms HabitProgram[]
+  habitThreads  HabitNavigatorThread[]
 }
 
 model Analysis {
@@ -63,6 +84,7 @@ model Analysis {
   reports       Report[]
   jobEvents     JobEvent[]
   events        AnalyticsEvent[]
+  habitPrograms HabitProgram[]
 }
 
 model Payment {
@@ -205,6 +227,173 @@ model AdminAuditLog {
   @@index([action, createdAt])
 }
 
+model HabitDefinition {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  cycle       Int      @default(1)
+  week        Int      @default(1)
+  title       String
+  focus       String
+  essence     String
+  practice    String
+  why         String
+  book        String?
+  zone        String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  enrollments HabitEnrollment[]
+
+  @@index([active, cycle, week])
+}
+
+model HabitProgram {
+  id          String             @id @default(cuid())
+  userId      String?
+  user        User?              @relation(fields: [userId], references: [id])
+  sessionId   String?
+  session     Session?           @relation(fields: [sessionId], references: [id])
+  analysisId  String?
+  analysis    Analysis?          @relation(fields: [analysisId], references: [id])
+  status      HabitProgramStatus @default(ACTIVE)
+  source      String             @default("manual")
+  title       String
+  weakZone    String?
+  archetype   String?
+  topRole     String?
+  careerAction String?
+  finalInsight String?
+  profile     Json?
+  startedAt   DateTime           @default(now())
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  enrollments HabitEnrollment[]
+  checkins    HabitCheckin[]
+  insights    HabitInsight[]
+  dailyMetrics HabitDailyMetric[]
+  rewards     HabitRewardEvent[]
+  navigatorThreads HabitNavigatorThread[]
+
+  @@index([userId, status, createdAt])
+  @@index([sessionId, status, createdAt])
+  @@index([analysisId])
+}
+
+model HabitEnrollment {
+  id                 String                @id @default(cuid())
+  programId          String
+  program            HabitProgram          @relation(fields: [programId], references: [id], onDelete: Cascade)
+  habitDefinitionId  String?
+  habitDefinition    HabitDefinition?      @relation(fields: [habitDefinitionId], references: [id])
+  title              String
+  focus              String
+  essence            String
+  practice           String
+  why                String
+  book               String?
+  zone               String?
+  week               Int                   @default(1)
+  sortOrder          Int                   @default(1)
+  status             HabitEnrollmentStatus @default(ACTIVE)
+  startedAt          DateTime              @default(now())
+  completedAt        DateTime?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  checkins           HabitCheckin[]
+  insights           HabitInsight[]
+
+  @@index([programId, status, sortOrder])
+}
+
+model HabitCheckin {
+  id           String          @id @default(cuid())
+  programId    String
+  program      HabitProgram    @relation(fields: [programId], references: [id], onDelete: Cascade)
+  enrollmentId String
+  enrollment   HabitEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  date         DateTime
+  completed    Boolean         @default(true)
+  note         String?
+  energy       Int?
+  clarity      Int?
+  stability    Int?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@unique([enrollmentId, date])
+  @@index([programId, date])
+}
+
+model HabitInsight {
+  id           String           @id @default(cuid())
+  programId    String
+  program      HabitProgram     @relation(fields: [programId], references: [id], onDelete: Cascade)
+  enrollmentId String?
+  enrollment   HabitEnrollment? @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
+  text         String
+  source       String           @default("user")
+  createdAt    DateTime         @default(now())
+
+  @@index([programId, createdAt])
+}
+
+model HabitDailyMetric {
+  id        String       @id @default(cuid())
+  programId String
+  program   HabitProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+  date      DateTime
+  energy    Int
+  clarity   Int
+  stability Int
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@unique([programId, date])
+  @@index([programId, date])
+}
+
+model HabitRewardEvent {
+  id        String       @id @default(cuid())
+  programId String
+  program   HabitProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+  type      String
+  label     String
+  xp        Int          @default(0)
+  createdAt DateTime     @default(now())
+
+  @@index([programId, createdAt])
+}
+
+model HabitNavigatorThread {
+  id        String       @id @default(cuid())
+  programId String?
+  program   HabitProgram? @relation(fields: [programId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?        @relation(fields: [userId], references: [id])
+  sessionId String?
+  session   Session?     @relation(fields: [sessionId], references: [id])
+  title     String?
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  messages  HabitNavigatorMessage[]
+
+  @@index([programId, updatedAt])
+  @@index([userId, updatedAt])
+  @@index([sessionId, updatedAt])
+}
+
+model HabitNavigatorMessage {
+  id        String               @id @default(cuid())
+  threadId  String
+  thread    HabitNavigatorThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  role      String
+  text      String
+  model     String?
+  createdAt DateTime             @default(now())
+
+  @@index([threadId, createdAt])
+}
+
 enum AnalysisStatus {
   PENDING
   QUEUED
@@ -255,5 +444,23 @@ enum ReportTier {
 enum PromptStatus {
   DRAFT
   ACTIVE
+  ARCHIVED
+}
+
+enum AuthTokenPurpose {
+  MAGIC_LOGIN
+}
+
+enum HabitProgramStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+  ARCHIVED
+}
+
+enum HabitEnrollmentStatus {
+  ACTIVE
+  COMPLETED
+  SKIPPED
   ARCHIVED
 }

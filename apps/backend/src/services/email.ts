@@ -22,6 +22,12 @@ export type SendReportEmailResult = {
   error?: string;
 };
 
+type SendMagicLinkEmailInput = {
+  email: string;
+  loginUrl: string;
+  locale: string;
+};
+
 export async function sendReportEmail(input: SendReportEmailInput): Promise<SendReportEmailResult> {
   if (!env.RESEND_API_KEY) {
     return { emailSent: false, error: "Resend is not configured" };
@@ -75,6 +81,59 @@ export async function sendReportEmail(input: SendReportEmailInput): Promise<Send
   }
 }
 
+export async function sendMagicLinkEmail(input: SendMagicLinkEmailInput): Promise<SendReportEmailResult> {
+  if (!env.RESEND_API_KEY) {
+    return { emailSent: false, error: "Resend is not configured" };
+  }
+
+  const subject = input.locale === "en"
+    ? "Sign in to ORKEN.LIFE"
+    : "Вход в ORKEN.LIFE";
+  const html = buildMagicLinkEmailHtml(input);
+  const text = buildMagicLinkEmailText(input);
+  const idempotencyKey = createHash("sha256")
+    .update(`magic-link:${input.email.toLowerCase()}:${input.loginUrl}`)
+    .digest("hex");
+
+  try {
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env.RESEND_API_KEY}`,
+        "Content-Type": "application/json",
+        "Idempotency-Key": idempotencyKey
+      },
+      body: JSON.stringify({
+        from: env.RESEND_FROM_EMAIL,
+        to: [input.email],
+        subject,
+        html,
+        text,
+        tags: [
+          { name: "source", value: "orken_life" },
+          { name: "kind", value: "magic_link" }
+        ]
+      })
+    });
+
+    const raw = await response.text();
+    const payload = raw ? JSON.parse(raw) as ResendEmailResponse : {};
+    if (!response.ok) {
+      return {
+        emailSent: false,
+        error: truncateEmailError(payload.message || payload.name || `Resend ${response.status}`)
+      };
+    }
+
+    return { emailSent: true, emailId: payload.id };
+  } catch (error) {
+    return {
+      emailSent: false,
+      error: truncateEmailError(error instanceof Error ? error.message : "Email send failed")
+    };
+  }
+}
+
 function buildReportEmailHtml(input: SendReportEmailInput) {
   const profession = input.profession ? escapeHtml(input.profession) : "ORKEN.LIFE";
   const freeUrl = escapeHtml(input.freeReportUrl);
@@ -98,6 +157,38 @@ function buildReportEmailHtml(input: SendReportEmailInput) {
     </div>
   </body>
 </html>`;
+}
+
+function buildMagicLinkEmailHtml(input: SendMagicLinkEmailInput) {
+  const loginUrl = escapeHtml(input.loginUrl);
+
+  return `<!doctype html>
+<html>
+  <body style="margin:0;background:#05070b;color:#f7f7fb;font-family:Arial,sans-serif;">
+    <div style="max-width:560px;margin:0 auto;padding:32px 20px;">
+      <div style="font-size:22px;font-weight:800;letter-spacing:2px;color:#20d4ff;">ORKEN.LIFE</div>
+      <h1 style="margin:28px 0 12px;font-size:28px;line-height:1.2;">Вход в личный кабинет</h1>
+      <p style="font-size:16px;line-height:1.6;color:#c8c8d2;">Нажмите кнопку ниже, чтобы войти в ORKEN.LIFE. Ссылка действует 20 минут и может быть использована только один раз.</p>
+      <p style="margin:28px 0;">
+        <a href="${loginUrl}" style="display:inline-block;background:#1fc7ff;color:#05070b;text-decoration:none;font-weight:800;padding:14px 20px;border-radius:10px;">Войти в ORKEN.LIFE</a>
+      </p>
+      <p style="margin-top:32px;font-size:12px;line-height:1.5;color:#858895;">Если вы не запрашивали вход, просто проигнорируйте это письмо.</p>
+    </div>
+  </body>
+</html>`;
+}
+
+function buildMagicLinkEmailText(input: SendMagicLinkEmailInput) {
+  return [
+    "ORKEN.LIFE",
+    "",
+    "Вход в личный кабинет.",
+    "Ссылка действует 20 минут и может быть использована только один раз.",
+    "",
+    input.loginUrl,
+    "",
+    "Если вы не запрашивали вход, просто проигнорируйте это письмо."
+  ].join("\n");
 }
 
 function buildReportEmailText(input: SendReportEmailInput) {

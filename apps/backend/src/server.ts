@@ -12,6 +12,7 @@ import { analysisRoutes } from "./routes/analyses.js";
 import { contentRoutes } from "./routes/content.js";
 import { eventRoutes } from "./routes/events.js";
 import { habitsRoutes } from "./routes/habits.js";
+import { meRoutes } from "./routes/me.js";
 import { paymentRoutes } from "./routes/payments.js";
 
 const app = Fastify({
@@ -57,6 +58,7 @@ await app.register(analysisRoutes);
 await app.register(paymentRoutes);
 await app.register(eventRoutes);
 await app.register(habitsRoutes);
+await app.register(meRoutes);
 await app.register(adminRoutes);
 
 app.get("/health", async () => ({ ok: true }));

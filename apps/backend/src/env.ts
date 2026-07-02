@@ -32,8 +32,10 @@ const schema = z.object({
   RESEND_API_KEY: z.string().optional(),
   RESEND_FROM_EMAIL: z.string().default("ORKEN.LIFE <reports@orken.life>"),
   OPENAI_API_KEY: z.string().optional(),
+  OPENAI_BASE_URL: z.string().url().default("https://api.enchantstartup.com/v1"),
   OPENAI_MODEL: z.string().default("gpt-4o-mini"),
   OPENAI_TRANSCRIPTION_MODEL: z.string().default("whisper-1"),
+  ORKEN_API_KEY_FILE: z.string().default("C:\\Users\\User\\Documents\\API Gate\\.secrets\\orken-key.json"),
   ANTHROPIC_API_KEY: z.string().optional(),
   ANTHROPIC_MODEL: z.string().default("claude-opus-4-6")
 });

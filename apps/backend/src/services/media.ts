@@ -111,3 +111,16 @@ export async function readMediaAssetBuffer(key: string) {
   }));
   return streamToBuffer(object.Body);
 }
+
+export async function getMediaAssetPublicUrl(key: string) {
+  if (key.includes("/") || key.includes("..")) return null;
+
+  if (!hasS3Config) {
+    return `${env.PUBLIC_API_URL}/api/uploads/${encodeURIComponent(key)}`;
+  }
+
+  return getSignedUrl(client, new GetObjectCommand({
+    Bucket: env.S3_BUCKET,
+    Key: key
+  }), { expiresIn: 900 });
+}

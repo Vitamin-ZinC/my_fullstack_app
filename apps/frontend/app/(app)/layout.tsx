@@ -19,7 +19,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <div className="sub">{text.nav.sub}</div>
             </div>
           </Link>
-          <Link className="btn-back" href="/">{text.nav.backHome}</Link>
+          <div className="nav-actions">
+            <Link className="btn-back" href="/">{text.nav.backHome}</Link>
+            <Link className="btn-back" href="/account">Кабинет</Link>
+          </div>
         </nav>
         <main className="screen app-screen">{children}</main>
       </div>

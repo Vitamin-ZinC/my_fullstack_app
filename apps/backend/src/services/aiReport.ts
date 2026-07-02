@@ -1,10 +1,13 @@
 import type { IkigaiAnswers, ReportFree, ReportFull, ReportTier } from "@levelup/contracts";
 import type { MediaAsset } from "@prisma/client";
+import type { ChatCompletionContentPart, ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { basename } from "node:path";
 import { z } from "zod";
 import { env } from "../env.js";
-import { readMediaAssetBuffer } from "./media.js";
+import { getMediaAssetPublicUrl, readMediaAssetBuffer } from "./media.js";
 import { buildReportPromptMessages } from "./reportPrompts.js";
+import { analyzeAudioMetrics, type AudioTranscription, type VoiceSignalMetrics } from "./audioMetrics.js";
+import { getOpenAiClient, hasOpenAiClient } from "./openaiClient.js";
 
 type ReportContext = {
   analysisId: string;
@@ -25,6 +28,7 @@ export type GeneratedReport = {
   usedOpenAI: boolean;
   mediaSignals: {
     audioTranscript: boolean;
+    audioMetrics: boolean;
     photoInput: boolean;
   };
 };
@@ -278,7 +282,9 @@ function isLikelyAudio(buffer: Buffer) {
   const isWebm = buffer[0] === 0x1a && buffer[1] === 0x45 && buffer[2] === 0xdf && buffer[3] === 0xa3;
   const isMp3 = buffer.subarray(0, 3).toString("latin1") === "ID3" || (buffer[0] === 0xff && (buffer[1] & 0xe0) === 0xe0);
   const isWav = buffer.subarray(0, 4).toString("latin1") === "RIFF";
-  return isWebm || isMp3 || isWav;
+  const isOgg = buffer.subarray(0, 4).toString("latin1") === "OggS";
+  const isMp4 = buffer.length >= 12 && buffer.subarray(4, 8).toString("latin1") === "ftyp";
+  return isWebm || isMp3 || isWav || isOgg || isMp4;
 }
 
 function getAsset(assets: MediaAsset[], type: "AUDIO" | "PHOTO") {
@@ -293,6 +299,7 @@ async function transcribeAudio(asset: MediaAsset | null) {
 
   const formData = new FormData();
   formData.set("model", env.OPENAI_TRANSCRIPTION_MODEL);
+  formData.set("response_format", "verbose_json");
   formData.set("file", new Blob([buffer], { type: asset.mimeType || "application/octet-stream" }), basename(asset.key));
 
   const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
@@ -308,8 +315,26 @@ async function transcribeAudio(asset: MediaAsset | null) {
     throw new Error(`OpenAI transcription failed with ${response.status}: ${body.slice(0, 240)}`);
   }
 
-  const data = await response.json() as { text?: string };
-  return data.text?.trim() || null;
+  const data = await response.json() as {
+    text?: string;
+    duration?: number;
+    segments?: Array<{ start?: number; end?: number; text?: string }>;
+  };
+  const text = data.text?.trim();
+  if (!text) return null;
+  return {
+    text,
+    durationSeconds: data.duration,
+    segments: Array.isArray(data.segments) ? data.segments : []
+  } satisfies AudioTranscription;
+}
+
+async function buildVoiceMetrics(asset: MediaAsset | null, transcription: AudioTranscription | null, clientDurationSeconds?: number | null) {
+  if (!asset) return null;
+  const buffer = await readMediaAssetBuffer(asset.key);
+  if (!buffer) return null;
+  if (!isLikelyAudio(buffer)) return null;
+  return analyzeAudioMetrics(buffer, transcription, clientDurationSeconds);
 }
 
 async function buildPhotoInput(asset: MediaAsset | null) {
@@ -317,41 +342,51 @@ async function buildPhotoInput(asset: MediaAsset | null) {
   const buffer = await readMediaAssetBuffer(asset.key);
   if (!buffer) return null;
   if (!isLikelyImage(buffer)) return null;
-  const mimeType = asset.mimeType?.startsWith("image/") ? asset.mimeType : "image/jpeg";
-  return `data:${mimeType};base64,${buffer.toString("base64")}`;
+  return getMediaAssetPublicUrl(asset.key);
 }
 
 export async function generateOpenAiReport(context: ReportContext): Promise<GeneratedReport | null> {
-  if (!env.OPENAI_API_KEY) return null;
+  if (!hasOpenAiClient()) return null;
 
   const audioAsset = getAsset(context.mediaAssets, "AUDIO");
   const photoAsset = getAsset(context.mediaAssets, "PHOTO");
 
-  let transcript: string | null = null;
+  let transcription: AudioTranscription | null = null;
   try {
-    transcript = await transcribeAudio(audioAsset);
+    transcription = await transcribeAudio(audioAsset);
   } catch {
-    transcript = null;
+    transcription = null;
   }
 
+  const clientDurationSeconds = extractClientVoiceDuration(context.answers);
+  let voiceMetrics: VoiceSignalMetrics | null = null;
+  try {
+    voiceMetrics = await buildVoiceMetrics(audioAsset, transcription, clientDurationSeconds);
+  } catch {
+    voiceMetrics = null;
+  }
+
+  const transcript = transcription?.text ?? null;
   const photoInput = await buildPhotoInput(photoAsset);
   const freeCompletion = await createReportCompletion({
     context,
     tier: "FREE",
     transcript,
+    voiceMetrics,
     photoInput,
     schemaName: "ikigai_free_report",
     jsonSchema: reportFreeJsonSchema,
-    parseReport: (content) => reportFreeSchema.parse(JSON.parse(content))
+    parseReport: (content) => reportFreeSchema.parse(parseCompletionJson(content))
   });
   const fullCompletion = await createReportCompletion({
     context,
     tier: "FULL",
     transcript,
+    voiceMetrics,
     photoInput,
     schemaName: "ikigai_full_report",
     jsonSchema: reportFullJsonSchema,
-    parseReport: (content) => reportFullSchema.parse(JSON.parse(content))
+    parseReport: (content) => reportFullSchema.parse(parseCompletionJson(content))
   });
   const promptVersion = Math.max(freeCompletion.promptVersion, fullCompletion.promptVersion);
 
@@ -367,20 +402,33 @@ export async function generateOpenAiReport(context: ReportContext): Promise<Gene
     usedOpenAI: true,
     mediaSignals: {
       audioTranscript: Boolean(transcript),
+      audioMetrics: Boolean(voiceMetrics),
       photoInput: freeCompletion.photoInputUsed || fullCompletion.photoInputUsed
     }
   };
 }
 
-async function buildCompletionInput(context: ReportContext, tier: ReportTier, transcript: string | null, photoInput: string | null) {
-  const prompts = await buildReportPromptMessages(context, tier, transcript, Boolean(photoInput));
-  const userContent: Array<Record<string, unknown>> = [
+function extractClientVoiceDuration(answers: ReportContext["answers"]) {
+  const maybeMetrics = answers as ReportContext["answers"] & { clientMetrics?: { voiceDurationSeconds?: unknown } };
+  const duration = Number(maybeMetrics.clientMetrics?.voiceDurationSeconds);
+  return Number.isFinite(duration) && duration > 0 ? duration : null;
+}
+
+async function buildCompletionInput(
+  context: ReportContext,
+  tier: ReportTier,
+  transcript: string | null,
+  voiceMetrics: VoiceSignalMetrics | null,
+  photoInput: string | null
+) {
+  const prompts = await buildReportPromptMessages(context, tier, transcript, voiceMetrics, Boolean(photoInput));
+  const userContent: ChatCompletionContentPart[] = [
     { type: "text", text: prompts.userPrompt }
   ];
   if (photoInput) {
     userContent.push({
       type: "image_url",
-      image_url: { url: photoInput, detail: "low" }
+      image_url: { url: photoInput }
     });
   }
   return {
@@ -391,21 +439,37 @@ async function buildCompletionInput(context: ReportContext, tier: ReportTier, tr
 }
 
 function isImageInputError(body: string) {
-  return /image_parse_error|unsupported image|invalid image|invalid_image/i.test(body);
+  return /image_parse_error|unsupported image|invalid image|invalid_image|400 status code \(no body\)|status code 400/i.test(body);
+}
+
+function parseCompletionJson(content: string) {
+  const withoutThink = content.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+  const withoutFence = withoutThink.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+  try {
+    return JSON.parse(withoutFence);
+  } catch {
+    const start = withoutFence.indexOf("{");
+    const end = withoutFence.lastIndexOf("}");
+    if (start >= 0 && end > start) {
+      return JSON.parse(withoutFence.slice(start, end + 1));
+    }
+    throw new Error("OpenAI-compatible gateway returned non-JSON report content");
+  }
 }
 
 type ReportCompletionRequest<TReport> = {
   context: ReportContext;
   tier: ReportTier;
   transcript: string | null;
+  voiceMetrics: VoiceSignalMetrics | null;
   photoInput: string | null;
   schemaName: string;
-  jsonSchema: unknown;
+  jsonSchema: Record<string, unknown>;
   parseReport: (content: string) => TReport;
 };
 
 async function createReportCompletion<TReport>(request: ReportCompletionRequest<TReport>): Promise<CompletionResult<TReport>> {
-  const input = await buildCompletionInput(request.context, request.tier, request.transcript, request.photoInput);
+  const input = await buildCompletionInput(request.context, request.tier, request.transcript, request.voiceMetrics, request.photoInput);
   try {
     return await requestReportCompletion(input, Boolean(request.photoInput), request.schemaName, request.jsonSchema, request.parseReport);
   } catch (error) {
@@ -414,7 +478,7 @@ async function createReportCompletion<TReport>(request: ReportCompletionRequest<
     }
 
     return requestReportCompletion(
-      await buildCompletionInput(request.context, request.tier, request.transcript, null),
+      await buildCompletionInput(request.context, request.tier, request.transcript, request.voiceMetrics, null),
       false,
       request.schemaName,
       request.jsonSchema,
@@ -427,29 +491,29 @@ async function requestReportCompletion<TReport>(
   input: Awaited<ReturnType<typeof buildCompletionInput>>,
   photoInputUsed: boolean,
   schemaName: string,
-  jsonSchema: unknown,
+  jsonSchema: Record<string, unknown>,
   parseReport: (content: string) => TReport
 ): Promise<CompletionResult<TReport>> {
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${env.OPENAI_API_KEY}`,
-      "Content-Type": "application/json"
+  const openai = getOpenAiClient();
+  if (!openai) throw new Error("OpenAI-compatible client is not configured");
+
+  const messages: ChatCompletionMessageParam[] = [
+    {
+      role: "system",
+      content: input.systemPrompt
     },
-    body: JSON.stringify({
+    {
+      role: "user",
+      content: input.userContent
+    }
+  ];
+
+  try {
+    const response = await openai.chat.completions.create({
       model: env.OPENAI_MODEL,
       temperature: 0.35,
       max_tokens: 4000,
-      messages: [
-        {
-          role: "system",
-          content: input.systemPrompt
-        },
-        {
-          role: "user",
-          content: input.userContent
-        }
-      ],
+      messages,
       response_format: {
         type: "json_schema",
         json_schema: {
@@ -458,29 +522,19 @@ async function requestReportCompletion<TReport>(
           schema: jsonSchema
         }
       }
-    })
-  });
+    });
 
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`OpenAI report generation failed with ${response.status}: ${body.slice(0, 240)}`);
+    const message = response.choices?.[0]?.message;
+    if (message?.refusal) throw new Error(`OpenAI-compatible gateway refused report generation: ${message.refusal}`);
+    if (!message?.content) throw new Error("OpenAI-compatible gateway returned an empty report");
+
+    return {
+      report: parseReport(message.content),
+      photoInputUsed,
+      promptVersion: input.promptVersion
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`OpenAI-compatible report generation failed: ${message.slice(0, 240)}`);
   }
-
-  const data = await response.json() as {
-    choices?: Array<{
-      message?: {
-        content?: string | null;
-        refusal?: string | null;
-      };
-    }>;
-  };
-  const message = data.choices?.[0]?.message;
-  if (message?.refusal) throw new Error(`OpenAI refused report generation: ${message.refusal}`);
-  if (!message?.content) throw new Error("OpenAI returned an empty report");
-
-  return {
-    report: parseReport(message.content),
-    photoInputUsed,
-    promptVersion: input.promptVersion
-  };
 }

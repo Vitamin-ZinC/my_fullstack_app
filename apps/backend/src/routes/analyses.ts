@@ -7,7 +7,7 @@ import { getRequestedLocale, requireAdmin, requireAnalysisAccess, requireSession
 import { analysisQueue } from "../lib/queue.js";
 import { subscribeProgress } from "../lib/progress.js";
 import { prisma } from "../lib/prisma.js";
-import { createMediaUploadUrls, verifyRequiredMedia } from "../services/media.js";
+import { createMediaUploadUrls, readMediaAssetBuffer, verifyRequiredMedia } from "../services/media.js";
 import { sendReportEmail } from "../services/email.js";
 import { buildFallbackFreeReport, buildFallbackReport } from "../services/report.js";
 
@@ -254,6 +254,22 @@ export async function analysisRoutes(app: FastifyInstance) {
       }
     });
     return { ok: true, mediaAssetId: asset.id };
+  });
+
+  app.get("/api/uploads/:key", async (request, reply) => {
+    if (!env.LOCAL_UPLOADS_ENABLED && env.NODE_ENV === "production") return reply.code(404).send({ error: "Not found" });
+    const params = z.object({ key: z.string() }).parse(request.params);
+    if (params.key.includes("/") || params.key.includes("..")) return reply.code(400).send({ error: "Invalid upload key" });
+    const asset = await prisma.mediaAsset.findUnique({ where: { key: params.key } });
+    if (!asset || (asset.status !== "UPLOADED" && asset.status !== "VERIFIED")) {
+      return reply.code(404).send({ error: "Upload not found" });
+    }
+    const body = await readMediaAssetBuffer(params.key);
+    if (!body) return reply.code(404).send({ error: "Upload not found" });
+    return reply
+      .header("Cache-Control", "public, max-age=900")
+      .type(asset.mimeType || "application/octet-stream")
+      .send(body);
   });
 
   app.put("/api/dev/uploads/:key", async (request, reply) => {

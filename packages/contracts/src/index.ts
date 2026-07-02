@@ -6,6 +6,8 @@ export type MediaAssetType = "AUDIO" | "PHOTO";
 export type MediaAssetStatus = "CREATED" | "UPLOADED" | "VERIFIED" | "REJECTED";
 export type ReportTier = "FREE" | "FULL";
 export type PromptStatus = "DRAFT" | "ACTIVE" | "ARCHIVED";
+export type HabitProgramStatus = "ACTIVE" | "PAUSED" | "COMPLETED" | "ARCHIVED";
+export type HabitEnrollmentStatus = "ACTIVE" | "COMPLETED" | "SKIPPED" | "ARCHIVED";
 export type SupportedLocale = "ru" | "en";
 
 export type IkigaiAnswers = {
@@ -95,6 +97,58 @@ export type ReportFull = {
   };
   career_action: string;
   final_insight: string;
+};
+
+export type AuthUser = {
+  id: string;
+  email: string;
+  name?: string | null;
+  locale: string;
+  role: UserRole;
+  status: "ACTIVE" | "DISABLED";
+  emailVerifiedAt?: string | null;
+  lastLoginAt?: string | null;
+  createdAt: string;
+};
+
+export type AuthSessionResponse = {
+  sessionId: string;
+  guestToken: string;
+  userId?: string | null;
+  locale: string;
+  user?: AuthUser | null;
+};
+
+export type AuthResult = {
+  sessionId: string;
+  guestToken: string;
+  user: AuthUser;
+};
+
+export type MagicLinkRequestResponse = {
+  ok: true;
+  emailSent: boolean;
+  expiresAt: string;
+  debugLoginUrl?: string;
+};
+
+export type MeReportSummary = {
+  id: string;
+  status: AnalysisStatus;
+  createdAt: string;
+  completedAt?: string | null;
+  profession?: string | null;
+  summary?: string | null;
+  fullReportAvailable: boolean;
+  paymentStatus?: PaymentStatus | null;
+  amountPaid?: number | null;
+  currency?: string | null;
+};
+
+export type MeResponse = {
+  user: AuthUser;
+  reportCount: number;
+  lastAnalysis?: Omit<MeReportSummary, "fullReportAvailable" | "paymentStatus" | "amountPaid" | "currency"> | null;
 };
 
 export type CreateAnalysisResponse = {
@@ -194,4 +248,99 @@ export type ReportContactResponse = {
   ok: true;
   emailSent: boolean;
   emailId?: string;
+};
+
+export type HabitDefinitionSummary = {
+  id: string;
+  slug?: string;
+  cycle?: number;
+  week: number;
+  title: string;
+  focus: string;
+  essence: string;
+  practice: string;
+  why: string;
+  book?: string | null;
+  zone?: string | null;
+};
+
+export type HabitEnrollmentSummary = HabitDefinitionSummary & {
+  status: HabitEnrollmentStatus;
+  sortOrder: number;
+  checkinsDone: number;
+  lastCheckinAt?: string | null;
+};
+
+export type HabitInsightSummary = {
+  id: string;
+  enrollmentId?: string | null;
+  habitTitle?: string | null;
+  text: string;
+  source: string;
+  createdAt: string;
+};
+
+export type HabitDailyMetricSummary = {
+  id: string;
+  date: string;
+  energy: number;
+  clarity: number;
+  stability: number;
+};
+
+export type HabitRewardSummary = {
+  id: string;
+  type: string;
+  label: string;
+  xp: number;
+  createdAt: string;
+};
+
+export type HabitProgramSummary = {
+  id: string;
+  status: HabitProgramStatus;
+  source: string;
+  title: string;
+  weakZone?: string | null;
+  archetype?: string | null;
+  topRole?: string | null;
+  careerAction?: string | null;
+  finalInsight?: string | null;
+  startedAt: string;
+  createdAt: string;
+  activeEnrollment?: HabitEnrollmentSummary | null;
+  enrollments: HabitEnrollmentSummary[];
+  insights: HabitInsightSummary[];
+  metrics: HabitDailyMetricSummary[];
+  rewards: HabitRewardSummary[];
+  stats: {
+    xp: number;
+    daysInProgram: number;
+    checkinsDone: number;
+    insightsCount: number;
+    streakDays: number;
+    currentWeek: number;
+  };
+};
+
+export type HabitLatestReport = {
+  analysisId: string;
+  profession?: string | null;
+  summary?: string | null;
+  completedAt?: string | null;
+};
+
+export type HabitMeResponse = {
+  program: HabitProgramSummary | null;
+  latestReport: HabitLatestReport | null;
+};
+
+export type HabitProgramResponse = {
+  program: HabitProgramSummary;
+};
+
+export type HabitNavigatorResponse = {
+  reply: string;
+  model: string;
+  threadId?: string;
 };

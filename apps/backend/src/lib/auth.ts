@@ -1,4 +1,4 @@
-import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { jwtVerify, SignJWT } from "jose";
 import { env } from "../env.js";
@@ -28,18 +28,21 @@ function adminSessionSecret() {
   return new TextEncoder().encode(env.ADMIN_SESSION_SECRET || env.JWT_ACCESS_SECRET);
 }
 
-export function hashAdminPassword(password: string, salt = randomBytes(16).toString("hex")) {
+export function hashPassword(password: string, salt = randomBytes(16).toString("hex")) {
   const hash = scryptSync(password, salt, 64).toString("hex");
   return `scrypt:${salt}:${hash}`;
 }
 
-export function verifyAdminPassword(password: string, storedHash: string) {
+export function verifyPassword(password: string, storedHash: string) {
   const [scheme, salt, expectedHex] = storedHash.split(":");
   if (scheme !== "scrypt" || !salt || !expectedHex) return false;
   const actual = Buffer.from(scryptSync(password, salt, 64));
   const expected = Buffer.from(expectedHex, "hex");
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
+
+export const hashAdminPassword = hashPassword;
+export const verifyAdminPassword = verifyPassword;
 
 export async function createAdminSessionToken() {
   return new SignJWT({ role: "admin" })
@@ -65,16 +68,35 @@ export function getRequestedLocale(request: FastifyRequest) {
   return locale.slice(0, 12);
 }
 
-export async function requireSession(request: FastifyRequest, reply: FastifyReply): Promise<SessionContext | null> {
+export async function createGuestSession(request: FastifyRequest, localeOverride?: string): Promise<SessionContext> {
+  const locale = (localeOverride ?? getRequestedLocale(request)).slice(0, 12);
+  const userAgentHeader = request.headers["user-agent"];
+  const userAgent = Array.isArray(userAgentHeader) ? userAgentHeader[0] : userAgentHeader;
+  const session = await prisma.session.create({
+    data: {
+      guestToken: randomUUID(),
+      locale,
+      userAgent,
+      ipAddress: request.ip,
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+    },
+    select: {
+      id: true,
+      guestToken: true,
+      userId: true,
+      locale: true
+    }
+  });
+  return session;
+}
+
+export async function getOptionalSession(request: FastifyRequest): Promise<SessionContext | null> {
   const sessionId = readRequestValue(request, "x-session-id");
   const guestToken = readRequestValue(request, "x-guest-token");
 
-  if (!guestToken) {
-    reply.code(401).send({ error: "Session required" });
-    return null;
-  }
+  if (!guestToken) return null;
 
-  const session = await prisma.session.findFirst({
+  return prisma.session.findFirst({
     where: {
       guestToken,
       expiresAt: { gt: new Date() },
@@ -87,6 +109,17 @@ export async function requireSession(request: FastifyRequest, reply: FastifyRepl
       locale: true
     }
   });
+}
+
+export async function requireSession(request: FastifyRequest, reply: FastifyReply): Promise<SessionContext | null> {
+  const guestToken = readRequestValue(request, "x-guest-token");
+
+  if (!guestToken) {
+    reply.code(401).send({ error: "Session required" });
+    return null;
+  }
+
+  const session = await getOptionalSession(request);
 
   if (!session) {
     reply.code(401).send({ error: "Invalid or expired session" });
@@ -94,6 +127,59 @@ export async function requireSession(request: FastifyRequest, reply: FastifyRepl
   }
 
   return session;
+}
+
+export async function requireUserSession(request: FastifyRequest, reply: FastifyReply): Promise<SessionContext | null> {
+  const session = await requireSession(request, reply);
+  if (!session) return null;
+  if (!session.userId) {
+    reply.code(401).send({ error: "Login required" });
+    return null;
+  }
+  return session;
+}
+
+export async function attachSessionToUser(session: SessionContext, userId: string) {
+  const analysisIds = await prisma.analysis.findMany({
+    where: {
+      sessionId: session.id,
+      OR: [{ userId: null }, { userId }]
+    },
+    select: { id: true }
+  });
+  const ids = analysisIds.map((analysis) => analysis.id);
+
+  await prisma.$transaction(async (tx) => {
+    await tx.session.update({
+      where: { id: session.id },
+      data: {
+        userId,
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
+      }
+    });
+    await tx.analysis.updateMany({
+      where: { id: { in: ids } },
+      data: { userId }
+    });
+    if (ids.length > 0) {
+      await tx.payment.updateMany({
+        where: { analysisId: { in: ids } },
+        data: { userId }
+      });
+    }
+    await tx.analyticsEvent.updateMany({
+      where: { sessionId: session.id, userId: null },
+      data: { userId }
+    });
+    await tx.habitProgram.updateMany({
+      where: { sessionId: session.id, userId: null },
+      data: { userId }
+    });
+    await tx.habitNavigatorThread.updateMany({
+      where: { sessionId: session.id, userId: null },
+      data: { userId }
+    });
+  });
 }
 
 export async function requireAnalysisAccess(

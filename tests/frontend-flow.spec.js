@@ -307,3 +307,70 @@ test("habits tracker records daily marks and uses AI navigator", async ({ page }
   await habitsFrame.getByText("Улучшить состояние").click();
   await expect(habitsFrame.locator("body")).toContainText("Пингви видит состояние", { timeout: 10000 });
 });
+
+test("password registration opens account with report history", async ({ page }) => {
+  await page.route(`${apiBase}/api/auth/guest`, async (route) => fulfillJson(route, { sessionId: "auth-session", guestToken: "auth-token" }));
+  await page.route(`${apiBase}/api/auth/register`, async (route) => {
+    expect(route.request().postDataJSON()).toEqual({
+      email: "client@orken.life",
+      password: "strongpass1",
+      name: "Client"
+    });
+    await fulfillJson(route, {
+      sessionId: "auth-session",
+      guestToken: "auth-token",
+      user: {
+        id: "user-auth",
+        email: "client@orken.life",
+        name: "Client",
+        locale: "ru",
+        role: "USER",
+        status: "ACTIVE",
+        emailVerifiedAt: "2026-07-02T00:00:00.000Z",
+        lastLoginAt: "2026-07-02T00:00:00.000Z",
+        createdAt: "2026-07-02T00:00:00.000Z"
+      }
+    });
+  });
+  await page.route(`${apiBase}/api/me`, async (route) => fulfillJson(route, {
+    user: {
+      id: "user-auth",
+      email: "client@orken.life",
+      name: "Client",
+      locale: "ru",
+      role: "USER",
+      status: "ACTIVE",
+      emailVerifiedAt: "2026-07-02T00:00:00.000Z",
+      lastLoginAt: "2026-07-02T00:00:00.000Z",
+      createdAt: "2026-07-02T00:00:00.000Z"
+    },
+    reportCount: 1,
+    lastAnalysis: null
+  }));
+  await page.route(`${apiBase}/api/me/reports`, async (route) => fulfillJson(route, [{
+    id: "analysis-auth",
+    status: "DONE",
+    createdAt: "2026-07-02T00:00:00.000Z",
+    completedAt: "2026-07-02T00:01:00.000Z",
+    profession: "Продуктовый стратег",
+    summary: "Сохраненный отчет в личном кабинете.",
+    fullReportAvailable: true,
+    paymentStatus: "SUCCEEDED",
+    amountPaid: 0,
+    currency: "usd"
+  }]));
+
+  await page.goto(`${appBase}/login`);
+  await page.getByText("Пароль").click();
+  await page.getByText("Нет аккаунта? Создать").click();
+  await page.getByPlaceholder("Как к вам обращаться").fill("Client");
+  await page.getByPlaceholder("you@email.com").fill("client@orken.life");
+  await page.getByPlaceholder("минимум 8 символов").fill("strongpass1");
+  await page.getByTestId("password-auth-submit").click();
+
+  await expect(page).toHaveURL(/\/account$/, { timeout: 10000 });
+  await expect(page.getByTestId("account-page")).toBeVisible();
+  await expect(page.getByText("Навигатор привычек")).toBeVisible();
+  await expect(page.getByText("Продуктовый стратег")).toBeVisible();
+  await expect(page.getByText("Полный отчёт")).toBeVisible();
+});

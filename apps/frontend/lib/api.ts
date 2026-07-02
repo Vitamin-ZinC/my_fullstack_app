@@ -1,9 +1,17 @@
 import type {
   AdminStats,
   AppSetting,
+  AuthResult,
+  AuthSessionResponse,
   CheckoutSessionResponse,
   FeatureFlag,
+  HabitMeResponse,
+  HabitNavigatorResponse,
+  HabitProgramResponse,
   IkigaiAnswers,
+  MagicLinkRequestResponse,
+  MeReportSummary,
+  MeResponse,
   PaymentConfigResponse,
   PaymentIntentResponse,
   PromoCode,
@@ -56,6 +64,18 @@ export function setStoredLocale(locale: TextLocale) {
   window.localStorage.setItem(LOCALE_KEY, locale);
 }
 
+function storeSession(session: { sessionId: string; guestToken: string }) {
+  if (!hasWindow()) return;
+  window.sessionStorage.setItem(SESSION_ID_KEY, session.sessionId);
+  window.sessionStorage.setItem(GUEST_TOKEN_KEY, session.guestToken);
+}
+
+function clearSession() {
+  if (!hasWindow()) return;
+  window.sessionStorage.removeItem(SESSION_ID_KEY);
+  window.sessionStorage.removeItem(GUEST_TOKEN_KEY);
+}
+
 function sessionHeaders() {
   if (!hasWindow()) return {};
   const sessionId = window.sessionStorage.getItem(SESSION_ID_KEY);
@@ -79,8 +99,7 @@ export async function ensureGuestSession() {
     method: "POST",
     body: JSON.stringify({ locale: getStoredLocale() })
   });
-  window.sessionStorage.setItem(SESSION_ID_KEY, session.sessionId);
-  window.sessionStorage.setItem(GUEST_TOKEN_KEY, session.guestToken);
+  storeSession(session);
   return session;
 }
 
@@ -94,6 +113,89 @@ export const contentApi = {
 
 export const api = {
   createGuest: () => ensureGuestSession(),
+  getSession: () => request<AuthSessionResponse>("/api/auth/session"),
+  register: async (email: string, password: string, name?: string) => {
+    await ensureGuestSession();
+    const result = await request<AuthResult>("/api/auth/register", {
+      method: "POST",
+      body: JSON.stringify({ email, password, name: name?.trim() || undefined })
+    });
+    storeSession(result);
+    return result;
+  },
+  login: async (email: string, password: string) => {
+    await ensureGuestSession();
+    const result = await request<AuthResult>("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password })
+    });
+    storeSession(result);
+    return result;
+  },
+  requestMagicLink: async (email: string) => {
+    await ensureGuestSession();
+    return request<MagicLinkRequestResponse>("/api/auth/magic-link/request", {
+      method: "POST",
+      body: JSON.stringify({ email })
+    });
+  },
+  verifyMagicLink: async (token: string) => {
+    await ensureGuestSession();
+    const result = await request<AuthResult>("/api/auth/magic-link/verify", {
+      method: "POST",
+      body: JSON.stringify({ token })
+    });
+    storeSession(result);
+    return result;
+  },
+  logout: async () => {
+    await request<{ ok: true }>("/api/auth/logout", { method: "POST" }).catch(() => ({ ok: true as const }));
+    clearSession();
+  },
+  me: () => request<MeResponse>("/api/me"),
+  myReports: () => request<MeReportSummary[]>("/api/me/reports"),
+  habitsMe: async () => {
+    await ensureGuestSession();
+    return request<HabitMeResponse>("/api/habits/me");
+  },
+  activateHabitsFromReport: async (analysisId: string) => {
+    await ensureGuestSession();
+    return request<HabitProgramResponse>(`/api/habits/enroll-from-report/${encodeURIComponent(analysisId)}`, {
+      method: "POST",
+      body: JSON.stringify({})
+    });
+  },
+  saveHabitMetric: (payload: { programId: string; date?: string; energy: number; clarity: number; stability: number }) => request<HabitProgramResponse>("/api/habits/metrics", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  }),
+  saveHabitCheckin: (payload: {
+    programId: string;
+    enrollmentId: string;
+    date?: string;
+    completed?: boolean;
+    note?: string;
+    energy?: number;
+    clarity?: number;
+    stability?: number;
+  }) => request<HabitProgramResponse>("/api/habits/checkins", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  }),
+  saveHabitInsight: (payload: { programId: string; enrollmentId?: string; text: string; source?: string }) => request<HabitProgramResponse>("/api/habits/insights", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  }),
+  askHabitNavigator: (payload: {
+    programId?: string;
+    threadId?: string;
+    message: string;
+    messages?: Array<{ role: "user" | "assistant"; text: string }>;
+    context?: Record<string, unknown>;
+  }) => request<HabitNavigatorResponse>("/api/habits/navigator", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  }),
   createAnalysis: async () => {
     await ensureGuestSession();
     return request<{ analysisId: string; audioUploadUrl: string; photoUploadUrl: string }>("/api/analyses", {

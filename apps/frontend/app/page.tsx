@@ -132,6 +132,7 @@ function AppNav() {
           <div className="sub">{text.nav.sub}</div>
         </div>
       </Link>
+      <Link className="btn-back" href="/account">Кабинет</Link>
     </nav>
   );
 }

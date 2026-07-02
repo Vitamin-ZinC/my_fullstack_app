@@ -1,5 +1,6 @@
 import type { IkigaiAnswers, PromptStatus, ReportTier } from "@levelup/contracts";
 import { prisma } from "../lib/prisma.js";
+import type { VoiceSignalMetrics } from "./audioMetrics.js";
 
 export const REPORT_FREE_SYSTEM_PROMPT_KEY = "ikigai.report.free.system";
 export const REPORT_FREE_USER_PROMPT_KEY = "ikigai.report.free.user";
@@ -101,7 +102,11 @@ export const defaultReportPromptTemplates: PromptDraft[] = [
       "Sections 2 through 8 must be personalized. Do not output placeholders, one-word labels, English trait words, raw scores, or 'unavailable' as a value.",
       "Each voice_analysis and face_analysis value must be a Russian short paragraph with exactly these three visible labeled parts: 'Ваш результат:', 'Что это значит:', and 'Рекомендация:'.",
       "Use this style for every diagnostic parameter: 'Ваш результат: [конкретный результат по параметру]. Что это значит: [рабочая интерпретация, где это помогает и какой риск возникает]. Рекомендация: [одно конкретное действие развития]'.",
+      "For voice_analysis, separate content evidence from acoustic evidence. The transcript can show themes, vocabulary, and clarity of thought; voiceMetricsJson can show only delivery signals such as pace, pauses, loudness stability, clipping, and recording quality.",
       "For voice_analysis.pace, if voiceMetricsJson.speechRateWpm is not null, include it in 'Ваш результат' exactly as words per minute, for example: 'Ваш результат: Ускоренный темп (выше среднего) — 178 слов в минуту.'",
+      "For voice_analysis.communication, use pauseCount, averagePauseMs, longestPauseMs, silenceRatio, and articulationRateWpm when available. Interpret pauses as presentation rhythm only, not as proof of anxiety, deception, or personal traits.",
+      "For voice_analysis.energy and confidence, use rmsDb, peakDb, loudnessVariationDb, clippingRatio, and quality when available. If quality is weak or notes mention a quiet/clipped recording, explicitly soften the conclusion and recommend retesting in a quieter environment.",
+      "For voice_analysis.anxiety, do not infer anxiety from voice alone. If pauses or pace look unstable, phrase it as possible speech tension or uneven delivery in this recording.",
       "Example style for voice_analysis.pace: 'Ваш результат: Ускоренный темп (выше среднего) — [Х] слов в минуту. Что это значит: в работе это проявляется как высокая динамика и гибкость. Вы быстро доносите мысли, но при избытке информации собеседник может терять фокус. Рекомендация: в сложных обсуждениях и на презентациях намеренно замедляйте темп на 15–20% и делайте паузы после ключевых тезисов для фиксации внимания.'",
       "Do not copy the example for every field; adapt the same 'Ваш результат' / 'Что это значит' / 'Рекомендация' structure to each concrete parameter.",
       "Use cautious formulations: 'похоже', 'может указывать', 'в рабочем контексте это проявляется как'. Never present face or voice as proof of character, health, deception, or identity.",
@@ -169,6 +174,7 @@ export async function buildReportPromptMessages(
   context: ReportPromptContext,
   tier: ReportTier,
   transcript: string | null,
+  voiceMetrics: VoiceSignalMetrics | null,
   photoIncluded: boolean
 ) {
   const keys = promptKeysForTier(tier);
@@ -182,7 +188,7 @@ export async function buildReportPromptMessages(
     language,
     analysisId: context.analysisId,
     questionnaireJson: JSON.stringify(questionnaire),
-    voiceMetricsJson: buildVoiceMetricsJson(context.answers, transcript),
+    voiceMetricsJson: buildVoiceMetricsJson(context.answers, transcript, voiceMetrics),
     voiceTranscript: transcript || "unavailable",
     photoIncluded: photoIncluded ? "yes" : "no"
   };
@@ -207,7 +213,9 @@ function stripClientMetrics(answers: ReportPromptContext["answers"]): IkigaiAnsw
   };
 }
 
-function buildVoiceMetricsJson(answers: ReportPromptContext["answers"], transcript: string | null) {
+function buildVoiceMetricsJson(answers: ReportPromptContext["answers"], transcript: string | null, voiceMetrics: VoiceSignalMetrics | null) {
+  if (voiceMetrics) return JSON.stringify(voiceMetrics);
+
   const voiceDurationSeconds = normalizePositiveNumber(answers.clientMetrics?.voiceDurationSeconds);
   const transcriptWordCount = transcript ? countWords(transcript) : null;
   const speechRateWpm = voiceDurationSeconds && transcriptWordCount
@@ -216,9 +224,22 @@ function buildVoiceMetricsJson(answers: ReportPromptContext["answers"], transcri
 
   return JSON.stringify({
     voiceDurationSeconds,
+    durationSeconds: voiceDurationSeconds,
     transcriptWordCount,
     speechRateWpm,
-    speechRateLabel: speechRateWpm === null ? null : labelSpeechRate(speechRateWpm)
+    speechRateLabel: speechRateWpm === null ? null : labelSpeechRate(speechRateWpm),
+    activeSpeechSeconds: null,
+    articulationRateWpm: null,
+    silenceRatio: null,
+    pauseCount: null,
+    averagePauseMs: null,
+    longestPauseMs: null,
+    rmsDb: null,
+    peakDb: null,
+    loudnessVariationDb: null,
+    clippingRatio: null,
+    quality: speechRateWpm === null ? "unknown" : "usable",
+    notes: []
   });
 }
 

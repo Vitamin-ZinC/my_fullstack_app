@@ -66,6 +66,7 @@ services:
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-ORKEN.LIFE <reports@orken.life>}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.enchantstartup.com/v1}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
       OPENAI_TRANSCRIPTION_MODEL: ${OPENAI_TRANSCRIPTION_MODEL:-whisper-1}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
@@ -99,6 +100,7 @@ services:
       LOCAL_UPLOADS_ENABLED: ${LOCAL_UPLOADS_ENABLED:-true}
       LOCAL_UPLOAD_DIR: /repo/.runtime/uploads
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.enchantstartup.com/v1}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
       OPENAI_TRANSCRIPTION_MODEL: ${OPENAI_TRANSCRIPTION_MODEL:-whisper-1}
     depends_on:

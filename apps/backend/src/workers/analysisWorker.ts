@@ -54,7 +54,7 @@ export const worker = new Worker("analysis", async (job) => {
       emitProgress(analysisId, {
         progress: 98,
         stage: "ai",
-        log: `AI report generated (${generated.mediaSignals.audioTranscript ? "audio" : "no audio"}, ${generated.mediaSignals.photoInput ? "photo" : "no photo"})`
+        log: `AI report generated (${generated.mediaSignals.audioTranscript ? "audio transcript" : "no audio transcript"}, ${generated.mediaSignals.audioMetrics ? "voice metrics" : "no voice metrics"}, ${generated.mediaSignals.photoInput ? "photo" : "no photo"})`
       });
     } else {
       if (!allowFallbackReport) {

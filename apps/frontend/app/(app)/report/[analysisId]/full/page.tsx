@@ -134,7 +134,7 @@ export default function FullReportPage() {
             <Link
               className="button"
               data-testid="activate-habits-link"
-              href="/habits?from=ikigai"
+              href={`/habits?from=ikigai&analysisId=${analysisId}`}
               onClick={() => storeHabitProfile(report)}
             >
               {habitsText.trialButton}

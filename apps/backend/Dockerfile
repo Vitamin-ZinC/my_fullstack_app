@@ -8,7 +8,7 @@ RUN npm install
 
 FROM node:20-alpine
 WORKDIR /repo
-RUN apk add --no-cache openssl
+RUN apk add --no-cache openssl ffmpeg
 COPY --from=deps /repo/node_modules ./node_modules
 COPY . .
 ENV DATABASE_URL=postgresql://user:password@localhost:5432/db

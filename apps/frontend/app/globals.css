@@ -628,6 +628,11 @@ svg {
   gap: 14px;
 }
 
+.account-hero h1,
+.account-hero p {
+  overflow-wrap: anywhere;
+}
+
 .account-metrics {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2642,7 +2647,7 @@ p {
   }
 
   .habits-main {
-    padding: 16px;
+    padding: 16px 16px 96px;
   }
 
   .habits-topbar {

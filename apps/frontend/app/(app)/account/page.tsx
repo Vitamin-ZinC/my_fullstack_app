@@ -19,7 +19,7 @@ export default function AccountPage() {
         setMe(nextMe);
         setReports(nextReports);
       })
-      .catch((reason) => setError(reason instanceof Error ? reason.message : "Нужно войти в аккаунт"))
+      .catch(() => setError("Войдите или создайте аккаунт, чтобы открыть кабинет. Повторно проходить диагностику для этого не нужно."))
       .finally(() => setLoading(false));
   }, []);
 
@@ -47,7 +47,10 @@ export default function AccountPage() {
           <h1 className="ub flow-title">Войдите, чтобы открыть кабинет</h1>
           <p className="flow-copy">{error || "Сессия не найдена"}</p>
         </div>
-        <Link className="button" href="/login">Войти или создать аккаунт</Link>
+        <div className="row">
+          <Link className="button" href="/login">Войти</Link>
+          <Link className="button secondary" href="/login?mode=register">Создать аккаунт</Link>
+        </div>
       </article>
     );
   }

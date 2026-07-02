@@ -44,7 +44,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(text || `API ${res.status}`);
+    let message = text || `API ${res.status}`;
+    try {
+      const parsed = JSON.parse(text) as { error?: unknown; message?: unknown };
+      if (typeof parsed.error === "string") message = parsed.error;
+      else if (typeof parsed.message === "string") message = parsed.message;
+    } catch {
+      // Keep the original response text when the API did not return JSON.
+    }
+    throw new Error(message);
   }
   return res.json();
 }
@@ -68,18 +76,22 @@ function storeSession(session: { sessionId: string; guestToken: string }) {
   if (!hasWindow()) return;
   window.sessionStorage.setItem(SESSION_ID_KEY, session.sessionId);
   window.sessionStorage.setItem(GUEST_TOKEN_KEY, session.guestToken);
+  window.localStorage.setItem(SESSION_ID_KEY, session.sessionId);
+  window.localStorage.setItem(GUEST_TOKEN_KEY, session.guestToken);
 }
 
 function clearSession() {
   if (!hasWindow()) return;
   window.sessionStorage.removeItem(SESSION_ID_KEY);
   window.sessionStorage.removeItem(GUEST_TOKEN_KEY);
+  window.localStorage.removeItem(SESSION_ID_KEY);
+  window.localStorage.removeItem(GUEST_TOKEN_KEY);
 }
 
 function sessionHeaders() {
   if (!hasWindow()) return {};
-  const sessionId = window.sessionStorage.getItem(SESSION_ID_KEY);
-  const guestToken = window.sessionStorage.getItem(GUEST_TOKEN_KEY);
+  const sessionId = window.sessionStorage.getItem(SESSION_ID_KEY) ?? window.localStorage.getItem(SESSION_ID_KEY);
+  const guestToken = window.sessionStorage.getItem(GUEST_TOKEN_KEY) ?? window.localStorage.getItem(GUEST_TOKEN_KEY);
   return {
     ...(sessionId ? { "x-session-id": sessionId } : {}),
     ...(guestToken ? { "x-guest-token": guestToken } : {}),
@@ -89,9 +101,10 @@ function sessionHeaders() {
 
 export async function ensureGuestSession() {
   if (!hasWindow()) throw new Error("Browser session is required");
-  const existingSessionId = window.sessionStorage.getItem(SESSION_ID_KEY);
-  const existingGuestToken = window.sessionStorage.getItem(GUEST_TOKEN_KEY);
+  const existingSessionId = window.sessionStorage.getItem(SESSION_ID_KEY) ?? window.localStorage.getItem(SESSION_ID_KEY);
+  const existingGuestToken = window.sessionStorage.getItem(GUEST_TOKEN_KEY) ?? window.localStorage.getItem(GUEST_TOKEN_KEY);
   if (existingSessionId && existingGuestToken) {
+    storeSession({ sessionId: existingSessionId, guestToken: existingGuestToken });
     return { sessionId: existingSessionId, guestToken: existingGuestToken };
   }
 
@@ -269,6 +282,8 @@ export function restoreSessionFromUrl() {
 
   window.sessionStorage.setItem(SESSION_ID_KEY, sessionId);
   window.sessionStorage.setItem(GUEST_TOKEN_KEY, guestToken);
+  window.localStorage.setItem(SESSION_ID_KEY, sessionId);
+  window.localStorage.setItem(GUEST_TOKEN_KEY, guestToken);
   url.searchParams.delete("x-session-id");
   url.searchParams.delete("x-guest-token");
   window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);

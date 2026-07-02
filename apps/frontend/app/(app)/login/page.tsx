@@ -40,6 +40,11 @@ function LoginContent() {
   const [error, setError] = useState("");
 
   useEffect(() => {
+    if (params.get("mode") === "register") {
+      setMode("password");
+      setIsRegister(true);
+    }
+
     const token = params.get("token");
     if (!token) return;
 
@@ -115,6 +120,9 @@ function LoginContent() {
             <button className="button" data-testid="magic-link-submit" disabled={busy} type="submit">
               {busy ? "Отправляем..." : "Получить ссылку для входа"}
             </button>
+            <button className="button secondary" type="button" onClick={() => { setMode("password"); setIsRegister(true); }}>
+              Создать аккаунт по паролю
+            </button>
           </form>
         ) : (
           <form className="auth-form" onSubmit={submitPassword}>
@@ -146,6 +154,7 @@ function LoginContent() {
       </section>
 
       <Link className="button secondary" href="/account">Открыть личный кабинет</Link>
+      <Link className="btn-back" href="/login?mode=register">Создать новый аккаунт</Link>
     </article>
   );
 }

@@ -37,6 +37,7 @@ const schema = z.object({
   OPENAI_TRANSCRIPTION_MODEL: z.string().default("whisper-1"),
   OPENAI_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(120000),
   OPENAI_MAX_OUTPUT_TOKENS: z.coerce.number().int().positive().default(5000),
+  AI_REPORT_FALLBACK_ENABLED: booleanEnv.default(false),
   ANALYSIS_WORKER_CONCURRENCY: z.coerce.number().int().positive().default(1),
   ORKEN_API_KEY_FILE: z.string().default("C:\\Users\\User\\Documents\\API Gate\\.secrets\\orken-key.json"),
   ANTHROPIC_API_KEY: z.string().optional(),

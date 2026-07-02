@@ -28,7 +28,7 @@ export const worker = new Worker("analysis", async (job) => {
     include: { mediaAssets: true }
   });
   const answers = analysis.ikigaiAnswers as any;
-  const allowFallbackReport = env.NODE_ENV !== "production" || env.DEV_TOOLS_ENABLED;
+  const allowFallbackReport = env.NODE_ENV !== "production" || env.DEV_TOOLS_ENABLED || env.AI_REPORT_FALLBACK_ENABLED;
   let report = allowFallbackReport ? buildFallbackReport(answers) : null;
   let reportFree = report ? buildFallbackFreeReport(report) : null;
   let reportModel = allowFallbackReport ? "fallback" : "";

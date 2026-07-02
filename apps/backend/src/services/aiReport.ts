@@ -465,9 +465,9 @@ function supportsNativeJsonSchemaResponseFormat() {
   return env.OPENAI_BASE_URL.includes("api.openai.com");
 }
 
-function buildResponseFormat(schemaName: string, jsonSchema: Record<string, unknown>): ResponseFormat {
+function buildResponseFormat(schemaName: string, jsonSchema: Record<string, unknown>): ResponseFormat | null {
   if (!supportsNativeJsonSchemaResponseFormat()) {
-    return { type: "json_object" };
+    return null;
   }
 
   return {
@@ -504,8 +504,15 @@ async function withOpenAiDeadline<T>(callback: (signal: AbortSignal) => Promise<
 async function createChatCompletionWithJsonMode(
   openai: OpenAiClient,
   params: Omit<ChatCompletionCreateParamsNonStreaming, "response_format">,
-  responseFormat: ResponseFormat
+  responseFormat: ResponseFormat | null
 ) {
+  if (!responseFormat) {
+    return withOpenAiDeadline((signal) => openai.chat.completions.create(params, {
+      timeout: env.OPENAI_REQUEST_TIMEOUT_MS,
+      signal
+    }));
+  }
+
   try {
     return await withOpenAiDeadline((signal) => openai.chat.completions.create({
         ...params,
@@ -551,7 +558,7 @@ async function requestReportJsonRepair(
   jsonSchema: Record<string, unknown>,
   invalidContent: string,
   validationError: string,
-  responseFormat: ResponseFormat
+  responseFormat: ResponseFormat | null
 ) {
   const repairMessages: ChatCompletionMessageParam[] = [
     {

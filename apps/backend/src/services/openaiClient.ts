@@ -7,6 +7,10 @@ let cachedClient: OpenAI | null = null;
 
 export function getOpenAiApiKey() {
   if (cachedApiKey !== undefined) return cachedApiKey;
+  if (env.ORKEN_LLM_API_KEY) {
+    cachedApiKey = env.ORKEN_LLM_API_KEY;
+    return cachedApiKey;
+  }
   if (env.OPENAI_API_KEY) {
     cachedApiKey = env.OPENAI_API_KEY;
     return cachedApiKey;

@@ -1,6 +1,7 @@
 import type { IkigaiAnswers, ReportFree, ReportFull, ReportTier } from "@levelup/contracts";
 import type { MediaAsset } from "@prisma/client";
 import type {
+  ChatCompletion,
   ChatCompletionContentPart,
   ChatCompletionCreateParamsNonStreaming,
   ChatCompletionMessageParam
@@ -12,7 +13,7 @@ import { getMediaAssetPublicUrl, readMediaAssetBuffer } from "./media.js";
 import { buildReportPromptMessages } from "./reportPrompts.js";
 import { analyzeAudioMetrics, type AudioTranscription, type VoiceSignalMetrics } from "./audioMetrics.js";
 import { parseCompletionJson } from "./completionJson.js";
-import { getOpenAiClient, hasOpenAiClient } from "./openaiClient.js";
+import { getOpenAiApiKey, getOpenAiClient, hasOpenAiClient } from "./openaiClient.js";
 
 type ReportContext = {
   analysisId: string;
@@ -46,6 +47,14 @@ type CompletionResult<TReport> = {
 
 type OpenAiClient = NonNullable<ReturnType<typeof getOpenAiClient>>;
 type ResponseFormat = NonNullable<ChatCompletionCreateParamsNonStreaming["response_format"]>;
+type AsyncCompletionJob = {
+  id?: string;
+  job_id?: string;
+  jobId?: string;
+  status?: string;
+  response?: ChatCompletion | null;
+  error?: unknown;
+};
 
 const scoreSchema = z.object({
   love: z.number().int().min(0).max(100),
@@ -384,6 +393,7 @@ export async function generateOpenAiReport(context: ReportContext): Promise<Gene
     photoInput,
     schemaName: "ikigai_free_report",
     jsonSchema: reportFreeJsonSchema,
+    useAsync: false,
     parseReport: (content) => reportFreeSchema.parse(parseCompletionJson(content))
   });
   const fullCompletion = await createReportCompletion({
@@ -394,6 +404,7 @@ export async function generateOpenAiReport(context: ReportContext): Promise<Gene
     photoInput,
     schemaName: "ikigai_full_report",
     jsonSchema: reportFullJsonSchema,
+    useAsync: env.OPENAI_ASYNC_REPORTS_ENABLED && supportsCompatibleAsyncCompletions(),
     parseReport: (content) => reportFullSchema.parse(parseCompletionJson(content))
   });
   const promptVersion = Math.max(freeCompletion.promptVersion, fullCompletion.promptVersion);
@@ -442,6 +453,8 @@ async function buildCompletionInput(
   return {
     userContent,
     systemPrompt: prompts.systemPrompt,
+    analysisId: context.analysisId,
+    tier,
     promptVersion: prompts.promptVersion
   };
 }
@@ -458,11 +471,16 @@ type ReportCompletionRequest<TReport> = {
   photoInput: string | null;
   schemaName: string;
   jsonSchema: Record<string, unknown>;
+  useAsync: boolean;
   parseReport: (content: string) => TReport;
 };
 
 function supportsNativeJsonSchemaResponseFormat() {
   return env.OPENAI_BASE_URL.includes("api.openai.com");
+}
+
+function supportsCompatibleAsyncCompletions() {
+  return !supportsNativeJsonSchemaResponseFormat();
 }
 
 function buildResponseFormat(schemaName: string, jsonSchema: Record<string, unknown>): ResponseFormat | null {
@@ -530,6 +548,85 @@ async function createChatCompletionWithJsonMode(
       signal
     }));
   }
+}
+
+function buildAsyncIdempotencyKey(input: Awaited<ReturnType<typeof buildCompletionInput>>, schemaName: string, photoInputUsed: boolean) {
+  return [
+    "report",
+    input.analysisId,
+    schemaName,
+    `v${input.promptVersion}`,
+    photoInputUsed ? "photo" : "no-photo"
+  ].join("-");
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getAsyncJobId(job: AsyncCompletionJob) {
+  const jobId = job.job_id ?? job.jobId ?? job.id;
+  return typeof jobId === "string" && jobId ? jobId : null;
+}
+
+function formatAsyncError(error: unknown) {
+  if (!error) return "unknown async completion error";
+  if (typeof error === "string") return error;
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+}
+
+async function fetchAsyncCompletionJson(path: string, init: RequestInit = {}) {
+  const apiKey = getOpenAiApiKey();
+  if (!apiKey) throw new Error("OpenAI-compatible client is not configured");
+  const response = await fetch(`${env.OPENAI_BASE_URL.replace(/\/$/, "")}${path}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      ...(init.headers ?? {})
+    }
+  });
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`OpenAI-compatible async completion failed with ${response.status}: ${text.slice(0, 500)}`);
+  }
+  return (text ? JSON.parse(text) : {}) as AsyncCompletionJob;
+}
+
+async function createAsyncChatCompletion(
+  params: Omit<ChatCompletionCreateParamsNonStreaming, "response_format">,
+  responseFormat: ResponseFormat | null,
+  idempotencyKey: string
+) {
+  const body = responseFormat ? { ...params, response_format: responseFormat } : params;
+  const created = await fetchAsyncCompletionJson("/chat/completions/async", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Idempotency-Key": idempotencyKey
+    },
+    body: JSON.stringify(body)
+  });
+  const jobId = getAsyncJobId(created);
+  if (!jobId) throw new Error(`OpenAI-compatible async completion did not return a job id: ${JSON.stringify(created).slice(0, 500)}`);
+
+  const startedAt = Date.now();
+  while (Date.now() - startedAt <= env.OPENAI_ASYNC_TIMEOUT_MS) {
+    const job = await fetchAsyncCompletionJson(`/chat/completions/async/${encodeURIComponent(jobId)}`);
+    if (job.status === "succeeded") {
+      if (!job.response) throw new Error(`OpenAI-compatible async completion ${jobId} succeeded without response`);
+      return job.response;
+    }
+    if (job.status === "failed" || job.status === "cancelled") {
+      throw new Error(`OpenAI-compatible async completion ${jobId} ${job.status}: ${formatAsyncError(job.error)}`);
+    }
+    await sleep(env.OPENAI_ASYNC_POLL_INTERVAL_MS);
+  }
+
+  throw new Error(`OpenAI-compatible async completion ${jobId} timed out after ${env.OPENAI_ASYNC_TIMEOUT_MS}ms`);
 }
 
 function buildJsonContract(schemaName: string, jsonSchema: Record<string, unknown>) {
@@ -604,7 +701,14 @@ async function requestReportJsonRepair(
 async function createReportCompletion<TReport>(request: ReportCompletionRequest<TReport>): Promise<CompletionResult<TReport>> {
   const input = await buildCompletionInput(request.context, request.tier, request.transcript, request.voiceMetrics, request.photoInput);
   try {
-    return await requestReportCompletion(input, Boolean(request.photoInput), request.schemaName, request.jsonSchema, request.parseReport);
+    return await requestReportCompletion(
+      input,
+      Boolean(request.photoInput),
+      request.schemaName,
+      request.jsonSchema,
+      request.useAsync,
+      request.parseReport
+    );
   } catch (error) {
     if (!request.photoInput || !(error instanceof Error) || !isImageInputError(error.message)) {
       throw error;
@@ -615,6 +719,7 @@ async function createReportCompletion<TReport>(request: ReportCompletionRequest<
       false,
       request.schemaName,
       request.jsonSchema,
+      request.useAsync,
       request.parseReport
     );
   }
@@ -625,6 +730,7 @@ async function requestReportCompletion<TReport>(
   photoInputUsed: boolean,
   schemaName: string,
   jsonSchema: Record<string, unknown>,
+  useAsync: boolean,
   parseReport: (content: string) => TReport
 ): Promise<CompletionResult<TReport>> {
   const openai = getOpenAiClient();
@@ -647,16 +753,15 @@ async function requestReportCompletion<TReport>(
   try {
     const responseFormat = buildResponseFormat(schemaName, jsonSchema);
 
-    const response = await createChatCompletionWithJsonMode(
-      openai,
-      {
-        model: env.OPENAI_MODEL,
-        temperature: 0.25,
-        max_tokens: env.OPENAI_MAX_OUTPUT_TOKENS,
-        messages
-      },
-      responseFormat
-    );
+    const params = {
+      model: env.OPENAI_MODEL,
+      temperature: 0.25,
+      max_tokens: env.OPENAI_MAX_OUTPUT_TOKENS,
+      messages
+    } satisfies Omit<ChatCompletionCreateParamsNonStreaming, "response_format">;
+    const response = useAsync
+      ? await createAsyncChatCompletion(params, responseFormat, buildAsyncIdempotencyKey(input, schemaName, photoInputUsed))
+      : await createChatCompletionWithJsonMode(openai, params, responseFormat);
 
     const message = response.choices?.[0]?.message;
     if (message?.refusal) throw new Error(`OpenAI-compatible gateway refused report generation: ${message.refusal}`);

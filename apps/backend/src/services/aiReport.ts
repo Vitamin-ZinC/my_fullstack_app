@@ -1,12 +1,17 @@
 import type { IkigaiAnswers, ReportFree, ReportFull, ReportTier } from "@levelup/contracts";
 import type { MediaAsset } from "@prisma/client";
-import type { ChatCompletionContentPart, ChatCompletionMessageParam } from "openai/resources/chat/completions";
+import type {
+  ChatCompletionContentPart,
+  ChatCompletionCreateParamsNonStreaming,
+  ChatCompletionMessageParam
+} from "openai/resources/chat/completions";
 import { basename } from "node:path";
 import { z } from "zod";
 import { env } from "../env.js";
 import { getMediaAssetPublicUrl, readMediaAssetBuffer } from "./media.js";
 import { buildReportPromptMessages } from "./reportPrompts.js";
 import { analyzeAudioMetrics, type AudioTranscription, type VoiceSignalMetrics } from "./audioMetrics.js";
+import { parseCompletionJson } from "./completionJson.js";
 import { getOpenAiClient, hasOpenAiClient } from "./openaiClient.js";
 
 type ReportContext = {
@@ -38,6 +43,9 @@ type CompletionResult<TReport> = {
   photoInputUsed: boolean;
   promptVersion: number;
 };
+
+type OpenAiClient = NonNullable<ReturnType<typeof getOpenAiClient>>;
+type ResponseFormat = NonNullable<ChatCompletionCreateParamsNonStreaming["response_format"]>;
 
 const scoreSchema = z.object({
   love: z.number().int().min(0).max(100),
@@ -442,21 +450,6 @@ function isImageInputError(body: string) {
   return /image_parse_error|unsupported image|invalid image|invalid_image|400 status code \(no body\)|status code 400/i.test(body);
 }
 
-function parseCompletionJson(content: string) {
-  const withoutThink = content.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
-  const withoutFence = withoutThink.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
-  try {
-    return JSON.parse(withoutFence);
-  } catch {
-    const start = withoutFence.indexOf("{");
-    const end = withoutFence.lastIndexOf("}");
-    if (start >= 0 && end > start) {
-      return JSON.parse(withoutFence.slice(start, end + 1));
-    }
-    throw new Error("OpenAI-compatible gateway returned non-JSON report content");
-  }
-}
-
 type ReportCompletionRequest<TReport> = {
   context: ReportContext;
   tier: ReportTier;
@@ -470,6 +463,42 @@ type ReportCompletionRequest<TReport> = {
 
 function supportsNativeJsonSchemaResponseFormat() {
   return env.OPENAI_BASE_URL.includes("api.openai.com");
+}
+
+function buildResponseFormat(schemaName: string, jsonSchema: Record<string, unknown>): ResponseFormat {
+  if (!supportsNativeJsonSchemaResponseFormat()) {
+    return { type: "json_object" };
+  }
+
+  return {
+    type: "json_schema",
+    json_schema: {
+      name: schemaName,
+      strict: true,
+      schema: jsonSchema
+    }
+  };
+}
+
+function isResponseFormatUnsupportedError(message: string) {
+  return /response_format|json_schema|json_object|unsupported.*format|invalid.*parameter|unknown field|extra field/i.test(message);
+}
+
+async function createChatCompletionWithJsonMode(
+  openai: OpenAiClient,
+  params: Omit<ChatCompletionCreateParamsNonStreaming, "response_format">,
+  responseFormat: ResponseFormat
+) {
+  try {
+    return await openai.chat.completions.create({
+      ...params,
+      response_format: responseFormat
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!isResponseFormatUnsupportedError(message)) throw error;
+    return openai.chat.completions.create(params);
+  }
 }
 
 function buildJsonContract(schemaName: string, jsonSchema: Record<string, unknown>) {
@@ -490,6 +519,55 @@ function buildJsonSystemRule() {
     "REPORT OUTPUT RULE:",
     "For report-generation requests, return only the requested raw JSON object. Do not include markdown, XML, comments, explanations, or hidden reasoning."
   ].join("\n");
+}
+
+async function requestReportJsonRepair(
+  openai: OpenAiClient,
+  schemaName: string,
+  jsonSchema: Record<string, unknown>,
+  invalidContent: string,
+  validationError: string,
+  responseFormat: ResponseFormat
+) {
+  const repairMessages: ChatCompletionMessageParam[] = [
+    {
+      role: "system",
+      content: [
+        "You repair report-generation JSON.",
+        "Return only one raw JSON object.",
+        "Do not include markdown, comments, explanations, or hidden reasoning.",
+        "Preserve the user's report meaning where possible, but fix syntax and fill missing required fields so the object satisfies the schema."
+      ].join("\n")
+    },
+    {
+      role: "user",
+      content: [
+        `Schema name: ${schemaName}`,
+        "JSON Schema:",
+        JSON.stringify(jsonSchema),
+        "Validation or parse error:",
+        validationError,
+        "Invalid report content:",
+        invalidContent
+      ].join("\n\n")
+    }
+  ];
+
+  const response = await createChatCompletionWithJsonMode(
+    openai,
+    {
+      model: env.OPENAI_MODEL,
+      temperature: 0,
+      max_tokens: 7000,
+      messages: repairMessages
+    },
+    responseFormat
+  );
+
+  const message = response.choices?.[0]?.message;
+  if (message?.refusal) throw new Error(`OpenAI-compatible gateway refused JSON repair: ${message.refusal}`);
+  if (!message?.content) throw new Error("OpenAI-compatible gateway returned an empty JSON repair");
+  return message.content;
 }
 
 async function createReportCompletion<TReport>(request: ReportCompletionRequest<TReport>): Promise<CompletionResult<TReport>> {
@@ -536,34 +614,45 @@ async function requestReportCompletion<TReport>(
   ];
 
   try {
-    const responseFormat = supportsNativeJsonSchemaResponseFormat()
-      ? {
-          type: "json_schema" as const,
-          json_schema: {
-            name: schemaName,
-            strict: true,
-            schema: jsonSchema
-          }
-        }
-      : undefined;
+    const responseFormat = buildResponseFormat(schemaName, jsonSchema);
 
-    const response = await openai.chat.completions.create({
-      model: env.OPENAI_MODEL,
-      temperature: 0.35,
-      max_tokens: 4000,
-      messages,
-      ...(responseFormat ? { response_format: responseFormat } : {})
-    });
+    const response = await createChatCompletionWithJsonMode(
+      openai,
+      {
+        model: env.OPENAI_MODEL,
+        temperature: 0.25,
+        max_tokens: 7000,
+        messages
+      },
+      responseFormat
+    );
 
     const message = response.choices?.[0]?.message;
     if (message?.refusal) throw new Error(`OpenAI-compatible gateway refused report generation: ${message.refusal}`);
     if (!message?.content) throw new Error("OpenAI-compatible gateway returned an empty report");
 
-    return {
-      report: parseReport(message.content),
-      photoInputUsed,
-      promptVersion: input.promptVersion
-    };
+    try {
+      return {
+        report: parseReport(message.content),
+        photoInputUsed,
+        promptVersion: input.promptVersion
+      };
+    } catch (parseError) {
+      const repairedContent = await requestReportJsonRepair(
+        openai,
+        schemaName,
+        jsonSchema,
+        message.content,
+        parseError instanceof Error ? parseError.message : String(parseError),
+        responseFormat
+      );
+
+      return {
+        report: parseReport(repairedContent),
+        photoInputUsed,
+        promptVersion: input.promptVersion
+      };
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`OpenAI-compatible report generation failed: ${message.slice(0, 240)}`);

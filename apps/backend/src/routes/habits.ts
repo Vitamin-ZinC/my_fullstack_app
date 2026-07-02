@@ -310,6 +310,76 @@ export async function habitsRoutes(app: FastifyInstance) {
     return { program: serializeProgram(program) };
   });
 
+  app.post("/api/habits/start", async (request, reply) => {
+    const session = await requireSession(request, reply);
+    if (!session) return;
+
+    const existing = await findActiveProgram(session);
+    if (existing) return { program: serializeProgram(existing) };
+
+    await ensureHabitDefinitions();
+    const definitions = await prisma.habitDefinition.findMany({
+      where: { active: true },
+      orderBy: [{ cycle: "asc" }, { week: "asc" }]
+    });
+
+    const profile = buildManualProgramProfile();
+    const program = await prisma.habitProgram.create({
+      data: {
+        userId: session.userId,
+        sessionId: session.id,
+        source: "manual-start",
+        title: profile.title,
+        weakZone: profile.weakZone,
+        archetype: profile.archetype,
+        topRole: profile.topRole,
+        careerAction: profile.careerAction,
+        finalInsight: profile.finalInsight,
+        profile: profile.raw,
+        enrollments: {
+          create: definitions.map((definition, index) => ({
+            habitDefinitionId: definition.id,
+            title: personalizeHabitTitle(definition.title, profile.weakZone, index),
+            focus: definition.focus,
+            essence: definition.essence,
+            practice: definition.practice,
+            why: definition.why,
+            book: definition.book,
+            zone: definition.zone,
+            week: definition.week,
+            sortOrder: index + 1
+          }))
+        },
+        insights: {
+          create: [{
+            text: `Стартовый фокус: ${profile.finalInsight}`,
+            source: "manual-start"
+          }]
+        },
+        rewards: {
+          create: [{
+            type: "program_started",
+            label: "Базовая программа привычек сохранена в кабинете",
+            xp: 15
+          }]
+        }
+      },
+      include: programInclude()
+    });
+
+    await prisma.analyticsEvent.create({
+      data: {
+        name: "habit_program_started",
+        locale: session.locale,
+        sessionId: session.id,
+        userId: session.userId,
+        properties: { programId: program.id, source: "manual-start" }
+      }
+    });
+
+    return { program: serializeProgram(program) };
+  });
+
   app.post("/api/habits/metrics", async (request, reply) => {
     const session = await requireSession(request, reply);
     if (!session) return;
@@ -657,6 +727,22 @@ function buildProgramProfile(report: unknown) {
       strengths: topRole?.strengths,
       risks: topRole?.risks
     }))
+  };
+}
+
+function buildManualProgramProfile() {
+  return {
+    title: "Базовый путь привычек",
+    weakZone: null,
+    archetype: "Старт без диагностики",
+    topRole: "Мягкая ежедневная практика",
+    careerAction: "Начать с одного маленького шага: ресурс, фокус, наблюдение и сохранённый инсайт.",
+    finalInsight: "Можно начать работу с привычками без повторной диагностики: сначала собрать устойчивый ритм, а персонализацию подключить позже из отчёта.",
+    raw: {
+      source: "manual-start",
+      summary: "Базовая программа привычек без привязки к диагностике",
+      mode: "no-report"
+    }
   };
 }
 

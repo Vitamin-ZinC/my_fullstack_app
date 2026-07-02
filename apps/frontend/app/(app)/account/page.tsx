@@ -79,10 +79,10 @@ export default function AccountPage() {
 
       <section className="card green-border account-navigator">
         <div>
-          <h2 className="ub">Навигатор привычек</h2>
-          <p className="muted">Переводит выводы диагностики в ежедневные действия, отметки состояния и персональные рекомендации Пингви.</p>
+          <h2 className="ub">Привычки и AI Навигатор</h2>
+          <p className="muted">Отдельный раздел кабинета для ежедневных шагов, метрик состояния и архива инсайтов. Можно начать без диагностики, а отчет подключить позже.</p>
         </div>
-        <Link className="button" href="/habits?from=account">Открыть навигатор</Link>
+        <Link className="button" href="/habits?from=account">Открыть привычки</Link>
       </section>
 
       <section className="stack">
@@ -93,7 +93,8 @@ export default function AccountPage() {
 
         {reports.length === 0 ? (
           <div className="card">
-            <p className="muted">Здесь появятся все ваши отчёты после прохождения диагностики.</p>
+            <p className="muted">Здесь появятся все ваши отчёты после прохождения диагностики. Привычки уже доступны отдельно, без обязательного теста.</p>
+            <Link className="button secondary account-inline-link" href="/habits?from=account">Перейти в привычки</Link>
           </div>
         ) : (
           reports.map((report) => (

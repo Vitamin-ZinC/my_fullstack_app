@@ -178,6 +178,13 @@ export const api = {
       body: JSON.stringify({})
     });
   },
+  startHabitProgram: async () => {
+    await ensureGuestSession();
+    return request<HabitProgramResponse>("/api/habits/start", {
+      method: "POST",
+      body: JSON.stringify({})
+    });
+  },
   saveHabitMetric: (payload: { programId: string; date?: string; energy: number; clarity: number; stability: number }) => request<HabitProgramResponse>("/api/habits/metrics", {
     method: "POST",
     body: JSON.stringify(payload)

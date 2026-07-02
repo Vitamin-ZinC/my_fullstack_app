@@ -664,6 +664,10 @@ svg {
   line-height: 1.3;
 }
 
+.account-inline-link {
+  margin-top: 14px;
+}
+
 .section-title {
   font-size: 16px;
 }
@@ -2243,6 +2247,10 @@ svg {
   display: block;
   color: #fff;
   margin-bottom: 3px;
+}
+
+.habits-current .button + .button {
+  margin-top: 10px;
 }
 
 .habits-metric {

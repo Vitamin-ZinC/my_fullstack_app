@@ -126,6 +126,21 @@ function HabitsContent() {
     }
   }
 
+  async function startManualProgram() {
+    setBusy(true);
+    setError("");
+    try {
+      const result = await api.startHabitProgram();
+      setProgram(result.program);
+      setLatestReport(null);
+      setSavedMessage("Базовая программа привычек сохранена в кабинете");
+    } catch (reason) {
+      setError(readableError(reason, "Не удалось запустить привычки"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function saveMetric() {
     if (!program) return;
     setBusy(true);
@@ -224,8 +239,8 @@ function HabitsContent() {
           </div>
           <h1>Привычки теперь сохраняются в кабинете</h1>
           <p>
-            Повторно проходить диагностику не нужно: можно запустить программу из последнего сохраненного отчета
-            и продолжить с любого устройства после входа.
+            Повторно проходить диагностику не нужно: можно запустить базовую программу сразу или собрать
+            персональную версию из последнего сохраненного отчета.
           </p>
           {error && <p className="auth-error">{error}</p>}
           {latestReport ? (
@@ -237,12 +252,18 @@ function HabitsContent() {
                 <Sparkles size={17} />
                 Создать программу из отчета
               </button>
+              <button className="button secondary" type="button" disabled={busy} onClick={startManualProgram}>
+                Начать без диагностики
+              </button>
             </div>
           ) : (
             <div className="habits-current">
-              <h2>Нет сохраненного отчета</h2>
-              <p>Сначала пройдите диагностику или войдите в аккаунт, где уже есть отчет.</p>
-              <Link className="button" href="/flow/voice">Пройти диагностику</Link>
+              <h2>Можно начать без отчета</h2>
+              <p>Запустите базовый путь привычек сейчас. Если позже появится диагностический отчет, навигатор сможет опираться и на него.</p>
+              <button className="button" type="button" disabled={busy} onClick={startManualProgram}>
+                <Sparkles size={17} />
+                Начать привычки
+              </button>
               <Link className="button secondary" href="/login">Войти в кабинет</Link>
             </div>
           )}

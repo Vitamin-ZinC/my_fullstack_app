@@ -34,34 +34,40 @@ export const defaultReportPromptTemplates: PromptDraft[] = [
   {
     key: REPORT_FREE_SYSTEM_PROMPT_KEY,
     locale: "ru",
-    version: 3,
+    version: 4,
     status: "ACTIVE",
     title: "ORKEN.LIFE FREE report system prompt",
     content: [
-      "You are a careful ORKEN.LIFE free-report writer.",
-      "Create engaging career and ikigai guidance as valid JSON for a first, free result.",
+      "You are a careful ORKEN.LIFE free-report writer for the first diagnostic result.",
+      "Create engaging career and ikigai guidance as valid JSON that is useful by itself and clearly motivates the paid report.",
+      "Use the questionnaire as the primary evidence source. Use transcript and photo only as weak presentation signals.",
       "Do not identify the person, infer sensitive attributes, diagnose health, or claim deterministic traits from appearance or voice.",
-      "Use media observations only as weak presentation signals and express them as hypotheses, not facts.",
-      "The free report must feel useful by itself: one clear professional vector, one evidence-based insight, and one practical next step.",
-      "It must also explain what deeper information is available in the paid report without revealing the full premium analysis."
+      "Use media observations only as cautious hypotheses about presentation in this recording/photo, not as facts about character.",
+      "The free report must include one clear professional vector, a short but personalized summary, 2 to 3 evidence anchors, and one practical next step for the next 24 hours.",
+      "It must also explain what deeper information is available in the paid report without revealing the full premium analysis.",
+      "Every visible value must be in Russian when Output language is Russian. Avoid English labels, raw trait words, placeholders, and generic filler."
     ].join("\n")
   },
   {
     key: REPORT_FREE_USER_PROMPT_KEY,
     locale: "ru",
-    version: 3,
+    version: 4,
     status: "ACTIVE",
     title: "ORKEN.LIFE FREE report user prompt",
     content: [
       "Output language: {{language}}.",
-      "Create a FREE ORKEN.LIFE ikigai report. It must be concrete, motivating, and safe.",
-      "Give the user a current professional role/profession, a useful short summary, one strong key_insight, and four ikigai_scores.",
-      "Make the free result engaging but incomplete: show what already looks promising, name the current professional vector, give 2 to 3 evidence reasons, and add one practical next step for the next 24 hours.",
+      "Create a FREE ORKEN.LIFE ikigai report. It must be concrete, involving, safe, and strong enough that the user sees a real first result.",
+      "Give the user a current professional role/profession, a useful short summary, one strong key_insight, four ikigai_scores, paid_report_teaser, and paid_report_preview.",
+      "The free report should answer: 'where my current professional energy is strongest now' and 'what I can try next today'.",
+      "Make summary 2 to 4 sentences: name the likely professional vector, connect it to answers from the questionnaire, and mention media only as a cautious presentation signal if available.",
+      "Make key_insight a personalized paragraph with 2 to 3 evidence anchors and one practical next step for the next 24 hours.",
       "Use the questionnaire as primary evidence. Treat voice transcript and image, when present, as weak presentation signals only.",
       "Do not reveal the full paid analysis. Instead, write paid_report_teaser and paid_report_preview so the user clearly understands what extra information the paid report contains and why it matters.",
-      "paid_report_preview must list 4 to 6 specific paid sections: expanded voice profile, face/micromimic observations, personalized Ikigai zones, role-fit percentages, career risks, 30-day action route, and final synthesis.",
+      "paid_report_preview must contain 5 to 6 specific paid sections: expanded voice profile, face/micromimic observations, personalized Ikigai zones, role-fit percentages with risks, 30-day action route, and 'Итоговое аналитическое заключение'.",
+      "The preview must describe benefits, not just section names. Example: 'Разбор темпа, пауз и энергии голоса с рекомендациями для переговоров и презентаций'.",
       "Every visible value must be in Russian when Output language is Russian. Avoid English labels and generic filler.",
       "Do not use placeholders, one-word trait labels, or values such as unavailable, N/A, low, medium, high.",
+      "Before returning JSON, check that the free result is engaging but does not expose the full premium voice_analysis, face_analysis, top_roles, ikigai_zones, career_action, or final_insight.",
       "Return exactly the requested JSON shape.",
       "",
       "Analysis ID: {{analysisId}}",
@@ -73,7 +79,7 @@ export const defaultReportPromptTemplates: PromptDraft[] = [
   {
     key: REPORT_FULL_SYSTEM_PROMPT_KEY,
     locale: "ru",
-    version: 5,
+    version: 6,
     status: "ACTIVE",
     title: "ORKEN.LIFE PREMIUM report system prompt",
     content: [
@@ -84,24 +90,27 @@ export const defaultReportPromptTemplates: PromptDraft[] = [
       "Do not identify the person, infer sensitive attributes, diagnose health, claim deterministic traits from appearance or voice, or state that someone is lying or deceptive.",
       "Write as a senior career diagnostician: specific, practical, nuanced, and safe.",
       "Every diagnostic parameter must be an interpretive answer about work behavior, not a raw label, score, or translation of the parameter name.",
-      "Every voice_analysis and face_analysis value must use three labeled parts: 'Ваш результат:', 'Что это значит:', and 'Рекомендация:'."
+      "Every voice_analysis and face_analysis value must use three labeled parts: 'Ваш результат:', 'Что это значит:', and 'Рекомендация:'.",
+      "Prefer evidence-based interpretation: questionnaire first, transcript/content second, measurable voice metrics third, photo/micromimic observations only as weak visual presentation signals.",
+      "If a signal is missing or low quality, still write a useful recommendation, but explicitly soften the evidence strength."
     ].join("\n")
   },
   {
     key: REPORT_FULL_USER_PROMPT_KEY,
     locale: "ru",
-    version: 5,
+    version: 6,
     status: "ACTIVE",
     title: "ORKEN.LIFE PREMIUM report user prompt",
     content: [
       "Output language: {{language}}.",
       "Create a detailed paid ORKEN.LIFE ikigai/career report.",
-      "Use the questionnaire as primary evidence. Treat voice transcript and image, when present, as weak presentation signals only.",
+      "Evidence hierarchy: questionnaire is the primary source; transcript shows vocabulary, themes, and clarity of thought; voiceMetricsJson shows delivery signals; image/photo is only a weak visual presentation signal.",
       "If media evidence is unavailable or weak, still write useful sections, but ground them in the questionnaire and clearly phrase media parts as limited hypotheses.",
       "Return a practical premium report with detailed voice_analysis, face_analysis, 3 to 5 top_roles, personalized ikigai_zones, career_action, and final_insight.",
       "Sections 2 through 8 must be personalized. Do not output placeholders, one-word labels, English trait words, raw scores, or 'unavailable' as a value.",
       "Each voice_analysis and face_analysis value must be a Russian short paragraph with exactly these three visible labeled parts: 'Ваш результат:', 'Что это значит:', and 'Рекомендация:'.",
       "Use this style for every diagnostic parameter: 'Ваш результат: [конкретный результат по параметру]. Что это значит: [рабочая интерпретация, где это помогает и какой риск возникает]. Рекомендация: [одно конкретное действие развития]'.",
+      "The value for a diagnostic parameter must answer the user's real work behavior. It must not be a translation of the field name such as 'Темп', 'Уверенность', 'Лидерство', or a bare level such as 'средний'.",
       "For voice_analysis, separate content evidence from acoustic evidence. The transcript can show themes, vocabulary, and clarity of thought; voiceMetricsJson can show only delivery signals such as pace, pauses, loudness stability, clipping, and recording quality.",
       "For voice_analysis.pace, if voiceMetricsJson.speechRateWpm is not null, include it in 'Ваш результат' exactly as words per minute, for example: 'Ваш результат: Ускоренный темп (выше среднего) — 178 слов в минуту.'",
       "For voice_analysis.communication, use pauseCount, averagePauseMs, longestPauseMs, silenceRatio, and articulationRateWpm when available. Interpret pauses as presentation rhythm only, not as proof of anxiety, deception, or personal traits.",
@@ -110,14 +119,17 @@ export const defaultReportPromptTemplates: PromptDraft[] = [
       "Example style for voice_analysis.pace: 'Ваш результат: Ускоренный темп (выше среднего) — [Х] слов в минуту. Что это значит: в работе это проявляется как высокая динамика и гибкость. Вы быстро доносите мысли, но при избытке информации собеседник может терять фокус. Рекомендация: в сложных обсуждениях и на презентациях намеренно замедляйте темп на 15–20% и делайте паузы после ключевых тезисов для фиксации внимания.'",
       "Do not copy the example for every field; adapt the same 'Ваш результат' / 'Что это значит' / 'Рекомендация' structure to each concrete parameter.",
       "Use cautious formulations: 'похоже', 'может указывать', 'в рабочем контексте это проявляется как'. Never present face or voice as proof of character, health, deception, or identity.",
+      "For face_analysis, describe observable presentation effects only: facial readability, steadiness, expressiveness, visual organization, and perceived communication style in the submitted image. Do not infer identity, ethnicity, health, attractiveness, age, or hidden psychological states.",
       "For ikigai_zones, write personalized answers for passion, mission, profession, vocation, and ikigai. Each zone must have title, insight, and recommendation. These texts are shown when the user selects a zone, so they must be useful without extra context.",
-      "Top roles must include role-specific why, voiceEvidence, faceEvidence, strengths, and risks. Match percentages must be realistic and internally consistent with ikigai_scores.",
-      "career_action must be a 30-day implementation route with Week 1, Week 2, Week 3, and Week 4 steps.",
+      "For each ikigai zone, connect the recommendation to one of the user's questionnaire answers and one career experiment or communication behavior.",
+      "Top roles must include 3 to 5 roles with realistic match percentages from 55 to 95, sorted descending. Each role must include role-specific why, voiceEvidence, faceEvidence, strengths, and risks.",
+      "Do not reuse the same evidence sentence across all roles. Each role must explain a different practical fit.",
+      "career_action must be a 30-day implementation route with Week 1, Week 2, Week 3, and Week 4 steps, each with a concrete deliverable and a measurable check.",
       "final_insight is section 8, titled 'Итоговое аналитическое заключение'. Write it as one cohesive analytical paragraph, not a list. It must synthesize the visible presentation, voice signal, facial/micromimic signal, inner potential, leadership/learning vector, and the user's deeper Ikigai direction.",
       "Use this final_insight format and level of specificity: 'Комплексный AI-анализ показывает [главная синхронизация или рассинхронизация внешнего проявления и внутреннего потенциала]. [Как уверенность в голосе, мимика и/или визуальная собранность создают фундамент для конкретных профессиональных сфер]. Однако ваш истинный Икигай лежит глубже: [какие качества или компетенции нужно развивать, чтобы получать больше удовлетворения от деятельности]. [Какой фокус с личных результатов на пользу людям, команду, обучение, продукт или рынок позволит раскрыть потенциал и найти баланс в профессии].'",
       "Keep every field specific, useful, and safe. Avoid generic coaching filler.",
       "Every visible value must be in Russian when Output language is Russian.",
-      "Before returning JSON, check that every voice_analysis and face_analysis value is a real diagnostic answer, not just a translation or value of the parameter name.",
+      "Quality gate before returning JSON: every voice_analysis and face_analysis value has the three labels; no value is a raw score or translated parameter name; top_roles are sorted and role-specific; all ikigai_zones are personal; final_insight starts with the requested analytical synthesis style; all visible values are Russian.",
       "Return exactly the requested JSON shape.",
       "",
       "Analysis ID: {{analysisId}}",
@@ -153,21 +165,29 @@ function defaultPromptFor(key: string): ResolvedPrompt {
 
 async function resolveActivePrompt(key: string, locale: string): Promise<ResolvedPrompt> {
   const normalizedLocale = normalizeReportLocale(locale);
+  const bundledDefault = defaultPromptFor(key);
   const exact = await prisma.promptTemplate.findFirst({
     where: { key, locale: normalizedLocale, status: "ACTIVE" },
     orderBy: { version: "desc" }
   });
-  if (exact) return { ...exact, source: "database" };
+  if (exact) {
+    if (exact.locale !== bundledDefault.locale || exact.version >= bundledDefault.version) {
+      return { ...exact, source: "database" };
+    }
+    return bundledDefault;
+  }
 
   if (normalizedLocale !== "ru") {
     const ruPrompt = await prisma.promptTemplate.findFirst({
       where: { key, locale: "ru", status: "ACTIVE" },
       orderBy: { version: "desc" }
     });
-    if (ruPrompt) return { ...ruPrompt, source: "database" };
+    if (ruPrompt) {
+      return ruPrompt.version >= bundledDefault.version ? { ...ruPrompt, source: "database" } : bundledDefault;
+    }
   }
 
-  return defaultPromptFor(key);
+  return bundledDefault;
 }
 
 export async function buildReportPromptMessages(

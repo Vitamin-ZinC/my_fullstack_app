@@ -20,6 +20,53 @@ async function fulfillJson(route, json) {
 
 const diagnosticText = "Параметр сформирован как развернутый диагностический ответ: он объясняет рабочее проявление, пользу, риск и следующий шаг развития.";
 
+function createHabitProgram(overrides = {}) {
+  const activeEnrollment = {
+    id: "habit-enrollment-1",
+    slug: "sleep-foundation",
+    cycle: 1,
+    week: 1,
+    title: "Сон как фундамент",
+    focus: "Вернуть базовый ресурс без давления",
+    essence: "Устойчивость начинается с восстановления.",
+    practice: "Выбери один вечерний якорь на 10 минут.",
+    why: "Так решения становятся спокойнее и точнее.",
+    book: "Атомные привычки",
+    zone: "resource",
+    status: "ACTIVE",
+    sortOrder: 1,
+    checkinsDone: 0,
+    lastCheckinAt: null
+  };
+  const base = {
+    id: "habit-program-1",
+    status: "ACTIVE",
+    source: "analysis-report",
+    title: "Навигатор привычек ORKEN.LIFE",
+    weakZone: "profession",
+    archetype: "Продуктовый стратег",
+    topRole: "Продуктовый стратег",
+    careerAction: "Неделя 1: собрать один маленький шаг и проверить его в реальности.",
+    finalInsight: "Комплексный AI-анализ показывает сильный вектор к структурной коммуникации.",
+    startedAt: "2026-07-02T00:00:00.000Z",
+    createdAt: "2026-07-02T00:00:00.000Z",
+    activeEnrollment,
+    enrollments: [activeEnrollment],
+    insights: [],
+    metrics: [],
+    rewards: [{ id: "reward-1", type: "start", label: "Старт программы", xp: 10, createdAt: "2026-07-02T00:00:00.000Z" }],
+    stats: { xp: 10, daysInProgram: 1, checkinsDone: 0, insightsCount: 0, streakDays: 0, currentWeek: 1 }
+  };
+
+  return {
+    ...base,
+    ...overrides,
+    stats: { ...base.stats, ...(overrides.stats || {}) },
+    activeEnrollment: overrides.activeEnrollment ?? activeEnrollment,
+    enrollments: overrides.enrollments ?? [overrides.activeEnrollment ?? activeEnrollment]
+  };
+}
+
 test.use({
   permissions: ["microphone", "camera"],
   launchOptions: {
@@ -143,6 +190,10 @@ test("ORKEN.LIFE frontend flow works with mocked backend", async ({ page }) => {
       promoCode: "FREE100"
     });
   });
+  await page.route(`${apiBase}/api/habits/enroll-from-report/analysis-test`, async (route) => {
+    expect(route.request().method()).toBe("POST");
+    await fulfillJson(route, { program: createHabitProgram() });
+  });
 
   await page.goto(`${appBase}/`);
   await expect(page.getByText("ORKEN.LIFE").first()).toBeVisible();
@@ -219,10 +270,9 @@ test("ORKEN.LIFE frontend flow works with mocked backend", async ({ page }) => {
   await expect.poll(async () => page.evaluate(() => window.sessionStorage.getItem("print-called"))).toBe("1");
 
   await page.getByTestId("activate-habits-link").click();
-  await expect(page).toHaveURL(/\/habits\?from=ikigai$/);
-  await expect(page.getByTestId("habits-frame")).toBeVisible();
-  const habitsFrame = page.frameLocator('[data-testid="habits-frame"]');
-  await expect(habitsFrame.getByText("ORKEN.LIFE").first()).toBeVisible({ timeout: 15000 });
+  await expect(page).toHaveURL(/\/habits\?from=ikigai&analysisId=analysis-test$/);
+  await expect(page.getByTestId("habits-app")).toBeVisible();
+  await expect(page.getByText("Навигатор привычек ORKEN.LIFE")).toBeVisible({ timeout: 15000 });
 });
 
 test("legacy ikigai flow route launches analysis instead of showing the map step", async ({ page }) => {
@@ -256,56 +306,64 @@ test("legacy ikigai flow route launches analysis instead of showing the map step
 });
 
 test("habits tracker records daily marks and uses AI navigator", async ({ page }) => {
+  const program = createHabitProgram();
+  await page.route(`${apiBase}/api/auth/guest`, async (route) => fulfillJson(route, { sessionId: "habit-session", guestToken: "habit-token" }));
+  await page.route(`${apiBase}/api/habits/me`, async (route) => fulfillJson(route, {
+    program,
+    latestReport: null
+  }));
+  await page.route(`${apiBase}/api/habits/metrics`, async (route) => {
+    expect(route.request().postDataJSON()).toMatchObject({
+      programId: "habit-program-1",
+      energy: 6,
+      clarity: 6,
+      stability: 6
+    });
+    await fulfillJson(route, {
+      program: createHabitProgram({
+        metrics: [{ id: "metric-1", date: "2026-07-02", energy: 6, clarity: 6, stability: 6 }]
+      })
+    });
+  });
+  await page.route(`${apiBase}/api/habits/checkins`, async (route) => {
+    expect(route.request().postDataJSON()).toMatchObject({
+      programId: "habit-program-1",
+      enrollmentId: "habit-enrollment-1",
+      completed: true
+    });
+    await fulfillJson(route, {
+      program: createHabitProgram({
+        stats: { xp: 20, checkinsDone: 1, streakDays: 1 },
+        activeEnrollment: { ...program.activeEnrollment, checkinsDone: 1 },
+        rewards: [
+          ...program.rewards,
+          { id: "reward-2", type: "checkin", label: "Шаг отмечен", xp: 10, createdAt: "2026-07-02T00:02:00.000Z" }
+        ]
+      })
+    });
+  });
   await page.route(`${apiBase}/api/habits/navigator`, async (route) => fulfillJson(route, {
     reply: "Пингви видит состояние и предлагает один маленький шаг на сегодня.",
+    threadId: "thread-test",
     model: "test"
   }));
 
   await page.goto(`${appBase}/habits`);
-  await expect(page.getByTestId("habits-frame")).toBeVisible();
-  const habitsFrame = page.frameLocator('[data-testid="habits-frame"]');
-  await expect(habitsFrame.getByText("ORKEN.LIFE").first()).toBeVisible({ timeout: 15000 });
+  await expect(page.getByTestId("habits-app")).toBeVisible({ timeout: 15000 });
+  await expect(page.getByText("Навигатор привычек ORKEN.LIFE")).toBeVisible();
+  await expect(page.getByText("Сегодняшний фокус")).toBeVisible();
 
-  await habitsFrame.locator("input").first().fill("Audit");
-  await habitsFrame.locator("button:visible").first().click();
-  await habitsFrame.locator("button:visible").nth(1).click();
+  await page.getByRole("button", { name: /Сохранить состояние/ }).click();
+  await expect(page.getByText("Метрика дня сохранена")).toBeVisible();
 
-  for (let index = 0; index < 4; index += 1) {
-    await habitsFrame.locator("button:visible").first().click();
-  }
+  await page.getByPlaceholder("Короткая заметка к сегодняшнему шагу").fill("Audit");
+  await page.getByRole("button", { name: /Сохранить мягкий шаг/ }).click();
+  await expect(page.getByText("Шаг отмечен, награда добавлена")).toBeVisible();
 
-  await expect(habitsFrame.locator("body")).toContainText("XP", { timeout: 10000 });
-  const frame = page.frame({ url: /habits-standalone/ });
-  expect(frame).toBeTruthy();
-
-  await frame.evaluate(() => {
-    [...document.querySelectorAll("button")]
-      .find((button) => button.innerText.includes("Привычки"))
-      ?.click();
-  });
-  await expect(habitsFrame.locator("button.hc").first()).toBeVisible();
-  await habitsFrame.locator("button.hc").first().click();
-  await expect(habitsFrame.locator("body")).toContainText("1/7");
-
-  const markedState = await frame.evaluate(() => JSON.parse(localStorage.getItem("levelup_ikigai_habits_state_v1")));
-  expect(markedState.totalPoints).toBe(10);
-  expect(markedState.streakDays).toBe(1);
-  expect(markedState.habits.c1w1.completed).toBe(false);
-  expect(markedState.habits.c1w1.completedDates).toHaveLength(1);
-
-  await habitsFrame.locator("button.hc").first().click();
-  const unmarkedState = await frame.evaluate(() => JSON.parse(localStorage.getItem("levelup_ikigai_habits_state_v1")));
-  expect(unmarkedState.totalPoints).toBe(0);
-  expect(unmarkedState.habits.c1w1.completedDates).toHaveLength(0);
-
-  await frame.evaluate(() => {
-    [...document.querySelectorAll("button")]
-      .find((button) => button.innerText.includes("Пингви"))
-      ?.click();
-  });
-  await expect(habitsFrame.locator("body")).toContainText("AI Навигатор");
-  await habitsFrame.getByText("Улучшить состояние").click();
-  await expect(habitsFrame.locator("body")).toContainText("Пингви видит состояние", { timeout: 10000 });
+  await page.getByRole("button", { name: /^Навигатор$/ }).click();
+  await expect(page.getByText("AI Навигатор")).toBeVisible();
+  await page.getByRole("button", { name: "Что сделать сегодня?" }).click();
+  await expect(page.getByText("Пингви видит состояние")).toBeVisible({ timeout: 10000 });
 });
 
 test("password registration opens account with report history", async ({ page }) => {
@@ -370,7 +428,7 @@ test("password registration opens account with report history", async ({ page })
 
   await expect(page).toHaveURL(/\/account$/, { timeout: 10000 });
   await expect(page.getByTestId("account-page")).toBeVisible();
-  await expect(page.getByText("Навигатор привычек")).toBeVisible();
+  await expect(page.getByText("Привычки и AI Навигатор")).toBeVisible();
   await expect(page.getByText("Продуктовый стратег")).toBeVisible();
   await expect(page.getByText("Полный отчёт")).toBeVisible();
 });

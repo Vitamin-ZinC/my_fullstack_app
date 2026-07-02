@@ -1572,6 +1572,36 @@ svg {
   text-transform: uppercase;
 }
 
+.prompt-version-panel {
+  display: grid;
+  gap: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.prompt-version-panel > div:first-child {
+  display: grid;
+  gap: 4px;
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.prompt-version-panel strong {
+  color: var(--cyan);
+  font-family: "Unbounded", sans-serif;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.prompt-version-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .free-key-insight {
   margin-top: 16px;
   padding-top: 14px;

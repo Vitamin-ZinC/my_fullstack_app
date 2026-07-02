@@ -17,6 +17,29 @@ test("default report prompts define separate free and full templates", () => {
   assert.equal(keys.has(REPORT_FULL_USER_PROMPT_KEY), true);
 });
 
+test("default report prompts expose strengthened version numbers", () => {
+  const freeVersions = defaultReportPromptTemplates
+    .filter((prompt) => prompt.key.startsWith("ikigai.report.free."))
+    .map((prompt) => prompt.version);
+  const fullVersions = defaultReportPromptTemplates
+    .filter((prompt) => prompt.key.startsWith("ikigai.report.full."))
+    .map((prompt) => prompt.version);
+
+  assert.deepEqual(new Set(freeVersions), new Set([4]));
+  assert.deepEqual(new Set(fullVersions), new Set([6]));
+});
+
+test("free default prompt requires engaging result and paid-report preview", () => {
+  const user = defaultReportPromptTemplates.find((prompt) => prompt.key === REPORT_FREE_USER_PROMPT_KEY);
+
+  assert.ok(user);
+  assert.match(user.content, /paid_report_teaser/);
+  assert.match(user.content, /paid_report_preview/);
+  assert.match(user.content, /next 24 hours/);
+  assert.match(user.content, /Итоговое аналитическое заключение/);
+  assert.match(user.content, /does not expose the full premium/);
+});
+
 test("premium default prompt requires safe profiling lens and Russian personalization", () => {
   const system = defaultReportPromptTemplates.find((prompt) => prompt.key === REPORT_FULL_SYSTEM_PROMPT_KEY);
   const user = defaultReportPromptTemplates.find((prompt) => prompt.key === REPORT_FULL_USER_PROMPT_KEY);
@@ -35,6 +58,9 @@ test("premium default prompt requires safe profiling lens and Russian personaliz
   assert.match(user.content, /Комплексный AI-анализ показывает/);
   assert.match(user.content, /похоже|может указывать/);
   assert.match(user.content, /Every visible value must be in Russian/);
+  assert.match(user.content, /Quality gate/);
+  assert.match(user.content, /55 to 95/);
+  assert.match(user.content, /not be a translation of the field name/);
   assert.doesNotMatch(user.content, /Рї|Рј|РІ СЂ/);
 });
 

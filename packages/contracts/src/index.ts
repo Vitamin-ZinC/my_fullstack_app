@@ -196,6 +196,9 @@ export type PromptTemplate = {
   status: PromptStatus;
   title: string;
   content: string;
+  createdAt?: string;
+  updatedAt?: string;
+  publishedAt?: string | null;
 };
 
 export type PromptTemplateInput = Omit<PromptTemplate, "id">;

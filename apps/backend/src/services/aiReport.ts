@@ -468,6 +468,30 @@ type ReportCompletionRequest<TReport> = {
   parseReport: (content: string) => TReport;
 };
 
+function supportsNativeJsonSchemaResponseFormat() {
+  return env.OPENAI_BASE_URL.includes("api.openai.com");
+}
+
+function buildJsonContract(schemaName: string, jsonSchema: Record<string, unknown>) {
+  return [
+    "",
+    "REPORT OUTPUT CONTRACT:",
+    `For this report-generation request, return ONLY one raw JSON object for schema "${schemaName}".`,
+    "Do not include markdown fences, XML, comments, prose, explanations, or <think> blocks.",
+    "The first character of the response must be { and the last character must be }.",
+    "The JSON object must satisfy this JSON Schema:",
+    JSON.stringify(jsonSchema)
+  ].join("\n");
+}
+
+function buildJsonSystemRule() {
+  return [
+    "",
+    "REPORT OUTPUT RULE:",
+    "For report-generation requests, return only the requested raw JSON object. Do not include markdown, XML, comments, explanations, or hidden reasoning."
+  ].join("\n");
+}
+
 async function createReportCompletion<TReport>(request: ReportCompletionRequest<TReport>): Promise<CompletionResult<TReport>> {
   const input = await buildCompletionInput(request.context, request.tier, request.transcript, request.voiceMetrics, request.photoInput);
   try {
@@ -500,28 +524,35 @@ async function requestReportCompletion<TReport>(
   const messages: ChatCompletionMessageParam[] = [
     {
       role: "system",
-      content: input.systemPrompt
+      content: `${input.systemPrompt}${buildJsonSystemRule()}`
     },
     {
       role: "user",
-      content: input.userContent
+      content: [
+        ...input.userContent,
+        { type: "text", text: buildJsonContract(schemaName, jsonSchema) }
+      ]
     }
   ];
 
   try {
+    const responseFormat = supportsNativeJsonSchemaResponseFormat()
+      ? {
+          type: "json_schema" as const,
+          json_schema: {
+            name: schemaName,
+            strict: true,
+            schema: jsonSchema
+          }
+        }
+      : undefined;
+
     const response = await openai.chat.completions.create({
       model: env.OPENAI_MODEL,
       temperature: 0.35,
       max_tokens: 4000,
       messages,
-      response_format: {
-        type: "json_schema",
-        json_schema: {
-          name: schemaName,
-          strict: true,
-          schema: jsonSchema
-        }
-      }
+      ...(responseFormat ? { response_format: responseFormat } : {})
     });
 
     const message = response.choices?.[0]?.message;

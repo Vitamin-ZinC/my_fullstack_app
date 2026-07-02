@@ -181,25 +181,46 @@ export async function adminRoutes(app: FastifyInstance) {
 
   app.post("/api/admin/prompts", async (request) => {
     const body = promptSchema.parse(request.body);
-    const prompt = await prisma.promptTemplate.upsert({
-      where: { key_locale_version: { key: body.key, locale: body.locale, version: body.version } },
-      update: {
-        status: body.status,
-        title: body.title,
-        content: body.content,
-        publishedAt: body.status === "ACTIVE" ? new Date() : undefined
-      },
-      create: {
-        key: body.key,
-        locale: body.locale,
-        version: body.version,
-        status: body.status,
-        title: body.title,
-        content: body.content,
-        publishedAt: body.status === "ACTIVE" ? new Date() : undefined
+    const normalized = {
+      ...body,
+      key: body.key.trim(),
+      locale: body.locale.trim().toLowerCase(),
+      title: body.title.trim()
+    };
+    const publishedAt = normalized.status === "ACTIVE" ? new Date() : undefined;
+    const prompt = await prisma.$transaction(async (tx) => {
+      if (normalized.status === "ACTIVE") {
+        await tx.promptTemplate.updateMany({
+          where: {
+            key: normalized.key,
+            locale: normalized.locale,
+            status: "ACTIVE",
+            NOT: { version: normalized.version }
+          },
+          data: { status: "ARCHIVED" }
+        });
       }
+
+      return tx.promptTemplate.upsert({
+        where: { key_locale_version: { key: normalized.key, locale: normalized.locale, version: normalized.version } },
+        update: {
+          status: normalized.status,
+          title: normalized.title,
+          content: normalized.content,
+          publishedAt
+        },
+        create: {
+          key: normalized.key,
+          locale: normalized.locale,
+          version: normalized.version,
+          status: normalized.status,
+          title: normalized.title,
+          content: normalized.content,
+          publishedAt
+        }
+      });
     });
-    await writeAdminAudit("prompt.upsert", "PromptTemplate", prompt.id, body);
+    await writeAdminAudit("prompt.upsert", "PromptTemplate", prompt.id, normalized);
     return prompt;
   });
 

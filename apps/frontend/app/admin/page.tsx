@@ -157,7 +157,39 @@ export default function AdminPage() {
     await refresh();
   }
 
-  async function upsertPrompt() {
+  function promptIdentity(prompt: Pick<PromptTemplateInput, "key" | "locale">) {
+    return {
+      key: prompt.key.trim(),
+      locale: prompt.locale.trim().toLowerCase() || "ru"
+    };
+  }
+
+  function promptVersionsFor(prompt: Pick<PromptTemplateInput, "key" | "locale">) {
+    const identity = promptIdentity(prompt);
+    const savedVersions = prompts
+      .filter((item) => item.key === identity.key && item.locale === identity.locale)
+      .map((item) => ({ ...item, source: "saved" as const }));
+    const defaultVersions = promptDefaults
+      .filter((item) => item.key === identity.key && item.locale === identity.locale)
+      .filter((item) => !savedVersions.some((saved) => saved.version === item.version))
+      .map((item) => ({ ...item, source: "default" as const }));
+
+    return [...savedVersions, ...defaultVersions].sort((left, right) => right.version - left.version);
+  }
+
+  function createNextPromptVersion() {
+    const versions = promptVersionsFor(promptForm);
+    const nextVersion = Math.max(0, ...versions.map((item) => item.version), Number(promptForm.version) || 0) + 1;
+    setPromptForm({
+      ...promptForm,
+      version: nextVersion,
+      status: "DRAFT",
+      title: `${promptForm.title.replace(/\s+v\d+$/i, "").trim() || promptForm.key} v${nextVersion}`
+    });
+    setMessage(adminText.promptNewVersionReady);
+  }
+
+  async function upsertPrompt(statusOverride?: PromptTemplateInput["status"]) {
     setMessage("");
     const version = Number(promptForm.version);
     if (!promptForm.key.trim() || !promptForm.title.trim() || !promptForm.content.trim()) {
@@ -174,9 +206,10 @@ export default function AdminPage() {
       key: promptForm.key.trim(),
       locale: promptForm.locale.trim().toLowerCase() || "ru",
       version,
+      status: statusOverride ?? promptForm.status,
       title: promptForm.title.trim()
     });
-    setMessage(adminText.savedPrompt);
+    setMessage((statusOverride ?? promptForm.status) === "ACTIVE" ? adminText.publishedPrompt : adminText.savedPrompt);
     await refresh();
   }
 
@@ -253,6 +286,7 @@ export default function AdminPage() {
       .filter((prompt) => !prompts.some((item) => item.key === prompt.key && item.locale === prompt.locale && item.version === prompt.version))
       .map((prompt) => ({ label: `${prompt.key}/${prompt.locale}/v${prompt.version} default`, value: `${prompt.key}|${prompt.locale}|${prompt.version}|default`, prompt }))
   ];
+  const promptVersionHistory = promptVersionsFor(promptForm);
 
   return (
     <main className="page stack">
@@ -328,6 +362,26 @@ export default function AdminPage() {
                 <option value={item.value} key={item.value}>{item.label}</option>
               ))}
             </select>
+            <div className="prompt-version-panel">
+              <div>
+                <strong>{adminText.promptVersioningTitle}</strong>
+                <span>{adminText.promptVersioningCopy}</span>
+              </div>
+              <div className="prompt-version-list">
+                {promptVersionHistory.length === 0 ? (
+                  <span className="muted">{adminText.promptNoVersions}</span>
+                ) : promptVersionHistory.map((item) => (
+                  <button
+                    className={`button secondary ${item.status === "ACTIVE" ? "active-control" : ""}`}
+                    key={`${item.key}-${item.locale}-${item.version}-${item.source}`}
+                    onClick={() => setPromptForm(toPromptForm(item))}
+                    style={{ width: "auto" }}
+                  >
+                    v{item.version} {item.status} - {item.source}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="grid grid-3">
               <input className="input" data-testid="admin-prompt-key" value={promptForm.key} onChange={(event) => setPromptForm({ ...promptForm, key: event.target.value })} placeholder={adminText.promptKey} />
               <input className="input" value={promptForm.locale} onChange={(event) => setPromptForm({ ...promptForm, locale: event.target.value.toLowerCase() })} placeholder={adminText.promptLocale} />
@@ -350,8 +404,10 @@ export default function AdminPage() {
               <strong>{adminText.promptPlaceholdersTitle}</strong>
               <span>{adminText.promptPlaceholders}</span>
             </div>
-            <div className="grid grid-2">
-              <button className="button" data-testid="admin-save-prompt" onClick={upsertPrompt}>{adminText.savePrompt}</button>
+            <div className="grid grid-3">
+              <button className="button" data-testid="admin-save-prompt" onClick={() => upsertPrompt()}>{adminText.savePrompt}</button>
+              <button className="button secondary" onClick={() => upsertPrompt("ACTIVE")}>{adminText.publishPrompt}</button>
+              <button className="button secondary" onClick={createNextPromptVersion}>{adminText.newPromptVersion}</button>
               <button className="button secondary" onClick={seedDefaultPrompts}>{adminText.seedPrompt}</button>
             </div>
           </section>

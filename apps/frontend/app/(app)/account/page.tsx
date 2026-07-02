@@ -3,21 +3,35 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import type { MeReportSummary, MeResponse } from "@levelup/contracts";
+import { CheckCircle2, Send, Sparkles } from "lucide-react";
+import type { HabitProgramSummary, MeReportSummary, MeResponse } from "@levelup/contracts";
 import { api } from "@/lib/api";
+
+type ChatMessage = { role: "user" | "assistant"; text: string };
 
 export default function AccountPage() {
   const router = useRouter();
   const [me, setMe] = useState<MeResponse | null>(null);
   const [reports, setReports] = useState<MeReportSummary[]>([]);
+  const [program, setProgram] = useState<HabitProgramSummary | null>(null);
   const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [savedMessage, setSavedMessage] = useState("");
+  const [chatInput, setChatInput] = useState("");
+  const [threadId, setThreadId] = useState<string | undefined>();
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
 
   useEffect(() => {
-    Promise.all([api.me(), api.myReports()])
-      .then(([nextMe, nextReports]) => {
+    Promise.all([api.me(), api.myReports(), api.habitsMe()])
+      .then(([nextMe, nextReports, habits]) => {
         setMe(nextMe);
         setReports(nextReports);
+        setProgram(habits.program);
+        void api.trackEvent("account_hub_opened", {
+          hasHabitProgram: Boolean(habits.program),
+          reportCount: nextMe.reportCount
+        }).catch(() => undefined);
       })
       .catch(() => setError("Войдите или создайте аккаунт, чтобы открыть кабинет. Повторно проходить диагностику для этого не нужно."))
       .finally(() => setLoading(false));
@@ -26,6 +40,75 @@ export default function AccountPage() {
   async function logout() {
     await api.logout();
     router.push("/login");
+  }
+
+  async function startHabits() {
+    setBusy(true);
+    setSavedMessage("");
+    try {
+      const result = await api.startHabitProgram("rhythm");
+      setProgram(result.program);
+      setSavedMessage("Привычки запущены и сохранены в кабинете");
+    } catch (reason) {
+      setSavedMessage(reason instanceof Error ? reason.message : "Не удалось запустить привычки");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function completeTodayStep() {
+    const activeHabit = program?.activeEnrollment ?? program?.enrollments[0] ?? null;
+    if (!program || !activeHabit) return;
+    setBusy(true);
+    setSavedMessage("");
+    try {
+      const result = await api.saveHabitCheckin({
+        programId: program.id,
+        enrollmentId: activeHabit.id,
+        completed: true,
+        note: "Быстрая отметка из кабинета"
+      });
+      setProgram(result.program);
+      setSavedMessage("Шаг дня отмечен");
+    } catch (reason) {
+      setSavedMessage(reason instanceof Error ? reason.message : "Не удалось отметить шаг");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function askPingvi(prompt?: string) {
+    const text = (prompt ?? chatInput).trim();
+    if (!text) return;
+    const activeHabit = program?.activeEnrollment ?? program?.enrollments[0] ?? null;
+    const nextMessages: ChatMessage[] = [...messages, { role: "user", text }];
+    setMessages(nextMessages);
+    setChatInput("");
+    setBusy(true);
+    try {
+      const result = await api.askHabitNavigator({
+        programId: program?.id,
+        threadId,
+        message: text,
+        messages,
+        context: {
+          mode: "chat",
+          name: me?.user.name || me?.user.email,
+          habit: activeHabit?.title,
+          topRole: program?.topRole ?? undefined,
+          weakZone: program?.weakZone ?? undefined,
+          careerAction: program?.careerAction ?? undefined,
+          recentInsight: program?.insights[0]?.text,
+          streakDays: program?.stats.streakDays
+        }
+      });
+      setThreadId(result.threadId);
+      setMessages([...nextMessages, { role: "assistant", text: result.reply }]);
+    } catch (reason) {
+      setMessages([...nextMessages, { role: "assistant", text: reason instanceof Error ? reason.message : "Пингви временно недоступен" }]);
+    } finally {
+      setBusy(false);
+    }
   }
 
   if (loading) {
@@ -55,6 +138,9 @@ export default function AccountPage() {
     );
   }
 
+  const activeHabit = program?.activeEnrollment ?? program?.enrollments[0] ?? null;
+  const pingviPrompts = ["Что ты уже знаешь обо мне?", "Какая привычка важнее сегодня?", "Где я буксую?", "Какой следующий шаг?"];
+
   return (
     <article className="account-page stack" data-testid="account-page">
       <section className="account-hero card cyan-border">
@@ -81,8 +167,77 @@ export default function AccountPage() {
         <div>
           <h2 className="ub">Привычки и AI Навигатор</h2>
           <p className="muted">Отдельный раздел кабинета для ежедневных шагов, метрик состояния и архива инсайтов. Можно начать без диагностики, а отчет подключить позже.</p>
+          {activeHabit ? (
+            <div className="account-daily-step">
+              <span>Сегодня</span>
+              <strong>{activeHabit.title}</strong>
+              <p>{activeHabit.focus}</p>
+            </div>
+          ) : (
+            <div className="account-daily-step">
+              <span>Старт без теста</span>
+              <strong>Базовый путь привычек</strong>
+              <p>Можно начать с мягкого ритма прямо сейчас, а персонализацию добавить позже.</p>
+            </div>
+          )}
         </div>
-        <Link className="button" href="/habits?from=account">Открыть привычки</Link>
+        <div className="account-action-stack">
+          <Link className="button" href="/habits?from=account">Открыть привычки</Link>
+          {program ? (
+            <button className="button secondary" type="button" disabled={busy} onClick={completeTodayStep}>
+              <CheckCircle2 size={17} />
+              Отметить шаг сегодня
+            </button>
+          ) : (
+            <button className="button secondary" type="button" disabled={busy} onClick={startHabits}>
+              <Sparkles size={17} />
+              Начать без диагностики
+            </button>
+          )}
+        </div>
+      </section>
+
+      {savedMessage && <p className="auth-message">{savedMessage}</p>}
+
+      <section className="card cyan-border account-pingvi">
+        <div>
+          <div className="eyebrow">Пингви</div>
+          <h2 className="ub">Спросить про себя</h2>
+          <p className="muted">Пингви отвечает с учетом отчетов, привычек, метрик, сохраненных инсайтов и текущего шага.</p>
+        </div>
+        <div className="habits-tabs">
+          {pingviPrompts.map((prompt) => (
+            <button className="btn-back" type="button" key={prompt} onClick={() => askPingvi(prompt)}>{prompt}</button>
+          ))}
+        </div>
+        <div className="habits-chat-log account-chat-log">
+          {messages.length === 0 ? (
+            <div className="habits-bubble ai">
+              Можно спросить: что уже видно по моим привычкам, какой шаг выбрать сегодня или как связать отчет с действиями.
+            </div>
+          ) : (
+            messages.map((message, index) => (
+              <div className={`habits-bubble ${message.role === "assistant" ? "ai" : "user"}`} key={`${message.role}-${index}`}>
+                {message.text}
+              </div>
+            ))
+          )}
+        </div>
+        <div className="habits-chat-form">
+          <input
+            className="input"
+            value={chatInput}
+            placeholder="Спросить Пингви"
+            onChange={(event) => setChatInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") askPingvi();
+            }}
+          />
+          <button className="button habits-cta" type="button" disabled={busy} onClick={() => askPingvi()}>
+            <Send size={17} />
+            Спросить
+          </button>
+        </div>
       </section>
 
       <section className="stack">

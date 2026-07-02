@@ -657,6 +657,44 @@ svg {
   gap: 14px;
 }
 
+.account-action-stack,
+.account-pingvi {
+  display: grid;
+  gap: 12px;
+}
+
+.account-daily-step {
+  display: grid;
+  gap: 6px;
+  margin-top: 14px;
+  border: 1px solid rgba(0, 255, 136, 0.18);
+  border-radius: 14px;
+  background: rgba(0, 255, 136, 0.06);
+  padding: 14px;
+}
+
+.account-daily-step span {
+  color: var(--green);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.account-daily-step strong {
+  color: #fff;
+}
+
+.account-daily-step p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.62);
+  font-size: 13px;
+}
+
+.account-chat-log {
+  max-height: 360px;
+  overflow-y: auto;
+}
+
 .account-navigator h2,
 .section-title,
 .report-history-card h3 {
@@ -2187,6 +2225,10 @@ svg {
   color: var(--cyan);
 }
 
+.habits-bottom-nav {
+  display: none;
+}
+
 .habits-main {
   padding: 24px;
   max-width: 920px;
@@ -2251,6 +2293,82 @@ svg {
 
 .habits-current .button + .button {
   margin-top: 10px;
+}
+
+.habits-first-step,
+.habits-onboarding-options {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.habits-first-step {
+  border: 1px solid rgba(0, 212, 255, 0.18);
+  border-radius: 16px;
+  background: rgba(0, 212, 255, 0.07);
+  padding: 16px;
+}
+
+.habits-first-step p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.78);
+  line-height: 1.55;
+}
+
+.habits-first-step small,
+.habits-save-state {
+  color: rgba(255, 255, 255, 0.48);
+  font-size: 12px;
+}
+
+.habits-save-state {
+  margin-top: -8px;
+}
+
+.habits-action-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.habits-action-row .button,
+.habits-action-row .btn-back {
+  width: auto;
+}
+
+.habits-onboarding-options {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.habits-onboarding-options button {
+  display: grid;
+  gap: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.045);
+  color: rgba(255, 255, 255, 0.72);
+  cursor: pointer;
+  padding: 12px;
+  text-align: left;
+}
+
+.habits-onboarding-options button.active {
+  border-color: rgba(0, 212, 255, 0.42);
+  background: rgba(0, 212, 255, 0.1);
+  color: #fff;
+}
+
+.habits-onboarding-options strong {
+  color: inherit;
+  font-family: "Unbounded", sans-serif;
+  font-size: 12px;
+}
+
+.habits-onboarding-options span {
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .habits-metric {
@@ -2520,6 +2638,7 @@ p {
   .habits-sidebar {
     position: static;
     height: auto;
+    padding-bottom: 10px;
   }
 
   .habits-main {
@@ -2543,6 +2662,46 @@ p {
 
   .habits-slider span {
     grid-column: 1 / -1;
+  }
+
+  .habits-bottom-nav {
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(2, 11, 24, 0.96);
+    padding: 8px;
+    order: 3;
+  }
+
+  .habits-bottom-nav button {
+    display: grid;
+    place-items: center;
+    gap: 4px;
+    border: 0;
+    border-radius: 12px;
+    background: transparent;
+    color: #94a3b8;
+    cursor: pointer;
+    font-size: 10px;
+    padding: 8px 4px;
+  }
+
+  .habits-bottom-nav button.active {
+    background: rgba(0, 212, 255, 0.1);
+    color: var(--cyan);
+  }
+
+  .habits-onboarding-options {
+    grid-template-columns: 1fr;
+  }
+
+  .habits-action-row .button,
+  .habits-action-row .btn-back {
+    width: 100%;
   }
 }
 

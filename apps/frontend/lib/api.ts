@@ -178,11 +178,11 @@ export const api = {
       body: JSON.stringify({})
     });
   },
-  startHabitProgram: async () => {
+  startHabitProgram: async (focus?: "energy" | "focus" | "career" | "rhythm") => {
     await ensureGuestSession();
     return request<HabitProgramResponse>("/api/habits/start", {
       method: "POST",
-      body: JSON.stringify({})
+      body: JSON.stringify({ focus })
     });
   },
   saveHabitMetric: (payload: { programId: string; date?: string; energy: number; clarity: number; stability: number }) => request<HabitProgramResponse>("/api/habits/metrics", {
@@ -243,10 +243,13 @@ export const api = {
     method: "POST",
     body: JSON.stringify({ analysisId, promoCode: promoCode?.trim() || undefined })
   }),
-  trackEvent: (name: string, properties?: Record<string, unknown>, analysisId?: string) => request<{ ok: true }>("/api/events", {
-    method: "POST",
-    body: JSON.stringify({ name, properties, analysisId, locale: getStoredLocale() })
-  }),
+  trackEvent: async (name: string, properties?: Record<string, unknown>, analysisId?: string) => {
+    await ensureGuestSession();
+    return request<{ ok: true }>("/api/events", {
+      method: "POST",
+      body: JSON.stringify({ name, properties, analysisId, locale: getStoredLocale() })
+    });
+  },
   getContent: contentApi.get
 };
 

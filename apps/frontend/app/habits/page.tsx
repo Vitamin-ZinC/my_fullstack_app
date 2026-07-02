@@ -19,12 +19,20 @@ import { api } from "@/lib/api";
 
 type Tab = "dashboard" | "journey" | "archive" | "navigator";
 type ChatMessage = { role: "user" | "assistant"; text: string };
+type HabitStartFocus = "energy" | "focus" | "career" | "rhythm";
 
 const navItems: Array<{ id: Tab; label: string; icon: LucideIcon }> = [
   { id: "dashboard", label: "Дашборд", icon: LayoutDashboard },
   { id: "journey", label: "Мой путь", icon: Compass },
   { id: "archive", label: "Архив", icon: Archive },
   { id: "navigator", label: "Навигатор", icon: Bot }
+];
+
+const startFocusOptions: Array<{ id: HabitStartFocus; label: string; copy: string }> = [
+  { id: "rhythm", label: "Мягкий ритм", copy: "начать спокойно, без ощущения долга" },
+  { id: "energy", label: "Больше энергии", copy: "сначала восстановить ресурс" },
+  { id: "focus", label: "Больше фокуса", copy: "выбирать один главный шаг дня" },
+  { id: "career", label: "Карьерный вектор", copy: "проверять направление маленькими действиями" }
 ];
 
 export default function HabitsPage() {
@@ -49,18 +57,22 @@ function HabitsLoading() {
 function HabitsContent() {
   const searchParams = useSearchParams();
   const analysisId = searchParams.get("analysisId");
+  const entryPoint = searchParams.get("from");
   const [tab, setTab] = useState<Tab>("dashboard");
   const [program, setProgram] = useState<HabitProgramSummary | null>(null);
   const [latestReport, setLatestReport] = useState<{ analysisId: string; profession?: string | null; summary?: string | null } | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [startFocus, setStartFocus] = useState<HabitStartFocus>("rhythm");
   const [energy, setEnergy] = useState(6);
   const [clarity, setClarity] = useState(6);
   const [stability, setStability] = useState(6);
   const [note, setNote] = useState("");
   const [insight, setInsight] = useState("");
   const [savedMessage, setSavedMessage] = useState("");
+  const [savedAt, setSavedAt] = useState<Date | null>(null);
+  const [microStepIndex, setMicroStepIndex] = useState(0);
   const [chatInput, setChatInput] = useState("");
   const [threadId, setThreadId] = useState<string | undefined>();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -80,6 +92,11 @@ function HabitsContent() {
         if (!cancelled) {
           setProgram(result.program);
           setLatestReport(result.latestReport);
+          void api.trackEvent(entryPoint === "account" ? "habits_opened_from_account" : "habits_opened", {
+            hasProgram: Boolean(result.program),
+            hasLatestReport: Boolean(result.latestReport),
+            entryPoint
+          }).catch(() => undefined);
         }
       } catch (reason) {
         if (!cancelled) setError(readableError(reason, "Не удалось открыть привычки"));
@@ -91,10 +108,16 @@ function HabitsContent() {
     return () => {
       cancelled = true;
     };
-  }, [analysisId]);
+  }, [analysisId, entryPoint]);
 
   const activeHabit = program?.activeEnrollment ?? program?.enrollments[0] ?? null;
   const latestMetric = program?.metrics[0];
+  const microSteps = useMemo(() => [
+    activeHabit?.practice ?? "Выбери один маленький шаг на 10 минут и остановись на нем.",
+    activeHabit ? `Облегченный вариант: 5 минут на тему «${activeHabit.title}», без идеального результата.` : "Облегченный вариант: 5 минут внимания к состоянию.",
+    "Запиши одну фразу: что сейчас даст больше ресурса, ясности или движения вперед?"
+  ], [activeHabit]);
+  const microStepText = microSteps[microStepIndex % microSteps.length];
   const navigatorContext = useMemo(() => ({
     mode: tab === "dashboard" ? "state" : tab === "journey" ? "path" : "chat",
     cycle: program ? "Цикл 1" : undefined,
@@ -118,7 +141,7 @@ function HabitsContent() {
       const result = await api.activateHabitsFromReport(latestReport.analysisId);
       setProgram(result.program);
       setLatestReport(null);
-      setSavedMessage("Программа сохранена в кабинете");
+      markSaved(program ? "Программа обновлена по отчету без сброса прогресса" : "Программа сохранена в кабинете");
     } catch (reason) {
       setError(readableError(reason, "Не удалось активировать привычки"));
     } finally {
@@ -126,14 +149,14 @@ function HabitsContent() {
     }
   }
 
-  async function startManualProgram() {
+  async function startManualProgram(focus: HabitStartFocus = startFocus) {
     setBusy(true);
     setError("");
     try {
-      const result = await api.startHabitProgram();
+      const result = await api.startHabitProgram(focus);
       setProgram(result.program);
       setLatestReport(null);
-      setSavedMessage("Базовая программа привычек сохранена в кабинете");
+      markSaved("Базовая программа привычек сохранена в кабинете");
     } catch (reason) {
       setError(readableError(reason, "Не удалось запустить привычки"));
     } finally {
@@ -148,7 +171,7 @@ function HabitsContent() {
     try {
       const result = await api.saveHabitMetric({ programId: program.id, energy, clarity, stability });
       setProgram(result.program);
-      setSavedMessage("Метрика дня сохранена");
+      markSaved("Метрика дня сохранена");
     } catch (reason) {
       setError(readableError(reason, "Не удалось сохранить метрики"));
     } finally {
@@ -156,7 +179,7 @@ function HabitsContent() {
     }
   }
 
-  async function completeHabit() {
+  async function completeHabit(noteOverride?: string) {
     if (!program || !activeHabit) return;
     setBusy(true);
     setSavedMessage("");
@@ -165,14 +188,14 @@ function HabitsContent() {
         programId: program.id,
         enrollmentId: activeHabit.id,
         completed: true,
-        note: note.trim() || undefined,
+        note: noteOverride ?? (note.trim() || undefined),
         energy,
         clarity,
         stability
       });
       setProgram(result.program);
       setNote("");
-      setSavedMessage("Шаг отмечен, награда добавлена");
+      markSaved("Шаг отмечен, награда добавлена");
     } catch (reason) {
       setError(readableError(reason, "Не удалось отметить привычку"));
     } finally {
@@ -192,12 +215,28 @@ function HabitsContent() {
       });
       setProgram(result.program);
       setInsight("");
-      setSavedMessage("Инсайт сохранен в архив");
+      markSaved("Инсайт сохранен в архив");
     } catch (reason) {
       setError(readableError(reason, "Не удалось сохранить инсайт"));
     } finally {
       setBusy(false);
     }
+  }
+
+  function softenTodayStep() {
+    const softNote = `Облегченный шаг: ${microSteps[1]}`;
+    setNote(softNote);
+    markSaved("Выбран облегченный вариант. Его можно отметить как шаг дня.");
+  }
+
+  function rotateTodayStep() {
+    setMicroStepIndex((value) => value + 1);
+    setSavedMessage("");
+  }
+
+  function markSaved(message: string) {
+    setSavedMessage(message);
+    setSavedAt(new Date());
   }
 
   async function askNavigator(prompt?: string) {
@@ -252,7 +291,7 @@ function HabitsContent() {
                 <Sparkles size={17} />
                 Создать программу из отчета
               </button>
-              <button className="button secondary" type="button" disabled={busy} onClick={startManualProgram}>
+              <button className="button secondary" type="button" disabled={busy} onClick={() => startManualProgram("rhythm")}>
                 Начать без диагностики
               </button>
             </div>
@@ -260,7 +299,20 @@ function HabitsContent() {
             <div className="habits-current">
               <h2>Можно начать без отчета</h2>
               <p>Запустите базовый путь привычек сейчас. Если позже появится диагностический отчет, навигатор сможет опираться и на него.</p>
-              <button className="button" type="button" disabled={busy} onClick={startManualProgram}>
+              <div className="habits-onboarding-options" role="list" aria-label="Фокус старта">
+                {startFocusOptions.map((option) => (
+                  <button
+                    className={startFocus === option.id ? "active" : ""}
+                    key={option.id}
+                    type="button"
+                    onClick={() => setStartFocus(option.id)}
+                  >
+                    <strong>{option.label}</strong>
+                    <span>{option.copy}</span>
+                  </button>
+                ))}
+              </div>
+              <button className="button" type="button" disabled={busy} onClick={() => startManualProgram()}>
                 <Sparkles size={17} />
                 Начать привычки
               </button>
@@ -296,6 +348,17 @@ function HabitsContent() {
         </nav>
         <Link className="btn-back habits-account-link" href="/account">Кабинет</Link>
       </aside>
+      <nav className="habits-bottom-nav" aria-label="Навигация привычек">
+        {navItems.map((item) => {
+          const Icon = item.icon;
+          return (
+            <button key={item.id} className={tab === item.id ? "active" : ""} type="button" onClick={() => setTab(item.id)}>
+              <Icon size={17} />
+              <span>{item.label}</span>
+            </button>
+          );
+        })}
+      </nav>
 
       <section className="habits-main">
         <header className="habits-topbar">
@@ -304,13 +367,14 @@ function HabitsContent() {
             <h1>{program.title}</h1>
             <p>{program.topRole || program.archetype || "Персональный путь по диагностике"}</p>
           </div>
-          <button className="button habits-cta" type="button" disabled={busy} onClick={completeHabit}>
+          <button className="button habits-cta" type="button" disabled={busy} onClick={() => completeHabit()}>
             <CheckCircle2 size={17} />
             Отметить шаг
           </button>
         </header>
 
         {savedMessage && <p className="auth-message">{savedMessage}</p>}
+        {savedAt && <p className="habits-save-state">Сохранено {formatTime(savedAt)}</p>}
         {error && <p className="auth-error">{error}</p>}
 
         {tab === "dashboard" && (
@@ -323,6 +387,9 @@ function HabitsContent() {
             stability={stability}
             note={note}
             insight={insight}
+            savedAt={savedAt}
+            microStepText={microStepText}
+            canPersonalize={Boolean(latestReport && program.source !== "analysis-report")}
             busy={busy}
             setEnergy={setEnergy}
             setClarity={setClarity}
@@ -332,6 +399,9 @@ function HabitsContent() {
             saveMetric={saveMetric}
             completeHabit={completeHabit}
             saveInsight={saveInsight}
+            softenTodayStep={softenTodayStep}
+            rotateTodayStep={rotateTodayStep}
+            personalizeFromReport={startFromLatestReport}
           />
         )}
         {tab === "journey" && <JourneyTab program={program} />}
@@ -358,6 +428,9 @@ function DashboardTab(props: {
   stability: number;
   note: string;
   insight: string;
+  savedAt: Date | null;
+  microStepText: string;
+  canPersonalize: boolean;
   busy: boolean;
   setEnergy: (value: number) => void;
   setClarity: (value: number) => void;
@@ -365,13 +438,34 @@ function DashboardTab(props: {
   setNote: (value: string) => void;
   setInsight: (value: string) => void;
   saveMetric: () => void;
-  completeHabit: () => void;
+  completeHabit: (noteOverride?: string) => void;
   saveInsight: () => void;
+  softenTodayStep: () => void;
+  rotateTodayStep: () => void;
+  personalizeFromReport: () => void;
 }) {
   return (
     <div className="habits-grid">
       <section className="habits-panel">
         <h2>Сегодняшний фокус</h2>
+        <div className="habits-first-step">
+          <div>
+            <div className="habit-week">Первый шаг сегодня</div>
+            <p>{props.microStepText}</p>
+            {props.savedAt && <small>Последнее сохранение: {formatTime(props.savedAt)}</small>}
+          </div>
+          <div className="habits-action-row">
+            <button className="button habits-cta" type="button" disabled={props.busy} onClick={() => props.completeHabit()}>
+              Сделал
+            </button>
+            <button className="button secondary habits-cta" type="button" disabled={props.busy} onClick={props.softenTodayStep}>
+              Слишком много
+            </button>
+            <button className="btn-back" type="button" onClick={props.rotateTodayStep}>
+              Заменить
+            </button>
+          </div>
+        </div>
         {props.activeHabit && (
           <div className="habits-current">
             <div className="habit-week">Неделя {props.activeHabit.week}</div>
@@ -387,10 +481,16 @@ function DashboardTab(props: {
           value={props.note}
           onChange={(event) => props.setNote(event.target.value)}
         />
-        <button className="button" type="button" disabled={props.busy} onClick={props.completeHabit}>
+        <button className="button" type="button" disabled={props.busy} onClick={() => props.completeHabit()}>
           <CheckCircle2 size={17} />
           Сохранить мягкий шаг
         </button>
+        {props.canPersonalize && (
+          <button className="button secondary" type="button" disabled={props.busy} onClick={props.personalizeFromReport}>
+            <Sparkles size={17} />
+            Обновить по отчету без сброса
+          </button>
+        )}
       </section>
 
       <section className="habits-panel">
@@ -570,6 +670,13 @@ function formatDate(value: string) {
     month: "2-digit",
     year: "numeric"
   }).format(new Date(value));
+}
+
+function formatTime(value: Date) {
+  return new Intl.DateTimeFormat("ru-RU", {
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(value);
 }
 
 function readableError(reason: unknown, fallback: string) {

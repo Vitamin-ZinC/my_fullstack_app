@@ -2472,6 +2472,22 @@ p {
   }
 }
 
+@media (max-width: 900px) {
+  .habits-app {
+    grid-template-columns: 1fr;
+  }
+
+  .habits-sidebar {
+    position: static;
+    height: auto;
+  }
+
+  .habits-main {
+    padding: 16px;
+    max-width: none;
+  }
+}
+
 @media (max-width: 760px) {
   .page {
     width: min(100% - 24px, 1120px);

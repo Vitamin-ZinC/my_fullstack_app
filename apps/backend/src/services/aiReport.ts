@@ -798,7 +798,7 @@ async function requestReportCompletion<TReport>(
       messages
     } satisfies Omit<ChatCompletionCreateParamsNonStreaming, "response_format">;
     const response = useAsync
-      ? await createAsyncChatCompletion(params, responseFormat, buildAsyncIdempotencyKey(input, schemaName, photoInputUsed))
+      ? await createChatCompletionWithAsyncFallback(openai, params, responseFormat, buildAsyncIdempotencyKey(input, schemaName, photoInputUsed))
       : await createChatCompletionWithJsonMode(openai, params, responseFormat);
 
     const message = response.choices?.[0]?.message;
@@ -830,5 +830,20 @@ async function requestReportCompletion<TReport>(
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`OpenAI-compatible report generation failed: ${message.slice(0, 240)}`);
+  }
+}
+
+async function createChatCompletionWithAsyncFallback(
+  openai: OpenAiClient,
+  params: Omit<ChatCompletionCreateParamsNonStreaming, "response_format">,
+  responseFormat: ResponseFormat | null,
+  idempotencyKey: string
+) {
+  try {
+    return await createAsyncChatCompletion(params, responseFormat, idempotencyKey);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!isRetryableAsyncCompletionError(message)) throw error;
+    return createChatCompletionWithJsonMode(openai, params, responseFormat);
   }
 }

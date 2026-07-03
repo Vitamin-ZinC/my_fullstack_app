@@ -1,7 +1,7 @@
 import { jsonrepair } from "jsonrepair";
 
 export function parseCompletionJson(content: string) {
-  const withoutThink = content.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+  const withoutThink = stripThinkBlocks(content);
   const withoutFence = withoutThink.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
   const candidate = extractJsonObjectCandidate(withoutFence);
   if (!candidate) {
@@ -9,6 +9,14 @@ export function parseCompletionJson(content: string) {
   }
 
   return parseJsonWithRepair(candidate);
+}
+
+function stripThinkBlocks(content: string) {
+  return content
+    .replace(/<think>[\s\S]*?<\/think>/gi, "")
+    .replace(/^<think>[\s\S]*?(?=\{)/i, "")
+    .replace(/<\/?think>/gi, "")
+    .trim();
 }
 
 function extractJsonObjectCandidate(content: string) {

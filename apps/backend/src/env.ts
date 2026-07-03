@@ -37,7 +37,7 @@ const schema = z.object({
   OPENAI_MODEL: z.string().default("gpt-4o-mini"),
   OPENAI_TRANSCRIPTION_MODEL: z.string().default("whisper-1"),
   OPENAI_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(120000),
-  OPENAI_MAX_OUTPUT_TOKENS: z.coerce.number().int().positive().default(5000),
+  OPENAI_MAX_OUTPUT_TOKENS: z.coerce.number().int().positive().default(9000),
   OPENAI_ASYNC_REPORTS_ENABLED: booleanEnv.default(true),
   OPENAI_ASYNC_TIMEOUT_MS: z.coerce.number().int().positive().default(900000),
   OPENAI_ASYNC_POLL_INTERVAL_MS: z.coerce.number().int().positive().default(5000),

@@ -23,6 +23,10 @@ test("parseCompletionJson extracts JSON object from surrounding prose", () => {
   assert.deepEqual(parseCompletionJson("Result:\n{\"ok\":true}\nDone."), { ok: true });
 });
 
+test("parseCompletionJson extracts JSON after an unclosed think block", () => {
+  assert.deepEqual(parseCompletionJson("<think>reasoning that was not closed\n{\"ok\":true}"), { ok: true });
+});
+
 test("parseCompletionJson rejects non-JSON content", () => {
   assert.throws(() => parseCompletionJson("not a report"), /non-JSON report content/);
 });

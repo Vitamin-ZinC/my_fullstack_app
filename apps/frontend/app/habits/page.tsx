@@ -19,7 +19,7 @@ import {
   User
 } from "lucide-react";
 import type { HabitConfigResponse, HabitEnrollmentSummary, HabitProgramResponse, HabitProgramSummary } from "@levelup/contracts";
-import { api, getStoredLocale, type TextLocale } from "@/lib/api";
+import { api, getStoredLocale, restoreSessionFromUrl, type TextLocale } from "@/lib/api";
 import { useSiteText } from "@/lib/useSiteText";
 
 type Tab = "dashboard" | "journey" | "habits" | "navigator" | "archive" | "guide" | "settings";
@@ -151,6 +151,7 @@ function HabitsContent() {
       setLoading(true);
       setError("");
       try {
+        restoreSessionFromUrl();
         if (analysisId) {
           const result = await api.activateHabitsFromReport(analysisId);
           if (!cancelled) applyProgramResponse(result);

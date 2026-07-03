@@ -7,6 +7,10 @@ export function isAsyncCompletionPollingTimeoutError(message: string) {
   return /OpenAI-compatible async completion .* timed out after \d+ms/i.test(message);
 }
 
+export function isTerminalAsyncProviderError(message: string) {
+  return /provider_unavailable|Provider request failed/i.test(message);
+}
+
 export function shouldFallbackToSyncCompletionAfterAsyncError(message: string) {
   return /404|405|method not allowed|cannot\s+(post|get)|unsupported.*async|async.*unsupported|async.*not supported|not found.*\/chat\/completions\/async|\/chat\/completions\/async.*not found/i.test(message);
 }

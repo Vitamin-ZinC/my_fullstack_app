@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   isAsyncCompletionPollingTimeoutError,
   isRetryableAsyncCompletionError,
+  isTerminalAsyncProviderError,
   normalizeCompatibleChatMessages,
   shouldFallbackToSyncCompletionAfterAsyncError
 } from "./aiReportRouting.js";
@@ -44,4 +45,11 @@ test("compatible chat message normalization adds missing text part type", () => 
     { text: "Опиши картинку", type: "text" },
     { type: "image_url", image_url: { url: "https://example.com/a.jpg" } }
   ]);
+});
+
+test("provider unavailable is terminal for async report jobs", () => {
+  const message = "OpenAI-compatible async completion job-1 attempt 1 failed: {\"code\":\"provider_unavailable\",\"message\":\"Provider request failed\"}";
+
+  assert.equal(isRetryableAsyncCompletionError(message), true);
+  assert.equal(isTerminalAsyncProviderError(message), true);
 });

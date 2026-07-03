@@ -17,6 +17,7 @@ import { getOpenAiApiKey, getOpenAiClient, hasOpenAiClient } from "./openaiClien
 import {
   isAsyncCompletionPollingTimeoutError,
   isRetryableAsyncCompletionError,
+  isTerminalAsyncProviderError,
   normalizeCompatibleChatMessages,
   shouldFallbackToSyncCompletionAfterAsyncError
 } from "./aiReportRouting.js";
@@ -400,28 +401,30 @@ export async function generateOpenAiReport(context: ReportContext): Promise<Gene
   const transcript = transcription?.text ?? null;
   const photoInput = await buildPhotoInput(photoAsset);
   const useCompatibleAsync = env.OPENAI_ASYNC_REPORTS_ENABLED && supportsCompatibleAsyncCompletions();
-  const freeCompletion = await createReportCompletion({
-    context,
-    tier: "FREE",
-    transcript,
-    voiceMetrics,
-    photoInput,
-    schemaName: "ikigai_free_report",
-    jsonSchema: reportFreeJsonSchema,
-    useAsync: useCompatibleAsync,
-    parseReport: (content) => reportFreeSchema.parse(parseCompletionJson(content))
-  });
-  const fullCompletion = await createReportCompletion({
-    context,
-    tier: "FULL",
-    transcript,
-    voiceMetrics,
-    photoInput,
-    schemaName: "ikigai_full_report",
-    jsonSchema: reportFullJsonSchema,
-    useAsync: useCompatibleAsync,
-    parseReport: (content) => reportFullSchema.parse(parseCompletionJson(content))
-  });
+  const [freeCompletion, fullCompletion] = await Promise.all([
+    createReportCompletion({
+      context,
+      tier: "FREE",
+      transcript,
+      voiceMetrics,
+      photoInput,
+      schemaName: "ikigai_free_report",
+      jsonSchema: reportFreeJsonSchema,
+      useAsync: useCompatibleAsync,
+      parseReport: (content) => reportFreeSchema.parse(parseCompletionJson(content))
+    }),
+    createReportCompletion({
+      context,
+      tier: "FULL",
+      transcript,
+      voiceMetrics,
+      photoInput,
+      schemaName: "ikigai_full_report",
+      jsonSchema: reportFullJsonSchema,
+      useAsync: useCompatibleAsync,
+      parseReport: (content) => reportFullSchema.parse(parseCompletionJson(content))
+    })
+  ]);
   const promptVersion = Math.max(freeCompletion.promptVersion, fullCompletion.promptVersion);
 
   return {
@@ -476,6 +479,15 @@ async function buildCompletionInput(
 
 function isImageInputError(body: string) {
   return /image_parse_error|unsupported image|invalid image|invalid_image|provider_unavailable|provider request failed|400 status code \(no body\)|status code 400|timed out|gateway time-out|gateway timeout|status code 504|504 /i.test(body);
+}
+
+function getReportMaxTokens(tier: ReportTier) {
+  const tierBudget = tier === "FREE" ? 2500 : 5500;
+  return Math.min(env.OPENAI_MAX_OUTPUT_TOKENS, tierBudget);
+}
+
+function getRepairMaxTokens() {
+  return Math.min(env.OPENAI_MAX_OUTPUT_TOKENS, 3500);
 }
 
 type ReportCompletionRequest<TReport> = {
@@ -646,6 +658,9 @@ async function createAsyncChatCompletion(
       if (isAsyncCompletionPollingTimeoutError(message)) {
         throw error;
       }
+      if (isTerminalAsyncProviderError(message)) {
+        throw error;
+      }
       if (attempt >= 3 || !isRetryableAsyncCompletionError(message)) {
         throw error;
       }
@@ -745,7 +760,7 @@ async function requestReportJsonRepair(
     withCompatibleGenerationControls({
       model: env.OPENAI_MODEL,
       temperature: 0,
-      max_tokens: env.OPENAI_MAX_OUTPUT_TOKENS,
+      max_tokens: getRepairMaxTokens(),
       messages: repairMessages
     }),
     responseFormat
@@ -815,7 +830,7 @@ async function requestReportCompletion<TReport>(
     const params = withCompatibleGenerationControls({
       model: env.OPENAI_MODEL,
       temperature: 0.25,
-      max_tokens: env.OPENAI_MAX_OUTPUT_TOKENS,
+      max_tokens: getReportMaxTokens(input.tier),
       messages
     } satisfies ChatCompletionParams);
     const response = useAsync

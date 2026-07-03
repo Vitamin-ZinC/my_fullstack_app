@@ -4,7 +4,10 @@ import type {
   AuthResult,
   AuthSessionResponse,
   CheckoutSessionResponse,
+  AnalysisStatusResponse,
   FeatureFlag,
+  FreeReportResponse,
+  FullReportResponse,
   HabitConfigResponse,
   HabitMeResponse,
   HabitNavigatorResponse,
@@ -18,9 +21,7 @@ import type {
   PromoCode,
   ReportContactResponse,
   PromptTemplateInput,
-  PromptTemplate,
-  ReportFree,
-  ReportFull
+  PromptTemplate
 } from "@levelup/contracts";
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
@@ -263,9 +264,9 @@ export const api = {
     method: "POST",
     body: JSON.stringify({ ikigaiAnswers, ...(clientMetrics ? { clientMetrics } : {}) })
   }),
-  getStatus: (analysisId: string) => request<{ status: string; progress: number; jobId?: string; errorMessage?: string }>(`/api/analyses/${analysisId}/status`),
-  getFreeReport: (analysisId: string) => request<{ reportFree: ReportFree }>(`/api/analyses/${analysisId}/report/free`),
-  getFullReport: (analysisId: string) => request<{ reportFull: ReportFull }>(`/api/analyses/${analysisId}/report/full`),
+  getStatus: (analysisId: string) => request<AnalysisStatusResponse>(`/api/analyses/${analysisId}/status`),
+  getFreeReport: (analysisId: string) => request<FreeReportResponse>(`/api/analyses/${analysisId}/report/free`),
+  getFullReport: (analysisId: string) => request<FullReportResponse>(`/api/analyses/${analysisId}/report/full`),
   saveReportContact: (analysisId: string, email: string) => request<ReportContactResponse>(`/api/analyses/${analysisId}/contact`, {
     method: "POST",
     body: JSON.stringify({ email })

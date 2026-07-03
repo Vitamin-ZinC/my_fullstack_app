@@ -164,6 +164,39 @@ export type AnalysisProgressEvent = {
   log?: string;
 };
 
+export type ReportGenerationItemMeta = {
+  model: string | null;
+  promptVersion: number;
+  generatedBy: "llm" | "fallback" | "unknown";
+  createdAt: string;
+};
+
+export type ReportGenerationMeta = {
+  free?: ReportGenerationItemMeta;
+  full?: ReportGenerationItemMeta;
+  usedFallback: boolean;
+  fallbackReason?: string;
+  fallbackAt?: string;
+};
+
+export type AnalysisStatusResponse = {
+  status: AnalysisStatus;
+  progress: number;
+  jobId?: string | number | null;
+  errorMessage?: string | null;
+  reportMeta?: ReportGenerationMeta;
+};
+
+export type FreeReportResponse = {
+  reportFree: ReportFree;
+  reportMeta?: ReportGenerationMeta;
+};
+
+export type FullReportResponse = {
+  reportFull: ReportFull;
+  reportMeta?: ReportGenerationMeta;
+};
+
 export type AdminStats = {
   analysesTotal: number;
   analysesByStatus: Array<{ status: AnalysisStatus; count: number }>;

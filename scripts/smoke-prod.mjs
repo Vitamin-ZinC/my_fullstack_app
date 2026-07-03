@@ -1,5 +1,6 @@
 const baseUrl = (process.env.SMOKE_BASE_URL || process.argv[2] || "https://orken.life").replace(/\/$/, "");
 const promoCode = process.env.SMOKE_PROMO_CODE || "";
+const allowFallback = process.env.SMOKE_ALLOW_FALLBACK === "true";
 
 async function request(path, init = {}, session) {
   const headers = {
@@ -74,6 +75,16 @@ const freeReport = await request(`/api/analyses/${analysis.analysisId}/report/fr
 if (!freeReport?.reportFree?.profession) {
   throw new Error("Free report payload is missing profession");
 }
+const reportMeta = freeReport.reportMeta ?? status.reportMeta ?? null;
+if (!allowFallback && !reportMeta) {
+  throw new Error("Smoke response is missing reportMeta; cannot verify LLM generation");
+}
+if (!allowFallback && reportMeta?.usedFallback) {
+  throw new Error(`Smoke produced fallback report instead of LLM report: ${JSON.stringify(reportMeta)}`);
+}
+if (!allowFallback && reportMeta && [reportMeta.free?.generatedBy, reportMeta.full?.generatedBy].includes("fallback")) {
+  throw new Error(`Smoke report metadata contains fallback tier: ${JSON.stringify(reportMeta)}`);
+}
 
 let checkout = null;
 if (promoCode) {
@@ -90,6 +101,7 @@ console.log(JSON.stringify({
   analysisId: analysis.analysisId,
   status: status.status,
   progress: status.progress,
+  reportMeta,
   freeProfession: freeReport.reportFree.profession,
   checkout: checkout ? {
     amount: checkout.amount,

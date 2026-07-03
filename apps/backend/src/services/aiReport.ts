@@ -309,7 +309,8 @@ function getAsset(assets: MediaAsset[], type: "AUDIO" | "PHOTO") {
 }
 
 async function transcribeAudio(asset: MediaAsset | null) {
-  if (!asset || !env.OPENAI_API_KEY) return null;
+  const apiKey = getOpenAiApiKey();
+  if (!asset || !apiKey) return null;
   const buffer = await readMediaAssetBuffer(asset.key);
   if (!buffer) return null;
   if (!isLikelyAudio(buffer)) return null;
@@ -319,13 +320,16 @@ async function transcribeAudio(asset: MediaAsset | null) {
   formData.set("response_format", "verbose_json");
   formData.set("file", new Blob([buffer], { type: asset.mimeType || "application/octet-stream" }), basename(asset.key));
 
-  const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${env.OPENAI_API_KEY}`
-    },
-    body: formData
-  });
+  const response = await withOpenAiDeadline((signal) => fetch(`${env.OPENAI_BASE_URL.replace(/\/$/, "")}/audio/transcriptions`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`
+      },
+      body: formData,
+      signal
+    }),
+    "OpenAI-compatible transcription"
+  );
 
   if (!response.ok) {
     const body = await response.text();
@@ -502,13 +506,13 @@ function isResponseFormatUnsupportedError(message: string) {
   return /response_format|json_schema|json_object|unsupported.*format|invalid.*parameter|unknown field|extra field/i.test(message);
 }
 
-async function withOpenAiDeadline<T>(callback: (signal: AbortSignal) => Promise<T>) {
+async function withOpenAiDeadline<T>(callback: (signal: AbortSignal) => Promise<T>, operation = "OpenAI-compatible chat completion") {
   const controller = new AbortController();
   let timeout: NodeJS.Timeout | null = null;
   const timeoutPromise = new Promise<never>((_, reject) => {
     timeout = setTimeout(() => {
       controller.abort();
-      reject(new Error(`OpenAI-compatible chat completion timed out after ${env.OPENAI_REQUEST_TIMEOUT_MS}ms`));
+      reject(new Error(`${operation} timed out after ${env.OPENAI_REQUEST_TIMEOUT_MS}ms`));
     }, env.OPENAI_REQUEST_TIMEOUT_MS);
   });
 

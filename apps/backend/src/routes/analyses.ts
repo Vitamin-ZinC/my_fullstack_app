@@ -102,7 +102,8 @@ export async function analysisRoutes(app: FastifyInstance) {
     if (!access) return;
     const analysis = access.analysis;
     const progress = analysis.status === "DONE" ? 100 : analysis.status === "PROCESSING" ? 55 : analysis.status === "QUEUED" ? 15 : 0;
-    return { status: analysis.status, progress, jobId: analysis.jobId, errorMessage: analysis.errorMessage };
+    const reportMeta = await buildReportGenerationMeta(params.id, analysis.locale);
+    return { status: analysis.status, progress, jobId: analysis.jobId, errorMessage: analysis.errorMessage, reportMeta };
   });
 
   app.get("/api/analyses/:id/report/free", async (request, reply) => {
@@ -120,7 +121,8 @@ export async function analysisRoutes(app: FastifyInstance) {
         analysisId: params.id
       }
     });
-    return { reportFree: analysis.reportFree };
+    const reportMeta = await buildReportGenerationMeta(params.id, analysis.locale);
+    return { reportFree: analysis.reportFree, reportMeta };
   });
 
   app.get("/api/analyses/:id/report/full", async (request, reply) => {
@@ -138,7 +140,8 @@ export async function analysisRoutes(app: FastifyInstance) {
         analysisId: params.id
       }
     });
-    return { reportFull: analysis.reportFull };
+    const reportMeta = await buildReportGenerationMeta(params.id, analysis.locale);
+    return { reportFull: analysis.reportFull, reportMeta };
   });
 
   app.post("/api/analyses/:id/contact", async (request, reply) => {
@@ -309,4 +312,43 @@ function buildAccessUrl(path: string, session: { id: string; guestToken: string 
   url.searchParams.set("x-session-id", session.id);
   url.searchParams.set("x-guest-token", session.guestToken);
   return url.toString();
+}
+
+async function buildReportGenerationMeta(analysisId: string, language: string) {
+  const [reports, fallbackEvent] = await Promise.all([
+    prisma.report.findMany({
+      where: { analysisId, language },
+      select: { tier: true, model: true, promptVersion: true, createdAt: true }
+    }),
+    prisma.analyticsEvent.findFirst({
+      where: { analysisId, name: "analysis_report_fallback_used" },
+      orderBy: { createdAt: "desc" },
+      select: { properties: true, createdAt: true }
+    })
+  ]);
+
+  const byTier = Object.fromEntries(reports.map((report) => [
+    report.tier.toLowerCase(),
+    {
+      model: report.model ?? null,
+      promptVersion: report.promptVersion,
+      generatedBy: report.model === "fallback" ? "fallback" : report.model ? "llm" : "unknown",
+      createdAt: report.createdAt.toISOString()
+    }
+  ]));
+  const usedFallback = reports.some((report) => report.model === "fallback") || Boolean(fallbackEvent);
+  const fallbackReason = readFallbackReason(fallbackEvent?.properties);
+
+  return {
+    ...byTier,
+    usedFallback,
+    ...(fallbackReason ? { fallbackReason } : {}),
+    ...(fallbackEvent?.createdAt ? { fallbackAt: fallbackEvent.createdAt.toISOString() } : {})
+  };
+}
+
+function readFallbackReason(properties: unknown) {
+  if (!properties || typeof properties !== "object" || Array.isArray(properties)) return null;
+  const reason = (properties as { reason?: unknown }).reason;
+  return typeof reason === "string" && reason.trim() ? reason.trim().slice(0, 500) : null;
 }

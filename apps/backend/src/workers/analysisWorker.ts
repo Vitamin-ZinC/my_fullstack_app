@@ -35,6 +35,7 @@ export const worker = new Worker("analysis", async (job) => {
   let reportPromptVersion = analysis.reportVersion;
   let freePromptVersion = analysis.reportVersion;
   let fullPromptVersion = analysis.reportVersion;
+  let fallbackReason: string | null = allowFallbackReport ? "AI report was prebuilt as fallback before LLM generation" : null;
 
   try {
     emitProgress(analysisId, { progress: 96, log: "Generating AI report...", stage: "ai" });
@@ -51,6 +52,7 @@ export const worker = new Worker("analysis", async (job) => {
       reportPromptVersion = generated.promptVersion;
       freePromptVersion = generated.promptVersions.free;
       fullPromptVersion = generated.promptVersions.full;
+      fallbackReason = null;
       emitProgress(analysisId, {
         progress: 98,
         stage: "ai",
@@ -60,6 +62,7 @@ export const worker = new Worker("analysis", async (job) => {
       if (!allowFallbackReport) {
         throw new Error("AI report generation is not configured");
       }
+      fallbackReason = "AI report generation is not configured";
       emitProgress(analysisId, { progress: 98, stage: "fallback", log: "AI is not configured; using fallback report" });
     }
   } catch (error) {
@@ -68,6 +71,7 @@ export const worker = new Worker("analysis", async (job) => {
       emitProgress(analysisId, { progress: 98, stage: "failed", log: message });
       throw error;
     }
+    fallbackReason = message;
     emitProgress(analysisId, { progress: 98, stage: "fallback", log: `${message}; using fallback report` });
   }
 
@@ -111,6 +115,22 @@ export const worker = new Worker("analysis", async (job) => {
       output: report
     }
   });
+
+  if (fallbackReason || reportModel === "fallback") {
+    await prisma.analyticsEvent.create({
+      data: {
+        name: "analysis_report_fallback_used",
+        locale: analysis.locale,
+        sessionId: analysis.sessionId,
+        userId: analysis.userId,
+        analysisId,
+        properties: JSON.parse(JSON.stringify({
+          model: reportModel,
+          reason: fallbackReason ?? "fallback report model persisted"
+        }))
+      }
+    });
+  }
 
   await prisma.analyticsEvent.create({
     data: {

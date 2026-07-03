@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseCompletionJson } from "./completionJson.js";
+import { parseCompletionJson, parseGatewayJson } from "./completionJson.js";
 
 test("parseCompletionJson repairs common malformed JSON from compatible LLM gateways", () => {
   const parsed = parseCompletionJson([
@@ -29,4 +29,13 @@ test("parseCompletionJson extracts JSON after an unclosed think block", () => {
 
 test("parseCompletionJson rejects non-JSON content", () => {
   assert.throws(() => parseCompletionJson("not a report"), /non-JSON report content/);
+});
+
+test("parseGatewayJson repairs malformed async gateway response JSON", () => {
+  const parsed = parseGatewayJson<{ id: string; status: string }>("{\"id\":\"job-1\" \"status\":\"succeeded\"}");
+
+  assert.deepEqual(parsed, {
+    id: "job-1",
+    status: "succeeded"
+  });
 });

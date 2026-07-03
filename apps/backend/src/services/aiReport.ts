@@ -12,7 +12,7 @@ import { env } from "../env.js";
 import { getMediaAssetPublicUrl, readMediaAssetBuffer } from "./media.js";
 import { buildReportPromptMessages } from "./reportPrompts.js";
 import { analyzeAudioMetrics, type AudioTranscription, type VoiceSignalMetrics } from "./audioMetrics.js";
-import { parseCompletionJson } from "./completionJson.js";
+import { parseCompletionJson, parseGatewayJson } from "./completionJson.js";
 import { getOpenAiApiKey, getOpenAiClient, hasOpenAiClient } from "./openaiClient.js";
 
 type ReportContext = {
@@ -613,7 +613,7 @@ async function fetchAsyncCompletionJson(path: string, init: RequestInit = {}) {
   if (!response.ok) {
     throw new Error(`OpenAI-compatible async completion failed with ${response.status}: ${text.slice(0, 500)}`);
   }
-  return (text ? JSON.parse(text) : {}) as AsyncCompletionJob;
+  return text ? parseGatewayJson<AsyncCompletionJob>(text, "OpenAI-compatible async completion response") : {};
 }
 
 async function createAsyncChatCompletion(
@@ -676,7 +676,7 @@ async function createAsyncChatCompletionAttempt(
 }
 
 function isRetryableAsyncCompletionError(message: string) {
-  return /provider_unavailable|temporar|overload|rate.?limit|gateway|timed? ?out|timeout|502|503|504/i.test(message);
+  return /provider_unavailable|temporar|overload|rate.?limit|gateway|invalid json|expected .* after property value|unterminated string|bad control character|timed? ?out|timeout|502|503|504/i.test(message);
 }
 
 function buildJsonContract(schemaName: string, jsonSchema: Record<string, unknown>) {
@@ -817,32 +817,53 @@ async function requestReportCompletion<TReport>(
     if (message?.refusal) throw new Error(`OpenAI-compatible gateway refused report generation: ${message.refusal}`);
     if (!message?.content) throw new Error("OpenAI-compatible gateway returned an empty report");
 
-    try {
-      return {
-        report: parseReport(message.content),
-        photoInputUsed,
-        promptVersion: input.promptVersion
-      };
-    } catch (parseError) {
-      const repairedContent = await requestReportJsonRepair(
+    return {
+      report: await parseReportWithRepair(
         openai,
         schemaName,
         jsonSchema,
         message.content,
-        parseError instanceof Error ? parseError.message : String(parseError),
-        responseFormat
-      );
-
-      return {
-        report: parseReport(repairedContent),
-        photoInputUsed,
-        promptVersion: input.promptVersion
-      };
-    }
+        responseFormat,
+        parseReport
+      ),
+      photoInputUsed,
+      promptVersion: input.promptVersion
+    };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`OpenAI-compatible report generation failed: ${message.slice(0, 240)}`);
   }
+}
+
+async function parseReportWithRepair<TReport>(
+  openai: OpenAiClient,
+  schemaName: string,
+  jsonSchema: Record<string, unknown>,
+  content: string,
+  responseFormat: ResponseFormat | null,
+  parseReport: (content: string) => TReport
+) {
+  let candidate = content;
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return parseReport(candidate);
+    } catch (error) {
+      lastError = error;
+      if (attempt >= 2) break;
+      candidate = await requestReportJsonRepair(
+        openai,
+        schemaName,
+        jsonSchema,
+        candidate,
+        error instanceof Error ? error.message : String(error),
+        responseFormat
+      );
+    }
+  }
+
+  const message = lastError instanceof Error ? lastError.message : String(lastError);
+  throw new Error(`OpenAI-compatible gateway returned invalid report JSON after repair: ${message}`);
 }
 
 async function createChatCompletionWithAsyncFallback(

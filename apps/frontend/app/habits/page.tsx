@@ -6,24 +6,18 @@ import { Suspense, useEffect, useMemo, useState, type CSSProperties } from "reac
 import {
   Archive,
   Bot,
-  BookOpen,
   CalendarPlus,
   CheckCircle2,
   ChevronDown,
   Circle,
   Compass,
-  Gauge,
-  LayoutDashboard,
-  ListChecks,
   PauseCircle,
   RotateCcw,
   Save,
-  Settings,
   Sparkles,
   Trophy,
   User
 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 import type { HabitConfigResponse, HabitEnrollmentSummary, HabitProgramResponse, HabitProgramSummary } from "@levelup/contracts";
 import { api, getStoredLocale, type TextLocale } from "@/lib/api";
 import { useSiteText } from "@/lib/useSiteText";
@@ -33,16 +27,26 @@ type DetailTab = "essence" | "practice" | "why";
 type ArchiveFilter = "all" | "insights" | "rewards" | "weeks";
 type HabitStartFocus = "energy" | "focus" | "career" | "rhythm";
 type ChatMessage = { role: "user" | "assistant"; text: string };
+type NavItem = { id: Tab; icon: string } | { id: Tab; penguin: true };
 
-const navItems: Array<{ id: Tab; icon: LucideIcon }> = [
-  { id: "dashboard", icon: LayoutDashboard },
-  { id: "journey", icon: Compass },
-  { id: "habits", icon: ListChecks },
-  { id: "navigator", icon: Bot },
-  { id: "archive", icon: Archive },
-  { id: "guide", icon: BookOpen },
-  { id: "settings", icon: Settings }
+const logoSrc = "/assets/levelup-logo.jpg";
+
+const navItems: NavItem[] = [
+  { id: "dashboard", icon: "⬡" },
+  { id: "journey", icon: "🧭" },
+  { id: "habits", icon: "✦" },
+  { id: "navigator", penguin: true },
+  { id: "archive", icon: "📚" },
+  { id: "guide", icon: "📖" },
+  { id: "settings", icon: "⚙" }
 ];
+
+const cycleVisuals = [
+  { icon: "🌱", color: "#00d4ff" },
+  { icon: "🚀", color: "#a855f7" },
+  { icon: "🌿", color: "#10b981" },
+  { icon: "🌟", color: "#f59e0b" }
+] as const;
 
 const zoneIds = ["passion", "mission", "profession", "vocation", "resource", "clarity", "stability", "ikigai"] as const;
 const todayIso = () => new Date().toISOString().slice(0, 10);
@@ -53,6 +57,37 @@ export default function HabitsPage() {
       <HabitsContent />
     </Suspense>
   );
+}
+
+function PenguinIcon({ size = 24, className = "" }: { size?: number; className?: string }) {
+  return (
+    <img
+      src={logoSrc}
+      alt="Пингви"
+      width={size}
+      height={size}
+      className={className}
+      style={{ objectFit: "contain", display: "inline-block", borderRadius: "50%" }}
+    />
+  );
+}
+
+function PenguinHeadIcon({ size = 24 }: { size?: number }) {
+  return (
+    <span className="habits-penguin-head" style={{ width: size, height: size }}>
+      <img
+        src={logoSrc}
+        alt="Пингви"
+        width={Math.round(size * 1.55)}
+        height={Math.round(size * 1.55)}
+      />
+    </span>
+  );
+}
+
+function NavIcon({ item, size }: { item: NavItem; size: number }) {
+  if ("penguin" in item) return <PenguinHeadIcon size={size + 5} />;
+  return <span className="habits-nav-symbol" style={{ width: size + 5, height: size + 5 }}>{item.icon}</span>;
 }
 
 function HabitsLoading() {
@@ -424,11 +459,15 @@ function HabitsContent() {
     );
   }
 
+  const sidebarName = settingsName || readProfileString(program.profile, "name") || program.title;
+  const sidebarZone = zoneOptions.find((option) => option.id === (program.weakZone || settingsZone))?.label || program.weakZone || settingsZone;
+  const trialDaysLeft = program.settings.trialDaysLeft ?? config?.trialDays ?? 0;
+
   return (
     <main className="habits-app" data-testid="habits-app">
       <aside className="habits-sidebar">
         <Link className="habits-brand" href="/">
-          <img src="/assets/levelup-logo.jpg" alt="" />
+          <PenguinIcon size={38} />
           <div>
             <div className="habits-brand-title">ORKEN.LIFE</div>
             <div className="habits-brand-sub">Кабинет привычек</div>
@@ -436,24 +475,29 @@ function HabitsContent() {
         </Link>
         <nav className="habits-nav">
           {navItems.map((item) => {
-            const Icon = item.icon;
             return (
               <button key={item.id} className={tab === item.id ? "active" : ""} type="button" onClick={() => setTab(item.id)}>
-                <Icon size={17} />
+                <NavIcon item={item} size={17} />
                 {t.nav[item.id]}
               </button>
             );
           })}
         </nav>
+        <div className="habits-sidebar-profile">
+          <div className="habits-sidebar-avatar">{settingsAvatar || "P"}</div>
+          <div>
+            <strong>{sidebarName}</strong>
+            <span>{t.dashboard.sidebarZone}: {sidebarZone}</span>
+          </div>
+        </div>
         <Link className="btn-back habits-account-link" href="/account">{t.account}</Link>
       </aside>
 
       <nav className="habits-bottom-nav" aria-label="Навигация привычек">
         {navItems.map((item) => {
-          const Icon = item.icon;
           return (
             <button key={item.id} className={tab === item.id ? "active" : ""} type="button" onClick={() => setTab(item.id)}>
-              <Icon size={17} />
+              <NavIcon item={item} size={17} />
               <span>{t.nav[item.id]}</span>
             </button>
           );
@@ -467,10 +511,15 @@ function HabitsContent() {
             <h1>{program.title}</h1>
             <p>{program.topRole || program.archetype || t.dashboard.topbarCopy}</p>
           </div>
-          <button className="button habits-cta" type="button" disabled={busy} onClick={() => saveCheckin(activeHabit, !doneToday)}>
-            {doneToday ? <RotateCcw size={17} /> : <CheckCircle2 size={17} />}
-            {doneToday ? t.journey.undoToday : t.journey.markToday}
-          </button>
+          <div className="habits-topbar-actions">
+            <div className="habits-top-pill online"><PenguinHeadIcon size={20} />{t.dashboard.pingviOnline}</div>
+            <div className="habits-top-pill"><span className="habits-pill-icon">⏳</span>{trialDaysLeft}/{config?.trialDays ?? trialDaysLeft} {t.dashboard.trialDays}</div>
+            <div className="habits-top-pill accent"><span className="habits-pill-icon">🔥</span>{program.stats.streakDays} {t.stats.streak}</div>
+            <button className="button habits-cta" type="button" disabled={busy} onClick={() => saveCheckin(activeHabit, !doneToday)}>
+              {doneToday ? <RotateCcw size={17} /> : <CheckCircle2 size={17} />}
+              {doneToday ? t.journey.undoToday : t.journey.markToday}
+            </button>
+          </div>
         </header>
 
         {savedMessage && <p className="auth-message">{savedMessage}</p>}
@@ -604,8 +653,124 @@ function DashboardTab(props: {
   openNavigator: () => void;
 }) {
   const wellness = props.program.stats.wellnessScore ?? Math.round(((props.energy + props.clarity + props.stability) / 3) * 10);
+  const totalWeeks = props.program.stats.totalWeeks || props.program.cycles.reduce((sum, cycle) => sum + cycle.weeks, 0);
+  const routeProgress = totalWeeks
+    ? Math.min(100, Math.round(((props.program.stats.currentSortOrder - 1 + props.program.stats.weekProgress / 100) / totalWeeks) * 100))
+    : 0;
+  const activeCycle = props.program.cycles.find((cycle) => cycle.id === props.program.currentCycle) ?? props.program.cycles[0];
+  const activeCycleVisual = cycleVisuals[((activeCycle?.id ?? props.program.currentCycle) - 1) % cycleVisuals.length];
+  const activeCycleWeeks = activeCycle?.weeks ?? 12;
+  const activeCycleProgress = Math.min(100, Math.round(((props.program.currentWeek - 1 + props.program.stats.weekProgress / 100) / activeCycleWeeks) * 100));
+  const weekProgress = Math.min(100, Math.max(0, props.program.stats.weekProgress));
+  const nextRank = props.program.stats.rank.nextTitle ?? props.t.dashboard.rankComplete;
+  const weakZoneId = zoneIds.includes(props.program.weakZone as (typeof zoneIds)[number])
+    ? props.program.weakZone as (typeof zoneIds)[number]
+    : "ikigai";
+  const weakZoneLabel = props.t.zones[weakZoneId];
+  const weakZoneIcon = weakZoneId === "passion" ? "💗"
+    : weakZoneId === "mission" ? "🌍"
+      : weakZoneId === "profession" ? "⭐"
+        : weakZoneId === "vocation" ? "💰"
+          : weakZoneId === "resource" ? "🌱"
+            : weakZoneId === "clarity" ? "🧭"
+              : weakZoneId === "stability" ? "🌳"
+                : "✦";
+  const zoneProgress = Math.min(100, Math.round((props.program.stats.checkinsDone / Math.max(1, props.program.enrollments.length * 7)) * 100));
+  const rankIcon = ["🌱", "🔥", "🧭", "⚡", "🌟", "👑"][Math.max(0, Math.min(5, props.program.stats.rank.level - 1))];
+  const statTiles: Array<{ label: string; value: string | number; icon: string; color: string }> = [
+    { label: props.t.stats.checkins, value: props.program.stats.checkinsDone, icon: "✅", color: "#00d4ff" },
+    { label: props.t.stats.insights, value: props.program.stats.insightsCount, icon: "💡", color: "#a855f7" },
+    { label: props.t.stats.xp, value: props.program.stats.xp, icon: "⭐", color: "#f59e0b" },
+    { label: props.t.dashboard.rankShort, value: props.program.stats.rank.title, icon: rankIcon, color: "#f59e0b" }
+  ];
   return (
     <div className="habits-grid">
+      <section className="habits-panel habits-wide habits-dashboard-hero">
+        <div className="habits-old-stat-grid">
+          {statTiles.map((tile) => (
+            <div className="habits-old-stat-card" key={tile.label} style={{ "--tile-color": tile.color } as CSSProperties}>
+              <div className="habits-old-stat-icon">{tile.icon}</div>
+              <strong>{tile.value}</strong>
+              <span>{tile.label}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="habits-dashboard-hero-head">
+          <div>
+            <div className="eyebrow">{props.t.dashboard.pathEyebrow}</div>
+            <h2>{props.t.dashboard.pathTitle}</h2>
+            <p>{props.t.dashboard.pathCopy}</p>
+          </div>
+          <button className="button secondary habits-cta" type="button" onClick={props.openNavigator}>
+            <PenguinHeadIcon size={18} />
+            {props.t.dashboard.askPingvi}
+          </button>
+        </div>
+
+        <div className="habits-status-strip">
+          <div className="habits-status-card">
+            <span><span className="habits-inline-icon">{rankIcon}</span>{props.t.dashboard.currentRank}</span>
+            <strong>{props.program.stats.rank.title}</strong>
+            <small>{props.program.stats.xp} XP · {props.t.dashboard.nextRank}: {nextRank}</small>
+          </div>
+          <div className="habits-status-card">
+            <span><span className="habits-inline-icon">🧭</span>{props.t.dashboard.totalRoute}</span>
+            <strong>{props.program.stats.currentSortOrder}/{totalWeeks || props.program.stats.currentSortOrder}</strong>
+            <small>{routeProgress}%</small>
+          </div>
+          <div className="habits-status-card">
+            <span><span className="habits-inline-icon">✦</span>{props.t.dashboard.weeklyRhythm}</span>
+            <strong>{props.program.stats.completedWeekCheckins}/7</strong>
+            <small>{weekProgress}%</small>
+          </div>
+        </div>
+
+        {activeCycle && (
+          <div className="habits-current-cycle-card" style={{ "--cycle-color": activeCycleVisual.color } as CSSProperties}>
+            <div>
+              <div className="habit-week">{props.t.dashboard.currentCycle}</div>
+              <h3><span className="habits-current-cycle-icon">{activeCycleVisual.icon}</span>{activeCycle.label} - {activeCycle.title}</h3>
+              <p>{activeCycle.goal}</p>
+              <div className="habits-tag-row">
+                {activeCycle.areas.map((area) => <span key={area} style={{ "--cycle-color": activeCycleVisual.color } as CSSProperties}>{area}</span>)}
+              </div>
+            </div>
+            <div className="habits-cycle-meter" style={{ "--cycle-progress": `${activeCycleProgress}%`, "--cycle-color": activeCycleVisual.color } as CSSProperties}>
+              <strong>{activeCycleProgress}%</strong>
+              <span>{props.t.dashboard.cycleProgress}</span>
+            </div>
+          </div>
+        )}
+
+        <div className="habits-route-progress">
+          <div className="row">
+            <strong>{props.t.dashboard.routeProgress}</strong>
+            <span>{routeProgress}%</span>
+          </div>
+          <div className="progress-bg habits-progress-slim"><div className="progress-fill" style={{ width: `${routeProgress}%` }} /></div>
+        </div>
+
+        <div className="habits-cycle-map">
+          {props.program.cycles.map((cycle) => {
+            const isActive = cycle.id === props.program.currentCycle;
+            const isDone = cycle.id < props.program.currentCycle;
+            const visual = cycleVisuals[(cycle.id - 1) % cycleVisuals.length];
+            const progress = isDone ? 100 : isActive ? activeCycleProgress : 0;
+            return (
+              <article className={`habits-cycle-step ${isActive ? "active" : ""} ${isDone ? "done" : ""}`} key={cycle.id} style={{ "--cycle-color": visual.color } as CSSProperties}>
+                <div className="habits-cycle-step-icon">{visual.icon}</div>
+                <span>{cycle.label}</span>
+                <h3>{cycle.title}</h3>
+                <p>{cycle.goal}</p>
+                <div className="progress-bg"><div className="progress-fill" style={{ width: `${progress}%`, "--progress-fill": `linear-gradient(90deg, ${visual.color}88, ${visual.color})` } as CSSProperties} /></div>
+                {isActive && <small>{props.t.dashboard.weekOfCycle}: {Math.min(props.program.currentWeek, cycle.weeks)}/{cycle.weeks}</small>}
+              </article>
+            );
+          })}
+        </div>
+      </section>
+
       <section className="habits-panel">
         <h2>{props.t.dashboard.todayFocus}</h2>
         <div className="habits-first-step">
@@ -626,7 +791,17 @@ function DashboardTab(props: {
           </div>
         </div>
         {props.activeHabit && <HabitDetailsCard habit={props.activeHabit} t={props.t} />}
-        <textarea className="input habits-note" placeholder="Короткая заметка к сегодняшнему шагу" value={props.note} onChange={(event) => props.setNote(event.target.value)} />
+        {props.activeHabit && (
+          <div className="habits-week-card habits-compact-week">
+            <div className="row">
+              <strong>{props.t.journey.weekCalendar}</strong>
+              <span>{props.activeHabit.checkinsDone}/7</span>
+            </div>
+            <WeekDots habit={props.activeHabit} />
+            <div className="progress-bg"><div className="progress-fill" style={{ width: `${weekProgress}%` }} /></div>
+          </div>
+        )}
+        <textarea className="input habits-note" placeholder={props.t.dashboard.notePlaceholder} value={props.note} onChange={(event) => props.setNote(event.target.value)} />
         <button className="button" type="button" disabled={props.busy} onClick={() => props.saveCheckin()}>
           <CheckCircle2 size={17} />
           {props.t.dashboard.saveStep}
@@ -653,9 +828,9 @@ function DashboardTab(props: {
             <div className="progress-bg"><div className="progress-fill" style={{ width: `${props.program.stats.rank.progress}%` }} /></div>
           </div>
         </div>
-        <MetricSlider icon={Gauge} label={props.t.metrics.energy} value={props.energy} onChange={props.setEnergy} />
-        <MetricSlider icon={Compass} label={props.t.metrics.clarity} value={props.clarity} onChange={props.setClarity} />
-        <MetricSlider icon={Sparkles} label={props.t.metrics.stability} value={props.stability} onChange={props.setStability} />
+        <MetricSlider icon="⚡" color="#00d4ff" label={props.t.metrics.energy} value={props.energy} onChange={props.setEnergy} />
+        <MetricSlider icon="🧠" color="#a855f7" label={props.t.metrics.clarity} value={props.clarity} onChange={props.setClarity} />
+        <MetricSlider icon="🌳" color="#10b981" label={props.t.metrics.stability} value={props.stability} onChange={props.setStability} />
         {props.latestMetric && (
           <div className="habits-mini-reward">
             {props.t.metrics.energy} {props.latestMetric.energy}/10 · {props.t.metrics.clarity} {props.latestMetric.clarity}/10
@@ -665,6 +840,19 @@ function DashboardTab(props: {
           <Save size={17} />
           {props.t.dashboard.saveMetric}
         </button>
+      </section>
+
+      <section className="habits-panel habits-growth-panel">
+        <div className="habit-week">{props.t.dashboard.growthPoint}</div>
+        <h2><span>{weakZoneIcon}</span>{weakZoneLabel}</h2>
+        <div className="row habits-growth-row">
+          <span>{props.t.dashboard.zoneProgress}</span>
+          <strong>{zoneProgress}<small>/100</small></strong>
+        </div>
+        <div className="progress-bg habits-progress-slim">
+          <div className="progress-fill" style={{ width: `${zoneProgress}%`, "--progress-fill": "linear-gradient(90deg, #00d4ff88, #00d4ff)" } as CSSProperties} />
+        </div>
+        <p>{props.program.stats.checkinsDone} {props.t.stats.checkins.toLowerCase()} · {props.t.dashboard.continuePath}</p>
       </section>
 
       <section className="habits-panel habits-wide">
@@ -1086,13 +1274,20 @@ function WeekDots({ habit }: { habit: HabitEnrollmentSummary }) {
   );
 }
 
-function MetricSlider(props: { icon: LucideIcon; label: string; value: number; onChange: (value: number) => void }) {
-  const Icon = props.icon;
+function metricStatus(value: number) {
+  if (value >= 7) return "🙂 Хорошо";
+  if (value >= 5) return "😐 Норма";
+  return "🌧 Низко";
+}
+
+function MetricSlider(props: { icon: string; color: string; label: string; value: number; onChange: (value: number) => void }) {
+  const progress = Math.max(0, Math.min(100, props.value * 10));
   return (
-    <label className="habits-slider">
-      <span><Icon size={16} />{props.label}</span>
-      <input type="range" min={0} max={10} value={props.value} onChange={(event) => props.onChange(Number(event.target.value))} />
+    <label className="habits-slider" style={{ "--metric-color": props.color, "--metric-progress": `${progress}%` } as CSSProperties}>
+      <span><span className="habits-inline-icon">{props.icon}</span>{props.label}</span>
+      <em>{metricStatus(props.value)}</em>
       <strong>{props.value}/10</strong>
+      <input type="range" min={0} max={10} value={props.value} onChange={(event) => props.onChange(Number(event.target.value))} />
     </label>
   );
 }

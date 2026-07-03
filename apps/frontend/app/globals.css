@@ -387,7 +387,7 @@ svg {
 .progress-fill {
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, var(--cyan), var(--violet));
+  background: var(--progress-fill, linear-gradient(90deg, var(--cyan), var(--violet)));
   transition: width 0.25s ease;
 }
 
@@ -2201,6 +2201,8 @@ svg {
 }
 
 .habits-sidebar {
+  display: flex;
+  flex-direction: column;
   border-right: 1px solid rgba(255, 255, 255, 0.06);
   background: rgba(2, 11, 24, 0.97);
   padding: 20px 12px;
@@ -2220,6 +2222,24 @@ svg {
   width: 38px;
   height: 38px;
   border-radius: 12px;
+}
+
+.habits-penguin-head {
+  flex: none;
+  display: inline-flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid rgba(0, 212, 255, 0.28);
+  border-radius: 50%;
+  background: #0d2137;
+  box-shadow: 0 0 16px rgba(0, 212, 255, 0.16);
+}
+
+.habits-penguin-head img {
+  object-fit: cover;
+  transform: translateY(-8%) scale(1.35);
+  transform-origin: center top;
 }
 
 .habits-brand-title {
@@ -2260,6 +2280,50 @@ svg {
   color: var(--cyan);
 }
 
+.habits-nav-symbol {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  color: inherit;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.habits-sidebar-profile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: auto;
+  padding: 16px 8px 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.habits-sidebar-avatar {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--cyan), #8b5cf6);
+  color: #fff;
+  font-family: "Unbounded", sans-serif;
+  font-size: 13px;
+}
+
+.habits-sidebar-profile strong {
+  display: block;
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.habits-sidebar-profile span {
+  display: block;
+  color: rgba(148, 163, 184, 0.82);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
 .habits-bottom-nav {
   display: none;
 }
@@ -2275,6 +2339,54 @@ svg {
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 22px;
+}
+
+.habits-topbar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.habits-top-pill {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.045);
+  color: rgba(226, 232, 240, 0.72);
+  font-size: 12px;
+  padding: 8px 13px;
+  white-space: nowrap;
+}
+
+.habits-pill-icon {
+  line-height: 1;
+  filter: drop-shadow(0 0 8px rgba(0, 212, 255, 0.18));
+}
+
+.habits-top-pill.online .habits-penguin-head {
+  position: relative;
+}
+
+.habits-top-pill.online .habits-penguin-head::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 10px rgba(0, 255, 136, 0.75);
+}
+
+.habits-top-pill.accent {
+  border-color: rgba(255, 184, 0, 0.2);
+  color: rgba(255, 255, 255, 0.82);
 }
 
 .habits-topbar h1,
@@ -2507,6 +2619,302 @@ svg {
   grid-column: 1 / -1;
 }
 
+.habits-dashboard-hero {
+  display: grid;
+  gap: 16px;
+  background:
+    linear-gradient(135deg, rgba(0, 212, 255, 0.1), rgba(139, 92, 246, 0.06)),
+    rgba(255, 255, 255, 0.04);
+  border-color: rgba(0, 212, 255, 0.16);
+}
+
+.habits-old-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.habits-old-stat-card {
+  display: grid;
+  place-items: center;
+  min-height: 112px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: rgba(2, 11, 24, 0.42);
+  color: rgba(226, 232, 240, 0.62);
+  padding: 14px;
+  text-align: center;
+}
+
+.habits-old-stat-icon {
+  font-size: 26px;
+  line-height: 1;
+  filter: drop-shadow(0 0 12px color-mix(in srgb, var(--tile-color, var(--cyan)) 55%, transparent));
+}
+
+.habits-old-stat-card strong {
+  color: var(--tile-color, #fff);
+  font-family: "Unbounded", sans-serif;
+  font-size: 20px;
+  line-height: 1.2;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.habits-old-stat-card span {
+  color: rgba(148, 163, 184, 0.86);
+  font-size: 12px;
+}
+
+.habits-dashboard-hero-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.habits-dashboard-hero-head p {
+  color: rgba(226, 232, 240, 0.7);
+  font-size: 13px;
+  line-height: 1.65;
+  margin: 8px 0 0;
+  max-width: 700px;
+}
+
+.habits-status-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.habits-status-card,
+.habits-cycle-step {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: rgba(2, 11, 24, 0.46);
+  padding: 14px;
+}
+
+.habits-current-cycle-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 132px;
+  align-items: center;
+  gap: 16px;
+  border: 1px solid rgba(0, 212, 255, 0.18);
+  border: 1px solid color-mix(in srgb, var(--cycle-color, var(--cyan)) 30%, transparent);
+  border-radius: 16px;
+  background: rgba(0, 212, 255, 0.07);
+  background:
+    radial-gradient(circle at 100% 0%, color-mix(in srgb, var(--cycle-color, var(--cyan)) 15%, transparent), transparent 38%),
+    rgba(255, 255, 255, 0.04);
+  padding: 16px;
+}
+
+.habits-current-cycle-card h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  color: #fff;
+  font-family: "Unbounded", sans-serif;
+  font-size: 16px;
+}
+
+.habits-current-cycle-icon {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.habits-current-cycle-card p {
+  margin: 0;
+  color: rgba(226, 232, 240, 0.68);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.habits-tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.habits-tag-row span {
+  border: 1px solid rgba(0, 212, 255, 0.24);
+  border: 1px solid color-mix(in srgb, var(--cycle-color, var(--cyan)) 30%, transparent);
+  border-radius: 999px;
+  background: rgba(0, 212, 255, 0.08);
+  background: color-mix(in srgb, var(--cycle-color, var(--cyan)) 12%, transparent);
+  color: var(--cycle-color, var(--cyan));
+  font-size: 11px;
+  padding: 5px 9px;
+}
+
+.habits-cycle-meter {
+  min-height: 112px;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at center, #020b18 0 54%, transparent 55%),
+    conic-gradient(var(--cycle-color, var(--cyan)) var(--cycle-progress, 0%), rgba(255, 255, 255, 0.09) 0);
+  border: 1px solid rgba(0, 212, 255, 0.18);
+  border: 1px solid color-mix(in srgb, var(--cycle-color, var(--cyan)) 30%, transparent);
+  text-align: center;
+}
+
+.habits-cycle-meter strong {
+  color: #fff;
+  font-family: "Unbounded", sans-serif;
+  font-size: 22px;
+}
+
+.habits-cycle-meter span {
+  color: rgba(226, 232, 240, 0.52);
+  font-size: 11px;
+}
+
+.habits-status-card {
+  display: grid;
+  gap: 6px;
+}
+
+.habits-status-card span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: rgba(226, 232, 240, 0.62);
+  font-size: 12px;
+}
+
+.habits-inline-icon {
+  display: inline-grid;
+  place-items: center;
+  line-height: 1;
+}
+
+.habits-status-card strong {
+  color: #fff;
+  font-family: "Unbounded", sans-serif;
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.habits-status-card small,
+.habits-cycle-step small {
+  color: rgba(226, 232, 240, 0.52);
+  font-size: 12px;
+}
+
+.habits-route-progress {
+  display: grid;
+  gap: 8px;
+}
+
+.habits-route-progress .row strong {
+  color: #fff;
+  font-family: "Unbounded", sans-serif;
+  font-size: 13px;
+}
+
+.habits-route-progress .row span {
+  color: var(--cyan);
+  font-family: "Unbounded", sans-serif;
+  font-size: 12px;
+}
+
+.habits-cycle-map {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.habits-cycle-step {
+  display: grid;
+  gap: 8px;
+  min-height: 150px;
+}
+
+.habits-cycle-step span {
+  color: var(--cycle-color, var(--cyan));
+  font-family: "Unbounded", sans-serif;
+  font-size: 12px;
+}
+
+.habits-cycle-step-icon {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.habits-cycle-step h3 {
+  margin: 0;
+  color: #fff;
+  font-size: 14px;
+}
+
+.habits-cycle-step p {
+  margin: 0;
+  color: rgba(226, 232, 240, 0.62);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.habits-cycle-step.active {
+  border-color: rgba(0, 212, 255, 0.34);
+  border-color: color-mix(in srgb, var(--cycle-color, var(--cyan)) 42%, transparent);
+  background: rgba(0, 212, 255, 0.08);
+  background: color-mix(in srgb, var(--cycle-color, var(--cyan)) 10%, transparent);
+}
+
+.habits-cycle-step.done {
+  border-color: rgba(0, 255, 136, 0.22);
+  background: rgba(0, 255, 136, 0.05);
+}
+
+.habits-progress-slim {
+  height: 6px;
+}
+
+.habits-growth-panel {
+  align-self: start;
+  display: grid;
+  gap: 10px;
+  background:
+    radial-gradient(circle at 75% 35%, rgba(0, 212, 255, 0.08), transparent 45%),
+    rgba(255, 255, 255, 0.04);
+}
+
+.habits-growth-panel h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--cyan);
+  font-size: 16px;
+}
+
+.habits-growth-row {
+  color: rgba(226, 232, 240, 0.66);
+  font-size: 12px;
+}
+
+.habits-growth-row strong {
+  color: var(--cyan);
+  font-family: "Unbounded", sans-serif;
+  font-size: 16px;
+}
+
+.habits-growth-row small {
+  color: rgba(226, 232, 240, 0.44);
+  font-size: 11px;
+}
+
+.habits-growth-panel p {
+  margin: 0;
+  color: rgba(226, 232, 240, 0.52);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
 .habits-cycle.active {
   border-color: rgba(0, 212, 255, 0.42);
   background: rgba(0, 212, 255, 0.08);
@@ -2542,7 +2950,7 @@ svg {
 
 .habits-slider {
   display: grid;
-  grid-template-columns: 116px 1fr 52px;
+  grid-template-columns: 116px minmax(84px, auto) 52px;
   align-items: center;
   gap: 10px;
   margin: 14px 0;
@@ -2557,11 +2965,52 @@ svg {
 }
 
 .habits-slider input {
-  accent-color: var(--cyan);
+  grid-column: 2 / 4;
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  appearance: none;
+  cursor: pointer;
+  background:
+    linear-gradient(90deg, var(--metric-color, var(--cyan)) var(--metric-progress, 0%), rgba(255, 255, 255, 0.1) 0);
+  outline: none;
+}
+
+.habits-slider input::-webkit-slider-thumb {
+  width: 15px;
+  height: 15px;
+  border: 0;
+  border-radius: 50%;
+  appearance: none;
+  background: var(--metric-color, var(--cyan));
+  box-shadow: 0 0 12px color-mix(in srgb, var(--metric-color, var(--cyan)) 60%, transparent);
+}
+
+.habits-slider input::-moz-range-thumb {
+  width: 15px;
+  height: 15px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--metric-color, var(--cyan));
+  box-shadow: 0 0 12px color-mix(in srgb, var(--metric-color, var(--cyan)) 60%, transparent);
+}
+
+.habits-slider em {
+  justify-self: end;
+  border: 1px solid rgba(0, 212, 255, 0.24);
+  border: 1px solid color-mix(in srgb, var(--metric-color, var(--cyan)) 28%, transparent);
+  border-radius: 999px;
+  background: rgba(0, 212, 255, 0.08);
+  background: color-mix(in srgb, var(--metric-color, var(--cyan)) 12%, transparent);
+  color: var(--metric-color, var(--cyan));
+  font-size: 11px;
+  font-style: normal;
+  line-height: 1;
+  padding: 5px 8px;
 }
 
 .habits-slider strong {
-  color: var(--cyan);
+  color: var(--metric-color, var(--cyan));
   font-family: "Unbounded", sans-serif;
   font-size: 12px;
   text-align: right;
@@ -2647,6 +3096,10 @@ svg {
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.04);
   padding: 14px;
+}
+
+.habits-compact-week {
+  margin: 12px 0;
 }
 
 .habits-rank-card span {
@@ -2822,6 +3275,14 @@ p {
   .habits-habit-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .habits-old-stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .habits-cycle-map {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 760px) {
@@ -2872,7 +3333,8 @@ p {
   }
 
   .habits-sidebar .habits-nav,
-  .habits-sidebar .habits-account-link {
+  .habits-sidebar .habits-account-link,
+  .habits-sidebar .habits-sidebar-profile {
     display: none;
   }
 
@@ -2887,12 +3349,30 @@ p {
 
   .habits-grid,
   .habits-stats,
+  .habits-status-strip,
   .habits-chat-form,
   .habits-form-row,
   .habits-wellness-row,
+  .habits-cycle-map,
   .habits-habit-grid,
   .habits-rank-ladder {
     grid-template-columns: 1fr;
+  }
+
+  .habits-current-cycle-card {
+    grid-template-columns: 1fr;
+  }
+
+  .habits-cycle-meter {
+    min-height: 96px;
+  }
+
+  .habits-dashboard-hero-head {
+    flex-direction: column;
+  }
+
+  .habits-dashboard-hero-head .button {
+    width: 100%;
   }
 
   .habits-slider {
@@ -2900,6 +3380,10 @@ p {
   }
 
   .habits-slider span {
+    grid-column: 1 / -1;
+  }
+
+  .habits-slider input {
     grid-column: 1 / -1;
   }
 

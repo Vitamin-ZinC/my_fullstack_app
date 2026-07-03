@@ -11,6 +11,19 @@ export function parseCompletionJson(content: string) {
   return parseJsonWithRepair(candidate);
 }
 
+export function parseGatewayJson<T = unknown>(content: string, label = "OpenAI-compatible gateway response"): T {
+  try {
+    return JSON.parse(content) as T;
+  } catch (error) {
+    try {
+      return JSON.parse(jsonrepair(content)) as T;
+    } catch {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`${label} returned invalid JSON: ${message}`);
+    }
+  }
+}
+
 function stripThinkBlocks(content: string) {
   return content
     .replace(/<think>[\s\S]*?<\/think>/gi, "")

@@ -134,6 +134,7 @@ function HabitsContent() {
   const [chatInput, setChatInput] = useState("");
   const [threadId, setThreadId] = useState<string | undefined>();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [showCoachmark, setShowCoachmark] = useState(false);
 
   const [settingsName, setSettingsName] = useState("");
   const [settingsZone, setSettingsZone] = useState<string>("clarity");
@@ -189,6 +190,12 @@ function HabitsContent() {
     setReminderTime(program.settings.reminderTime || "09:00");
   }, [program]);
 
+  useEffect(() => {
+    if (!program || typeof window === "undefined") return;
+    const key = `orken_habits_coachmark_v1_${program.id}`;
+    setShowCoachmark(window.localStorage.getItem(key) !== "1");
+  }, [program?.id]);
+
   const activeHabit = program?.activeEnrollment ?? program?.enrollments[0] ?? null;
   const latestMetric = program?.metrics[0];
   const doneToday = Boolean(activeHabit?.checkins.some((checkin) => checkin.date === todayIso() && checkin.completed));
@@ -229,6 +236,13 @@ function HabitsContent() {
     setSavedMessage(message);
     setSavedAt(new Date());
     setError("");
+  }
+
+  function dismissCoachmark() {
+    if (program && typeof window !== "undefined") {
+      window.localStorage.setItem(`orken_habits_coachmark_v1_${program.id}`, "1");
+    }
+    setShowCoachmark(false);
   }
 
   async function startFromLatestReport() {
@@ -477,7 +491,7 @@ function HabitsContent() {
         <nav className="habits-nav">
           {navItems.map((item) => {
             return (
-              <button key={item.id} className={tab === item.id ? "active" : ""} type="button" onClick={() => setTab(item.id)}>
+              <button key={item.id} className={tab === item.id ? "active" : ""} type="button" title={t.habitsUx.tooltips[item.id]} onClick={() => setTab(item.id)}>
                 <NavIcon item={item} size={17} />
                 {t.nav[item.id]}
               </button>
@@ -497,7 +511,7 @@ function HabitsContent() {
       <nav className="habits-bottom-nav" aria-label="Навигация привычек">
         {navItems.map((item) => {
           return (
-            <button key={item.id} className={tab === item.id ? "active" : ""} type="button" onClick={() => setTab(item.id)}>
+            <button key={item.id} className={tab === item.id ? "active" : ""} type="button" title={t.habitsUx.tooltips[item.id]} onClick={() => setTab(item.id)}>
               <NavIcon item={item} size={17} />
               <span>{t.nav[item.id]}</span>
             </button>
@@ -526,6 +540,16 @@ function HabitsContent() {
         {savedMessage && <p className="auth-message">{savedMessage}</p>}
         {savedAt && <p className="habits-save-state">{t.saved} {formatTime(savedAt)}</p>}
         {error && <p className="auth-error">{error}</p>}
+        {showCoachmark && (
+          <Coachmark
+            t={t}
+            onClose={dismissCoachmark}
+            onGuide={() => {
+              dismissCoachmark();
+              setTab("guide");
+            }}
+          />
+        )}
 
         {tab === "dashboard" && (
           <DashboardTab
@@ -686,6 +710,21 @@ function DashboardTab(props: {
   ];
   return (
     <div className="habits-grid">
+      <section className="habits-panel habits-wide habits-day-plan">
+        <div>
+          <div className="eyebrow">{props.t.dashboard.eyebrow}</div>
+          <h2>{props.t.habitsUx.dailyPlanTitle}<HelpTip label={props.t.habitsUx.tooltips.dashboard} /></h2>
+        </div>
+        <div className="habits-plan-steps">
+          {props.t.habitsUx.dailyPlan.map((step, index) => (
+            <div className="habits-plan-step" key={step}>
+              <span>{index + 1}</span>
+              <strong>{step}</strong>
+            </div>
+          ))}
+        </div>
+      </section>
+
       <section className="habits-panel habits-wide habits-dashboard-hero">
         <div className="habits-old-stat-grid">
           {statTiles.map((tile) => (
@@ -703,7 +742,7 @@ function DashboardTab(props: {
             <h2>{props.t.dashboard.pathTitle}</h2>
             <p>{props.t.dashboard.pathCopy}</p>
           </div>
-          <button className="button secondary habits-cta" type="button" onClick={props.openNavigator}>
+          <button className="button secondary habits-cta" type="button" title={props.t.habitsUx.tooltips.navigator} onClick={props.openNavigator}>
             <PenguinHeadIcon size={18} />
             {props.t.dashboard.askPingvi}
           </button>
@@ -773,20 +812,20 @@ function DashboardTab(props: {
       </section>
 
       <section className="habits-panel">
-        <h2>{props.t.dashboard.todayFocus}</h2>
+        <h2>{props.t.dashboard.todayFocus}<HelpTip label={props.t.habitsUx.tooltips.done} /></h2>
         <div className="habits-first-step">
           <div>
             <div className="habit-week">{props.t.dashboard.firstStep}</div>
             <p>{props.microStepText}</p>
           </div>
           <div className="habits-action-row">
-            <button className="button habits-cta" type="button" disabled={props.busy} onClick={() => props.saveCheckin(props.activeHabit, !props.doneToday)}>
+            <button className="button habits-cta" type="button" title={props.t.habitsUx.tooltips.done} disabled={props.busy} onClick={() => props.saveCheckin(props.activeHabit, !props.doneToday)}>
               {props.doneToday ? props.t.journey.undoToday : props.t.dashboard.done}
             </button>
-            <button className="button secondary habits-cta" type="button" disabled={props.busy} onClick={props.softenTodayStep}>
+            <button className="button secondary habits-cta" type="button" title={props.t.habitsUx.tooltips.tooMuch} disabled={props.busy} onClick={props.softenTodayStep}>
               {props.t.dashboard.tooMuch}
             </button>
-            <button className="btn-back" type="button" onClick={props.rotateTodayStep}>
+            <button className="btn-back" type="button" title={props.t.habitsUx.tooltips.replace} onClick={props.rotateTodayStep}>
               {props.t.dashboard.replace}
             </button>
           </div>
@@ -804,7 +843,7 @@ function DashboardTab(props: {
           </div>
         )}
         <textarea className="input habits-note" placeholder={props.t.dashboard.notePlaceholder} value={props.note} onChange={(event) => props.setNote(event.target.value)} />
-        <button className="button" type="button" disabled={props.busy} onClick={() => props.saveCheckin()}>
+        <button className="button" type="button" title={props.t.habitsUx.tooltips.saveStep} disabled={props.busy} onClick={() => props.saveCheckin()}>
           <CheckCircle2 size={17} />
           {props.t.dashboard.saveStep}
         </button>
@@ -818,7 +857,7 @@ function DashboardTab(props: {
       </section>
 
       <section className="habits-panel">
-        <h2>{props.t.dashboard.metricTitle}</h2>
+        <h2>{props.t.dashboard.metricTitle}<HelpTip label={props.t.habitsUx.tooltips.saveMetric} /></h2>
         <p className="habits-muted">{props.t.dashboard.metricCopy}</p>
         <div className="habits-wellness-row">
           <div className="habits-progress-ring" style={{ "--progress": `${wellness}%` } as CSSProperties}>
@@ -837,6 +876,7 @@ function DashboardTab(props: {
           label={props.t.metrics.energy}
           value={props.energy}
           hint={metricValueHint(props.energy, props.t.dashboard.metricValueHints)}
+          scale={props.t.habitsUx.metricScales.energy}
           onChange={props.setEnergy}
         />
         <MetricSlider
@@ -845,6 +885,7 @@ function DashboardTab(props: {
           label={props.t.metrics.clarity}
           value={props.clarity}
           hint={metricValueHint(props.clarity, props.t.dashboard.metricValueHints)}
+          scale={props.t.habitsUx.metricScales.clarity}
           onChange={props.setClarity}
         />
         <MetricSlider
@@ -853,20 +894,15 @@ function DashboardTab(props: {
           label={props.t.metrics.stability}
           value={props.stability}
           hint={metricValueHint(props.stability, props.t.dashboard.metricValueHints)}
+          scale={props.t.habitsUx.metricScales.stability}
           onChange={props.setStability}
         />
-        <details className="habits-explainer">
-          <summary>{props.t.dashboard.metricScaleTitle}</summary>
-          <ul>
-            {props.t.dashboard.metricScale.map((item) => <li key={item}>{item}</li>)}
-          </ul>
-        </details>
         {props.latestMetric && (
           <div className="habits-mini-reward">
             {props.t.metrics.energy} {props.latestMetric.energy}/10 · {props.t.metrics.clarity} {props.latestMetric.clarity}/10
           </div>
         )}
-        <button className="button secondary" type="button" disabled={props.busy} onClick={props.saveMetric}>
+        <button className="button secondary" type="button" title={props.t.habitsUx.tooltips.saveMetric} disabled={props.busy} onClick={props.saveMetric}>
           <Save size={17} />
           {props.t.dashboard.saveMetric}
         </button>
@@ -955,7 +991,7 @@ function JourneyTab(props: {
   return (
     <div className="habits-grid">
       <section className="habits-panel">
-        <h2>{props.t.journey.title}</h2>
+        <h2>{props.t.journey.title}<HelpTip label={props.t.habitsUx.tooltips.journey} /></h2>
         <p className="habits-muted">{props.program.careerAction || props.t.journey.copy}</p>
         {activeHabit && (
           <div className="habits-current">
@@ -988,29 +1024,46 @@ function JourneyTab(props: {
             )}
           </div>
         )}
+        {activeHabit && (
+          <div className="habits-week-summary">
+            <div>
+              <div className="habit-week">{props.t.habitsUx.weekSummary.title}</div>
+              <strong>{canAdvance ? props.t.habitsUx.weekSummary.ready : props.t.habitsUx.weekSummary.inProgress}</strong>
+            </div>
+            <button className="btn-back" type="button" onClick={() => copyWeekSummary(props.program, activeHabit)}>
+              {props.t.habitsUx.weekSummary.copy}
+            </button>
+          </div>
+        )}
       </section>
 
       <section className="habits-panel">
-        <h2>{props.t.journey.title}</h2>
+        <h2>{props.t.habitsUx.actionHelp.title}</h2>
         <div className="habits-action-stack">
-          <button className="button" type="button" disabled={props.busy || !canAdvance} onClick={() => props.advanceWeek(false)}>
+          <button className="button" type="button" title={props.t.habitsUx.tooltips.advance} disabled={props.busy || !canAdvance} onClick={() => props.advanceWeek(false)}>
             <CheckCircle2 size={17} />
             {props.t.journey.advance}
           </button>
-          <button className="button secondary" type="button" disabled={props.busy} onClick={() => props.advanceWeek(true)}>
+          <button className="button secondary" type="button" title={props.t.habitsUx.tooltips.softAdvance} disabled={props.busy} onClick={() => props.advanceWeek(true)}>
             <Sparkles size={17} />
             {props.t.journey.softAdvance}
           </button>
-          <button className="button secondary" type="button" disabled={props.busy || props.program.settings.weeklyFreezes <= 0} onClick={props.freezeWeek}>
+          <button className="button secondary" type="button" title={props.t.habitsUx.tooltips.freeze} disabled={props.busy || props.program.settings.weeklyFreezes <= 0} onClick={props.freezeWeek}>
             <PauseCircle size={17} />
             {props.program.settings.weeklyFreezes > 0 ? `${props.t.journey.freeze} (${props.program.settings.weeklyFreezes})` : props.t.journey.noFreezes}
           </button>
           {activeHabit && (
-            <a className="button secondary" href={buildCalendarUrl(props.program, activeHabit)} target="_blank" rel="noreferrer">
+            <a className="button secondary" title={props.t.habitsUx.tooltips.calendar} href={buildCalendarUrl(props.program, activeHabit)} target="_blank" rel="noreferrer">
               <CalendarPlus size={17} />
               {props.t.journey.calendar}
             </a>
           )}
+        </div>
+        <div className="habits-action-help-grid">
+          <p><strong>{props.t.journey.advance}</strong>{props.t.habitsUx.actionHelp.advance}</p>
+          <p><strong>{props.t.journey.softAdvance}</strong>{props.t.habitsUx.actionHelp.softAdvance}</p>
+          <p><strong>{props.t.journey.freeze}</strong>{props.t.habitsUx.actionHelp.freeze}</p>
+          <p><strong>{props.t.journey.calendar}</strong>{props.t.habitsUx.actionHelp.calendar}</p>
         </div>
       </section>
 
@@ -1090,10 +1143,11 @@ function NavigatorTab(props: {
 }) {
   return (
     <section className="habits-panel habits-chat">
-      <h2>{props.t.navigator.title}</h2>
-      <p className="habits-muted">{props.t.navigator.copy}</p>
+      <h2>{props.t.navigator.title}<HelpTip label={props.t.habitsUx.tooltips.navigator} /></h2>
+      <p className="habits-muted">{props.t.habitsUx.navigator.copy}</p>
+      <div className="habit-week">{props.t.habitsUx.navigator.promptTitle}</div>
       <div className="habits-tabs">
-        {props.t.navigator.prompts.map((prompt) => (
+        {props.t.habitsUx.navigator.prompts.map((prompt) => (
           <button className="btn-back" type="button" key={prompt} onClick={() => props.askNavigator(prompt)}>{prompt}</button>
         ))}
       </div>
@@ -1131,6 +1185,7 @@ function ArchiveTab(props: {
   const showInsights = props.filter === "all" || props.filter === "insights";
   const showRewards = props.filter === "all" || props.filter === "rewards";
   const showWeeks = props.filter === "all" || props.filter === "weeks";
+  const closedWeeks = props.program.enrollments.filter((habit) => habit.status === "COMPLETED");
   return (
     <div className="habits-grid">
       <section className="habits-panel habits-wide">
@@ -1170,6 +1225,28 @@ function ArchiveTab(props: {
                 <span>{reward.label}</span>
                 <strong>+{reward.xp}</strong>
               </div>
+            ))}
+          </div>
+        </section>
+      )}
+      {showWeeks && (
+        <section className="habits-panel habits-wide">
+          <h2>{props.t.habitsUx.archive.closedWeeksTitle}<HelpTip label={props.t.habitsUx.tooltips.archive} /></h2>
+          <div className="habits-closed-weeks">
+            {closedWeeks.length === 0 ? (
+              <div className="habits-current">{props.t.habitsUx.archive.closedWeeksEmpty}</div>
+            ) : closedWeeks.map((habit) => (
+              <article className="habits-card habits-closed-week" key={habit.id}>
+                <div className="habit-week">Цикл {habit.cycle} · Неделя {habit.week}</div>
+                <h3>{habit.title}</h3>
+                <p>{habit.focus}</p>
+                <div className="row">
+                  <span>{habit.checkinsDone}/7</span>
+                  <button className="btn-back" type="button" onClick={() => copyWeekSummary(props.program, habit, props.markSaved, props.t.habitsUx.archive.weekCopied)}>
+                    {props.t.habitsUx.archive.shareWeek}
+                  </button>
+                </div>
+              </article>
             ))}
           </div>
         </section>
@@ -1310,6 +1387,37 @@ function HabitDetailsCard({ habit, t }: { habit: HabitEnrollmentSummary; t: Retu
   );
 }
 
+function Coachmark(props: {
+  t: ReturnType<typeof useSiteText>["habits"]["app"];
+  onClose: () => void;
+  onGuide: () => void;
+}) {
+  return (
+    <section className="habits-coachmark" aria-label={props.t.habitsUx.coachmark.title}>
+      <div>
+        <h2>{props.t.habitsUx.coachmark.title}</h2>
+        <p>{props.t.habitsUx.coachmark.copy}</p>
+      </div>
+      <div className="habits-coachmark-steps">
+        {props.t.habitsUx.coachmark.steps.map((step) => <span key={step}>{step}</span>)}
+      </div>
+      <div className="habits-action-row">
+        <button className="button habits-cta" type="button" onClick={props.onClose}>{props.t.habitsUx.coachmark.primary}</button>
+        <button className="button secondary habits-cta" type="button" onClick={props.onGuide}>{props.t.habitsUx.coachmark.guide}</button>
+      </div>
+    </section>
+  );
+}
+
+function HelpTip({ label }: { label: string }) {
+  return (
+    <span className="habits-help-tip" tabIndex={0} aria-label={label}>
+      ?
+      <span>{label}</span>
+    </span>
+  );
+}
+
 function WeekDots({ habit }: { habit: HabitEnrollmentSummary }) {
   const completedDates = new Set(habit.checkins.filter((checkin) => checkin.completed).map((checkin) => checkin.date));
   const days = Array.from({ length: 7 }, (_, index) => index + 1);
@@ -1330,16 +1438,22 @@ function metricStatus(value: number) {
   return "🌧 Низко";
 }
 
-function MetricSlider(props: { icon: string; color: string; label: string; value: number; hint: string; onChange: (value: number) => void }) {
+function MetricSlider(props: { icon: string; color: string; label: string; value: number; hint: string; scale: readonly string[]; onChange: (value: number) => void }) {
   const progress = Math.max(0, Math.min(100, props.value * 10));
   return (
-    <label className="habits-slider" style={{ "--metric-color": props.color, "--metric-progress": `${progress}%` } as CSSProperties}>
-      <span><span className="habits-inline-icon">{props.icon}</span>{props.label}</span>
+    <div className="habits-slider" style={{ "--metric-color": props.color, "--metric-progress": `${progress}%` } as CSSProperties}>
+      <label htmlFor={`metric-${props.label}`}><span className="habits-inline-icon">{props.icon}</span>{props.label}</label>
       <em>{metricStatus(props.value)}</em>
       <strong>{props.value}/10</strong>
-      <input type="range" min={0} max={10} value={props.value} onChange={(event) => props.onChange(Number(event.target.value))} />
+      <input id={`metric-${props.label}`} type="range" min={0} max={10} value={props.value} onChange={(event) => props.onChange(Number(event.target.value))} />
       <small>{props.hint}</small>
-    </label>
+      <details className="habits-metric-help">
+        <summary>Что значит шкала {props.label.toLowerCase()}</summary>
+        <ul>
+          {props.scale.map((item) => <li key={item}>{item}</li>)}
+        </ul>
+      </details>
+    </div>
   );
 }
 
@@ -1373,6 +1487,23 @@ function buildCalendarUrl(program: HabitProgramSummary, habit: HabitEnrollmentSu
     dates: `${fmt(date)}/${fmt(end)}`
   });
   return `https://calendar.google.com/calendar/render?${params.toString()}`;
+}
+
+function buildWeekShareText(program: HabitProgramSummary, habit: HabitEnrollmentSummary) {
+  return [
+    `ORKEN.LIFE - ${program.title}`,
+    `Цикл ${habit.cycle}, неделя ${habit.week}: ${habit.title}`,
+    `Фокус: ${habit.focus}`,
+    `Отметки: ${habit.checkinsDone}/7`,
+    `XP: ${program.stats.xp}`,
+    `Ранг: ${program.stats.rank.title}`
+  ].join("\n");
+}
+
+function copyWeekSummary(program: HabitProgramSummary, habit: HabitEnrollmentSummary, markSaved?: (message: string) => void, message?: string) {
+  void navigator.clipboard?.writeText(buildWeekShareText(program, habit)).then(() => {
+    if (markSaved && message) markSaved(message);
+  }).catch(() => undefined);
 }
 
 function copyInsight(text: string, markSaved: (message: string) => void, message: string) {

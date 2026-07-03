@@ -2484,6 +2484,13 @@ svg {
   width: auto;
 }
 
+.habits-action-help {
+  margin: 0;
+  color: rgba(226, 232, 240, 0.56);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
 .habits-onboarding-options {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -3016,6 +3023,67 @@ svg {
   text-align: right;
 }
 
+.habits-slider small {
+  grid-column: 1 / -1;
+  color: rgba(226, 232, 240, 0.52);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.habits-explainer,
+.habits-xp-explainer {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.035);
+  color: rgba(226, 232, 240, 0.68);
+  font-size: 12px;
+  line-height: 1.55;
+  padding: 12px;
+}
+
+.habits-explainer {
+  margin: 12px 0;
+}
+
+.habits-explainer summary {
+  color: #fff;
+  cursor: pointer;
+  font-family: "Unbounded", sans-serif;
+  font-size: 12px;
+}
+
+.habits-explainer ul,
+.habits-xp-explainer ul {
+  margin: 10px 0 0;
+  padding-left: 18px;
+}
+
+.habits-explainer li + li,
+.habits-xp-explainer li + li {
+  margin-top: 6px;
+}
+
+.habits-xp-explainer {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.habits-xp-explainer h3 {
+  margin: 0 0 8px;
+  color: #fff;
+  font-family: "Unbounded", sans-serif;
+  font-size: 14px;
+}
+
+.habits-xp-explainer p {
+  margin: 0;
+  color: rgba(226, 232, 240, 0.62);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
 .habits-stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -3117,6 +3185,40 @@ svg {
 .habits-guide-list {
   display: grid;
   gap: 12px;
+}
+
+.habits-guide-steps {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.habits-guide-step {
+  display: grid;
+  gap: 8px;
+  min-height: 112px;
+  border: 1px solid rgba(0, 212, 255, 0.16);
+  border-radius: 14px;
+  background: rgba(0, 212, 255, 0.055);
+  padding: 12px;
+}
+
+.habits-guide-step span {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(0, 212, 255, 0.13);
+  color: var(--cyan);
+  font-family: "Unbounded", sans-serif;
+  font-size: 11px;
+}
+
+.habits-guide-step strong {
+  color: rgba(226, 232, 240, 0.82);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .habits-week-dots {
@@ -3283,6 +3385,10 @@ p {
   .habits-cycle-map {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .habits-guide-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 760px) {
@@ -3355,6 +3461,8 @@ p {
   .habits-wellness-row,
   .habits-cycle-map,
   .habits-habit-grid,
+  .habits-guide-steps,
+  .habits-xp-explainer,
   .habits-rank-ladder {
     grid-template-columns: 1fr;
   }

@@ -789,6 +789,7 @@ function DashboardTab(props: {
               {props.t.dashboard.replace}
             </button>
           </div>
+          <p className="habits-action-help">{props.t.dashboard.softStepHelp}</p>
         </div>
         {props.activeHabit && <HabitDetailsCard habit={props.activeHabit} t={props.t} />}
         {props.activeHabit && (
@@ -806,6 +807,7 @@ function DashboardTab(props: {
           <CheckCircle2 size={17} />
           {props.t.dashboard.saveStep}
         </button>
+        <p className="habits-action-help">{props.t.dashboard.saveStepHelp}</p>
         {props.canPersonalize && (
           <button className="button secondary" type="button" disabled={props.busy} onClick={props.personalizeFromReport}>
             <Sparkles size={17} />
@@ -828,9 +830,36 @@ function DashboardTab(props: {
             <div className="progress-bg"><div className="progress-fill" style={{ width: `${props.program.stats.rank.progress}%` }} /></div>
           </div>
         </div>
-        <MetricSlider icon="⚡" color="#00d4ff" label={props.t.metrics.energy} value={props.energy} onChange={props.setEnergy} />
-        <MetricSlider icon="🧠" color="#a855f7" label={props.t.metrics.clarity} value={props.clarity} onChange={props.setClarity} />
-        <MetricSlider icon="🌳" color="#10b981" label={props.t.metrics.stability} value={props.stability} onChange={props.setStability} />
+        <MetricSlider
+          icon="⚡"
+          color="#00d4ff"
+          label={props.t.metrics.energy}
+          value={props.energy}
+          hint={metricValueHint(props.energy, props.t.dashboard.metricValueHints)}
+          onChange={props.setEnergy}
+        />
+        <MetricSlider
+          icon="🧠"
+          color="#a855f7"
+          label={props.t.metrics.clarity}
+          value={props.clarity}
+          hint={metricValueHint(props.clarity, props.t.dashboard.metricValueHints)}
+          onChange={props.setClarity}
+        />
+        <MetricSlider
+          icon="🌳"
+          color="#10b981"
+          label={props.t.metrics.stability}
+          value={props.stability}
+          hint={metricValueHint(props.stability, props.t.dashboard.metricValueHints)}
+          onChange={props.setStability}
+        />
+        <details className="habits-explainer">
+          <summary>{props.t.dashboard.metricScaleTitle}</summary>
+          <ul>
+            {props.t.dashboard.metricScale.map((item) => <li key={item}>{item}</li>)}
+          </ul>
+        </details>
         {props.latestMetric && (
           <div className="habits-mini-reward">
             {props.t.metrics.energy} {props.latestMetric.energy}/10 · {props.t.metrics.clarity} {props.latestMetric.clarity}/10
@@ -879,6 +908,15 @@ function DashboardTab(props: {
               <strong>+{reward.xp} XP</strong>
             </div>
           ))}
+        </div>
+        <div className="habits-xp-explainer">
+          <div>
+            <h3>{props.t.dashboard.xpTitle}</h3>
+            <p>{props.t.dashboard.xpCopy}</p>
+          </div>
+          <ul>
+            {props.t.dashboard.xpRules.map((rule) => <li key={rule}>{rule}</li>)}
+          </ul>
         </div>
       </section>
 
@@ -1180,6 +1218,17 @@ function GuideTab({ t, program }: { t: ReturnType<typeof useSiteText>["habits"][
           ))}
         </div>
       </section>
+      <section className="habits-panel habits-wide">
+        <h2>{t.guide.quickStartTitle}</h2>
+        <div className="habits-guide-steps">
+          {t.guide.quickStart.map((step, index) => (
+            <div className="habits-guide-step" key={step}>
+              <span>{index + 1}</span>
+              <strong>{step}</strong>
+            </div>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }
@@ -1280,7 +1329,7 @@ function metricStatus(value: number) {
   return "🌧 Низко";
 }
 
-function MetricSlider(props: { icon: string; color: string; label: string; value: number; onChange: (value: number) => void }) {
+function MetricSlider(props: { icon: string; color: string; label: string; value: number; hint: string; onChange: (value: number) => void }) {
   const progress = Math.max(0, Math.min(100, props.value * 10));
   return (
     <label className="habits-slider" style={{ "--metric-color": props.color, "--metric-progress": `${progress}%` } as CSSProperties}>
@@ -1288,8 +1337,17 @@ function MetricSlider(props: { icon: string; color: string; label: string; value
       <em>{metricStatus(props.value)}</em>
       <strong>{props.value}/10</strong>
       <input type="range" min={0} max={10} value={props.value} onChange={(event) => props.onChange(Number(event.target.value))} />
+      <small>{props.hint}</small>
     </label>
   );
+}
+
+function metricValueHint(value: number, hints: readonly string[]) {
+  if (value <= 2) return hints[0] ?? "";
+  if (value <= 4) return hints[1] ?? "";
+  if (value <= 6) return hints[2] ?? "";
+  if (value <= 8) return hints[3] ?? "";
+  return hints[4] ?? "";
 }
 
 function Stat({ label, value }: { label: string; value: string | number }) {

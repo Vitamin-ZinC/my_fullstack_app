@@ -389,6 +389,7 @@ export async function generateOpenAiReport(context: ReportContext): Promise<Gene
 
   const transcript = transcription?.text ?? null;
   const photoInput = await buildPhotoInput(photoAsset);
+  const useCompatibleAsync = env.OPENAI_ASYNC_REPORTS_ENABLED && supportsCompatibleAsyncCompletions();
   const freeCompletion = await createReportCompletion({
     context,
     tier: "FREE",
@@ -397,7 +398,7 @@ export async function generateOpenAiReport(context: ReportContext): Promise<Gene
     photoInput,
     schemaName: "ikigai_free_report",
     jsonSchema: reportFreeJsonSchema,
-    useAsync: false,
+    useAsync: useCompatibleAsync,
     parseReport: (content) => reportFreeSchema.parse(parseCompletionJson(content))
   });
   const fullCompletion = await createReportCompletion({
@@ -408,7 +409,7 @@ export async function generateOpenAiReport(context: ReportContext): Promise<Gene
     photoInput,
     schemaName: "ikigai_full_report",
     jsonSchema: reportFullJsonSchema,
-    useAsync: env.OPENAI_ASYNC_REPORTS_ENABLED && supportsCompatibleAsyncCompletions(),
+    useAsync: useCompatibleAsync,
     parseReport: (content) => reportFullSchema.parse(parseCompletionJson(content))
   });
   const promptVersion = Math.max(freeCompletion.promptVersion, fullCompletion.promptVersion);

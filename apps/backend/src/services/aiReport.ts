@@ -587,13 +587,16 @@ function formatAsyncError(error: unknown) {
 async function fetchAsyncCompletionJson(path: string, init: RequestInit = {}) {
   const apiKey = getOpenAiApiKey();
   if (!apiKey) throw new Error("OpenAI-compatible client is not configured");
-  const response = await fetch(`${env.OPENAI_BASE_URL.replace(/\/$/, "")}${path}`, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      ...(init.headers ?? {})
-    }
-  });
+  const response = await withOpenAiDeadline((signal) => fetch(`${env.OPENAI_BASE_URL.replace(/\/$/, "")}${path}`, {
+      ...init,
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        ...(init.headers ?? {})
+      },
+      signal
+    }),
+    "OpenAI-compatible async completion request"
+  );
   const text = await response.text();
   if (!response.ok) {
     throw new Error(`OpenAI-compatible async completion failed with ${response.status}: ${text.slice(0, 500)}`);

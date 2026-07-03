@@ -15,7 +15,9 @@ import { analyzeAudioMetrics, type AudioTranscription, type VoiceSignalMetrics }
 import { parseCompletionJson, parseGatewayJson } from "./completionJson.js";
 import { getOpenAiApiKey, getOpenAiClient, hasOpenAiClient } from "./openaiClient.js";
 import {
+  isAsyncCompletionPollingTimeoutError,
   isRetryableAsyncCompletionError,
+  normalizeCompatibleChatMessages,
   shouldFallbackToSyncCompletionAfterAsyncError
 } from "./aiReportRouting.js";
 
@@ -564,9 +566,13 @@ async function createChatCompletionWithJsonMode(
 }
 
 function withCompatibleGenerationControls(params: ChatCompletionParams): CompatibleChatCompletionParams {
-  if (supportsNativeJsonSchemaResponseFormat()) return params;
-  return {
+  const normalizedParams = {
     ...params,
+    messages: normalizeCompatibleChatMessages(params.messages) as ChatCompletionMessageParam[]
+  };
+  if (supportsNativeJsonSchemaResponseFormat()) return normalizedParams;
+  return {
+    ...normalizedParams,
     thinking: { type: "disabled" }
   };
 }
@@ -637,6 +643,9 @@ async function createAsyncChatCompletion(
     } catch (error) {
       lastError = error;
       const message = error instanceof Error ? error.message : String(error);
+      if (isAsyncCompletionPollingTimeoutError(message)) {
+        throw error;
+      }
       if (attempt >= 3 || !isRetryableAsyncCompletionError(message)) {
         throw error;
       }

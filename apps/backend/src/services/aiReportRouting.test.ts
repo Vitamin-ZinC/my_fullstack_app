@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  isAsyncCompletionPollingTimeoutError,
   isRetryableAsyncCompletionError,
+  normalizeCompatibleChatMessages,
   shouldFallbackToSyncCompletionAfterAsyncError
 } from "./aiReportRouting.js";
 
@@ -17,4 +19,29 @@ test("unsupported async endpoint can fall back to sync report generation", () =>
 
   assert.equal(isRetryableAsyncCompletionError(message), true);
   assert.equal(shouldFallbackToSyncCompletionAfterAsyncError(message), true);
+});
+
+test("async polling timeout is not retried as a new long-running job", () => {
+  const message = "OpenAI-compatible async completion job-1 attempt 1 timed out after 600000ms";
+
+  assert.equal(isRetryableAsyncCompletionError(message), true);
+  assert.equal(isAsyncCompletionPollingTimeoutError(message), true);
+  assert.equal(shouldFallbackToSyncCompletionAfterAsyncError(message), false);
+});
+
+test("compatible chat message normalization adds missing text part type", () => {
+  const messages = normalizeCompatibleChatMessages([
+    {
+      role: "user",
+      content: [
+        { text: "Опиши картинку" },
+        { type: "image_url", image_url: { url: "https://example.com/a.jpg" } }
+      ]
+    }
+  ]);
+
+  assert.deepEqual(messages[0]?.content, [
+    { text: "Опиши картинку", type: "text" },
+    { type: "image_url", image_url: { url: "https://example.com/a.jpg" } }
+  ]);
 });

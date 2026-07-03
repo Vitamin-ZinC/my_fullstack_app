@@ -47,6 +47,10 @@ type CompletionResult<TReport> = {
 
 type OpenAiClient = NonNullable<ReturnType<typeof getOpenAiClient>>;
 type ResponseFormat = NonNullable<ChatCompletionCreateParamsNonStreaming["response_format"]>;
+type ChatCompletionParams = Omit<ChatCompletionCreateParamsNonStreaming, "response_format">;
+type CompatibleChatCompletionParams = ChatCompletionParams & {
+  thinking?: { type: "disabled" };
+};
 type AsyncCompletionJob = {
   id?: string;
   job_id?: string;
@@ -526,7 +530,7 @@ async function withOpenAiDeadline<T>(callback: (signal: AbortSignal) => Promise<
 
 async function createChatCompletionWithJsonMode(
   openai: OpenAiClient,
-  params: Omit<ChatCompletionCreateParamsNonStreaming, "response_format">,
+  params: CompatibleChatCompletionParams,
   responseFormat: ResponseFormat | null
 ) {
   if (!responseFormat) {
@@ -553,6 +557,14 @@ async function createChatCompletionWithJsonMode(
       signal
     }));
   }
+}
+
+function withCompatibleGenerationControls(params: ChatCompletionParams): CompatibleChatCompletionParams {
+  if (supportsNativeJsonSchemaResponseFormat()) return params;
+  return {
+    ...params,
+    thinking: { type: "disabled" }
+  };
 }
 
 function buildAsyncIdempotencyKey(input: Awaited<ReturnType<typeof buildCompletionInput>>, schemaName: string, photoInputUsed: boolean) {
@@ -605,7 +617,7 @@ async function fetchAsyncCompletionJson(path: string, init: RequestInit = {}) {
 }
 
 async function createAsyncChatCompletion(
-  params: Omit<ChatCompletionCreateParamsNonStreaming, "response_format">,
+  params: CompatibleChatCompletionParams,
   responseFormat: ResponseFormat | null,
   idempotencyKey: string
 ) {
@@ -632,7 +644,7 @@ async function createAsyncChatCompletion(
 }
 
 async function createAsyncChatCompletionAttempt(
-  body: Omit<ChatCompletionCreateParamsNonStreaming, "response_format"> | ChatCompletionCreateParamsNonStreaming,
+  body: CompatibleChatCompletionParams | ChatCompletionCreateParamsNonStreaming,
   idempotencyKey: string,
   attempt: number
 ) {
@@ -721,12 +733,12 @@ async function requestReportJsonRepair(
 
   const response = await createChatCompletionWithJsonMode(
     openai,
-    {
+    withCompatibleGenerationControls({
       model: env.OPENAI_MODEL,
       temperature: 0,
       max_tokens: env.OPENAI_MAX_OUTPUT_TOKENS,
       messages: repairMessages
-    },
+    }),
     responseFormat
   );
 
@@ -791,12 +803,12 @@ async function requestReportCompletion<TReport>(
   try {
     const responseFormat = buildResponseFormat(schemaName, jsonSchema);
 
-    const params = {
+    const params = withCompatibleGenerationControls({
       model: env.OPENAI_MODEL,
       temperature: 0.25,
       max_tokens: env.OPENAI_MAX_OUTPUT_TOKENS,
       messages
-    } satisfies Omit<ChatCompletionCreateParamsNonStreaming, "response_format">;
+    } satisfies ChatCompletionParams);
     const response = useAsync
       ? await createChatCompletionWithAsyncFallback(openai, params, responseFormat, buildAsyncIdempotencyKey(input, schemaName, photoInputUsed))
       : await createChatCompletionWithJsonMode(openai, params, responseFormat);
@@ -835,7 +847,7 @@ async function requestReportCompletion<TReport>(
 
 async function createChatCompletionWithAsyncFallback(
   openai: OpenAiClient,
-  params: Omit<ChatCompletionCreateParamsNonStreaming, "response_format">,
+  params: CompatibleChatCompletionParams,
   responseFormat: ResponseFormat | null,
   idempotencyKey: string
 ) {

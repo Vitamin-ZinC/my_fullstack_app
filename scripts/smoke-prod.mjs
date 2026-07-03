@@ -1,6 +1,8 @@
 const baseUrl = (process.env.SMOKE_BASE_URL || process.argv[2] || "https://orken.life").replace(/\/$/, "");
 const promoCode = process.env.SMOKE_PROMO_CODE || "";
 const allowFallback = process.env.SMOKE_ALLOW_FALLBACK === "true";
+const timeoutMs = Number(process.env.SMOKE_TIMEOUT_MS || 15 * 60 * 1000);
+const pollIntervalMs = Number(process.env.SMOKE_POLL_INTERVAL_MS || 5000);
 
 async function request(path, init = {}, session) {
   const headers = {
@@ -61,10 +63,11 @@ await request(`/api/analyses/${analysis.analysisId}/confirm`, {
 }, session);
 
 let status;
-for (let attempt = 0; attempt < 45; attempt += 1) {
+const startedAt = Date.now();
+while (Date.now() - startedAt < timeoutMs) {
   status = await request(`/api/analyses/${analysis.analysisId}/status`, {}, session);
   if (status.status === "DONE" || status.status === "FAILED") break;
-  await new Promise((resolve) => setTimeout(resolve, 2000));
+  await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
 }
 
 if (!status || status.status !== "DONE") {

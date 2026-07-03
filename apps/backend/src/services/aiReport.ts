@@ -606,6 +606,32 @@ async function createAsyncChatCompletion(
   idempotencyKey: string
 ) {
   const body = responseFormat ? { ...params, response_format: responseFormat } : params;
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      return await createAsyncChatCompletionAttempt(
+        body,
+        attempt === 1 ? idempotencyKey : `${idempotencyKey}-retry-${attempt}`,
+        attempt
+      );
+    } catch (error) {
+      lastError = error;
+      const message = error instanceof Error ? error.message : String(error);
+      if (attempt >= 3 || !isRetryableAsyncCompletionError(message)) {
+        throw error;
+      }
+      await sleep(env.OPENAI_ASYNC_POLL_INTERVAL_MS);
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error(String(lastError ?? "unknown async completion error"));
+}
+
+async function createAsyncChatCompletionAttempt(
+  body: Omit<ChatCompletionCreateParamsNonStreaming, "response_format"> | ChatCompletionCreateParamsNonStreaming,
+  idempotencyKey: string,
+  attempt: number
+) {
   const created = await fetchAsyncCompletionJson("/chat/completions/async", {
     method: "POST",
     headers: {
@@ -615,7 +641,7 @@ async function createAsyncChatCompletion(
     body: JSON.stringify(body)
   });
   const jobId = getAsyncJobId(created);
-  if (!jobId) throw new Error(`OpenAI-compatible async completion did not return a job id: ${JSON.stringify(created).slice(0, 500)}`);
+  if (!jobId) throw new Error(`OpenAI-compatible async completion attempt ${attempt} did not return a job id: ${JSON.stringify(created).slice(0, 500)}`);
 
   const startedAt = Date.now();
   while (Date.now() - startedAt <= env.OPENAI_ASYNC_TIMEOUT_MS) {
@@ -625,12 +651,16 @@ async function createAsyncChatCompletion(
       return job.response;
     }
     if (job.status === "failed" || job.status === "cancelled") {
-      throw new Error(`OpenAI-compatible async completion ${jobId} ${job.status}: ${formatAsyncError(job.error)}`);
+      throw new Error(`OpenAI-compatible async completion ${jobId} attempt ${attempt} ${job.status}: ${formatAsyncError(job.error)}`);
     }
     await sleep(env.OPENAI_ASYNC_POLL_INTERVAL_MS);
   }
 
-  throw new Error(`OpenAI-compatible async completion ${jobId} timed out after ${env.OPENAI_ASYNC_TIMEOUT_MS}ms`);
+  throw new Error(`OpenAI-compatible async completion ${jobId} attempt ${attempt} timed out after ${env.OPENAI_ASYNC_TIMEOUT_MS}ms`);
+}
+
+function isRetryableAsyncCompletionError(message: string) {
+  return /provider_unavailable|temporar|overload|rate.?limit|gateway|timed? ?out|timeout|502|503|504/i.test(message);
 }
 
 function buildJsonContract(schemaName: string, jsonSchema: Record<string, unknown>) {

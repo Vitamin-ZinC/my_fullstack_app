@@ -14,6 +14,10 @@ import { buildReportPromptMessages } from "./reportPrompts.js";
 import { analyzeAudioMetrics, type AudioTranscription, type VoiceSignalMetrics } from "./audioMetrics.js";
 import { parseCompletionJson, parseGatewayJson } from "./completionJson.js";
 import { getOpenAiApiKey, getOpenAiClient, hasOpenAiClient } from "./openaiClient.js";
+import {
+  isRetryableAsyncCompletionError,
+  shouldFallbackToSyncCompletionAfterAsyncError
+} from "./aiReportRouting.js";
 
 type ReportContext = {
   analysisId: string;
@@ -675,10 +679,6 @@ async function createAsyncChatCompletionAttempt(
   throw new Error(`OpenAI-compatible async completion ${jobId} attempt ${attempt} timed out after ${env.OPENAI_ASYNC_TIMEOUT_MS}ms`);
 }
 
-function isRetryableAsyncCompletionError(message: string) {
-  return /provider_unavailable|temporar|overload|rate.?limit|gateway|invalid json|expected .* after property value|unterminated string|bad control character|timed? ?out|timeout|502|503|504/i.test(message);
-}
-
 function buildJsonContract(schemaName: string, jsonSchema: Record<string, unknown>) {
   return [
     "",
@@ -877,6 +877,7 @@ async function createChatCompletionWithAsyncFallback(
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (!isRetryableAsyncCompletionError(message)) throw error;
+    if (!shouldFallbackToSyncCompletionAfterAsyncError(message)) throw error;
     return createChatCompletionWithJsonMode(openai, params, responseFormat);
   }
 }

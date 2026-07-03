@@ -1,7 +1,7 @@
 const baseUrl = (process.env.SMOKE_BASE_URL || process.argv[2] || "https://orken.life").replace(/\/$/, "");
 const promoCode = process.env.SMOKE_PROMO_CODE || "";
 const allowFallback = process.env.SMOKE_ALLOW_FALLBACK === "true";
-const timeoutMs = Number(process.env.SMOKE_TIMEOUT_MS || 15 * 60 * 1000);
+const timeoutMs = Number(process.env.SMOKE_TIMEOUT_MS || 20 * 60 * 1000);
 const pollIntervalMs = Number(process.env.SMOKE_POLL_INTERVAL_MS || 5000);
 
 async function request(path, init = {}, session) {

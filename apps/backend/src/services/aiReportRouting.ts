@@ -12,7 +12,7 @@ export function isTerminalAsyncProviderError(message: string) {
 }
 
 export function shouldFallbackToSyncCompletionAfterAsyncError(message: string) {
-  return /404|405|method not allowed|cannot\s+(post|get)|unsupported.*async|async.*unsupported|async.*not supported|not found.*\/chat\/completions\/async|\/chat\/completions\/async.*not found/i.test(message);
+  return /provider_unavailable|Provider request failed|404|405|method not allowed|cannot\s+(post|get)|unsupported.*async|async.*unsupported|async.*not supported|not found.*\/chat\/completions\/async|\/chat\/completions\/async.*not found/i.test(message);
 }
 
 type ChatMessageLike = {

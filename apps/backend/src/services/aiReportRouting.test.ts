@@ -47,9 +47,10 @@ test("compatible chat message normalization adds missing text part type", () => 
   ]);
 });
 
-test("provider unavailable is terminal for async report jobs", () => {
+test("provider unavailable can fall back to sync report generation", () => {
   const message = "OpenAI-compatible async completion job-1 attempt 1 failed: {\"code\":\"provider_unavailable\",\"message\":\"Provider request failed\"}";
 
   assert.equal(isRetryableAsyncCompletionError(message), true);
   assert.equal(isTerminalAsyncProviderError(message), true);
+  assert.equal(shouldFallbackToSyncCompletionAfterAsyncError(message), true);
 });

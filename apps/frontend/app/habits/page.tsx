@@ -1214,18 +1214,6 @@ function JourneyTab(props: {
         </div>
       </section>
 
-      <section className="habits-panel habits-wide">
-        <div className="habits-road">
-          {props.program.enrollments.map((habit) => (
-            <article className={`habits-cycle ${habit.sortOrder === props.program.currentSortOrder ? "active" : ""}`} key={habit.id}>
-              <span>Цикл {habit.cycle} · {habit.week}</span>
-              <h3>{habit.title}</h3>
-              <p>{habit.focus}</p>
-              <small>{habit.checkinsDone > 0 ? `${habit.checkinsDone} отметок` : "Можно начать в любой день"}</small>
-            </article>
-          ))}
-        </div>
-      </section>
     </div>
   );
 }

@@ -7,6 +7,7 @@ import { prisma } from "../lib/prisma.js";
 import { HABIT_CYCLES, HABIT_DEFINITIONS, HABIT_PROGRAM_TOTAL_WEEKS, HABIT_WEEKS_PER_CYCLE } from "../services/habitCatalog.js";
 import { parseGatewayJson } from "../services/completionJson.js";
 import { getHabitAiSettings, HABIT_WEEK_SUMMARY_MODE_LLM } from "../services/habitSettings.js";
+import { askHabitNavigator } from "../services/habitNavigator.js";
 import { getOpenAiClient, hasOpenAiClient } from "../services/openaiClient.js";
 import { getHabitSubscriptionConfig } from "../services/pricing.js";
 
@@ -672,80 +673,42 @@ export async function habitsRoutes(app: FastifyInstance) {
     const body = navigatorRequestSchema.parse(request.body ?? {});
     const requestedProgram = body.programId ? await requireHabitProgram(session, reply, body.programId) : null;
     if (body.programId && !requestedProgram) return;
-    const activeProgram = body.programId ? await loadProgram(body.programId) : await findActiveProgram(session);
-    const personalContext = await buildNavigatorPersonalContext(session, activeProgram);
-    const programId = activeProgram?.id;
-
-    const thread = await getOrCreateNavigatorThread(session, body.threadId, programId, body.message);
-    await prisma.habitNavigatorMessage.create({
-      data: { threadId: thread.id, role: "user", text: body.message }
-    });
-    await prisma.analyticsEvent.create({
-      data: {
-        name: "navigator_message_sent",
-        locale: session.locale,
-        sessionId: session.id,
-        userId: session.userId,
-        properties: {
-          programId: programId ?? null,
-          threadId: thread.id,
-          entryPoint: body.programId ? "habits" : "account",
-          mode: body.context.mode
-        }
-      }
-    });
-
-    if (!hasOpenAiClient()) {
-      const fallback = buildFallbackReply(body.context, personalContext);
-      await prisma.habitNavigatorMessage.create({
-        data: { threadId: thread.id, role: "assistant", text: fallback, model: "local-fallback" }
-      });
-      return { reply: fallback, model: "local-fallback", threadId: thread.id };
-    }
-
-    const openai = getOpenAiClient();
-    if (!openai) {
-      const fallback = buildFallbackReply(body.context, personalContext);
-      await prisma.habitNavigatorMessage.create({
-        data: { threadId: thread.id, role: "assistant", text: fallback, model: "local-fallback" }
-      });
-      return { reply: fallback, model: "local-fallback", threadId: thread.id };
-    }
 
     try {
-      const habitAiSettings = await getHabitAiSettings(env.OPENAI_MODEL);
-      const response = await openai.chat.completions.create({
-        model: env.OPENAI_MODEL,
-        temperature: habitAiSettings.navigatorTemperature,
-        max_tokens: 600,
-        messages: [
-          { role: "system", content: buildNavigatorSystemPrompt(body.context, personalContext) },
-          ...body.messages.slice(-10).map((message) => ({
-            role: message.role,
-            content: message.text
-          })),
-          { role: "user", content: body.message }
-        ]
+      const result = await askHabitNavigator({
+        identity: { userId: session.userId, sessionId: session.id, locale: session.locale },
+        programId: body.programId,
+        threadId: body.threadId,
+        message: body.message,
+        messages: body.messages,
+        context: body.context,
+        channel: "WEB"
       });
-
-      const answer = cleanNavigatorAnswer(response.choices?.[0]?.message?.content, body.context, personalContext);
-      await prisma.habitNavigatorMessage.create({
-        data: { threadId: thread.id, role: "assistant", text: answer, model: env.OPENAI_MODEL }
+      await prisma.analyticsEvent.create({
+        data: {
+          name: "navigator_message_sent",
+          locale: session.locale,
+          sessionId: session.id,
+          userId: session.userId,
+          properties: {
+            programId: body.programId ?? null,
+            threadId: result.threadId ?? null,
+            entryPoint: body.programId ? "habits" : "account",
+            mode: body.context.mode,
+            channel: "WEB"
+          }
+        }
       });
       return {
-        reply: answer,
-        model: env.OPENAI_MODEL,
-        threadId: thread.id
+        reply: result.reply,
+        model: result.model,
+        threadId: result.threadId
       };
     } catch (error) {
       request.log.warn({
         error: error instanceof Error ? error.message.slice(0, 240) : String(error).slice(0, 240)
       }, "OpenAI-compatible habits navigator failed");
-      const fallback = buildFallbackReply(body.context, personalContext);
-      await prisma.habitNavigatorMessage.create({
-        data: { threadId: thread.id, role: "assistant", text: fallback, model: "local-fallback" }
-      });
-      return { reply: fallback, model: "local-fallback", threadId: thread.id };
+      return { reply: "Пингви временно не смог ответить. Попробуй задать вопрос короче или вернись к текущему шагу дня.", model: "local-fallback" };
     }
   });
 }

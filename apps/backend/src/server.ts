@@ -10,10 +10,12 @@ import { adminRoutes } from "./routes/admin.js";
 import { authRoutes } from "./routes/auth.js";
 import { analysisRoutes } from "./routes/analyses.js";
 import { contentRoutes } from "./routes/content.js";
+import { docsRoutes } from "./routes/docs.js";
 import { eventRoutes } from "./routes/events.js";
 import { habitsRoutes } from "./routes/habits.js";
 import { meRoutes } from "./routes/me.js";
 import { paymentRoutes } from "./routes/payments.js";
+import { telegramRoutes } from "./routes/telegram.js";
 
 const app = Fastify({
   logger: true,
@@ -54,12 +56,14 @@ app.addContentTypeParser([
 
 await app.register(authRoutes);
 await app.register(contentRoutes);
+await app.register(docsRoutes);
 await app.register(analysisRoutes);
 await app.register(paymentRoutes);
 await app.register(eventRoutes);
 await app.register(habitsRoutes);
 await app.register(meRoutes);
 await app.register(adminRoutes);
+await app.register(telegramRoutes);
 
 app.get("/health", async () => ({ ok: true }));
 

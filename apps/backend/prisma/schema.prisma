@@ -27,6 +27,7 @@ model User {
   adminEvents AdminAuditLog[] @relation("AdminAuditActor")
   habitPrograms HabitProgram[]
   habitThreads  HabitNavigatorThread[]
+  telegramAccounts TelegramAccount[]
 }
 
 model LoginToken {
@@ -55,6 +56,7 @@ model Session {
   events     AnalyticsEvent[]
   habitPrograms HabitProgram[]
   habitThreads  HabitNavigatorThread[]
+  telegramAccounts TelegramAccount[]
 }
 
 model Analysis {
@@ -283,6 +285,7 @@ model HabitProgram {
   dailyTasks  HabitDailyTask[]
   weekSummaries HabitWeekSummary[]
   navigatorThreads HabitNavigatorThread[]
+  notificationPreference HabitNotificationPreference?
 
   @@index([userId, status, createdAt])
   @@index([sessionId, status, createdAt])
@@ -444,9 +447,65 @@ model HabitNavigatorMessage {
   role      String
   text      String
   model     String?
+  channel   String               @default("WEB")
   createdAt DateTime             @default(now())
 
   @@index([threadId, createdAt])
+  @@index([channel, createdAt])
+}
+
+model TelegramAccount {
+  id             String    @id @default(cuid())
+  userId         String?
+  user           User?     @relation(fields: [userId], references: [id])
+  sessionId      String?
+  session        Session?  @relation(fields: [sessionId], references: [id])
+  telegramUserId String    @unique
+  chatId         String
+  username       String?
+  firstName      String?
+  lastName       String?
+  status         String    @default("ACTIVE")
+  linkedAt       DateTime  @default(now())
+  lastSeenAt     DateTime  @default(now())
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([userId, updatedAt])
+  @@index([sessionId, updatedAt])
+  @@index([chatId])
+}
+
+model TelegramLinkToken {
+  id         String    @id @default(cuid())
+  tokenHash  String    @unique
+  userId     String?
+  sessionId  String?
+  programId  String?
+  createdAt  DateTime  @default(now())
+  expiresAt  DateTime
+  usedAt     DateTime?
+
+  @@index([userId, expiresAt])
+  @@index([sessionId, expiresAt])
+  @@index([programId, expiresAt])
+}
+
+model HabitNotificationPreference {
+  id                  String       @id @default(cuid())
+  programId           String       @unique
+  program             HabitProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+  telegramEnabled     Boolean      @default(false)
+  reminderTime        String       @default("09:00")
+  timezone            String       @default("Europe/Moscow")
+  quietHoursStart     String?
+  quietHoursEnd       String?
+  motivationFrequency String       @default("daily")
+  lastReminderAt      DateTime?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  @@index([telegramEnabled, reminderTime])
 }
 
 enum AnalysisStatus {

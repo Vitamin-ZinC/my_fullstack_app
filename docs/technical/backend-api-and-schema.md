@@ -33,6 +33,9 @@ Current models in `apps/backend/prisma/schema.prisma`:
 - `HabitWeekSummary`
 - `HabitNavigatorThread`
 - `HabitNavigatorMessage`
+- `TelegramAccount`
+- `TelegramLinkToken`
+- `HabitNotificationPreference`
 
 Current enums:
 
@@ -106,6 +109,7 @@ Relations:
 - `dailyTasks`
 - `weekSummaries`
 - `navigatorThreads`
+- `notificationPreference`
 
 ### `HabitEnrollment`
 
@@ -240,7 +244,61 @@ Messages store:
 - `role`
 - `text`
 - `model`
+- `channel`
 - `createdAt`
+
+`channel` is `"WEB"` by default and `"TELEGRAM"` for messages written by the Telegram bot. Web Pingvi and Telegram Pingvi use the same `HabitNavigatorThread` / `HabitNavigatorMessage` storage.
+
+### `TelegramAccount`
+
+Telegram chat identity linked to an ORKEN user or guest session.
+
+Key fields:
+
+- `userId`
+- `sessionId`
+- `telegramUserId`
+- `chatId`
+- `username`
+- `firstName`
+- `lastName`
+- `status`
+- `linkedAt`
+- `lastSeenAt`
+
+Unique behavior: one account per `telegramUserId`.
+
+### `TelegramLinkToken`
+
+Short-lived one-time token for native web-to-Telegram linking.
+
+Key fields:
+
+- `tokenHash`
+- `userId`
+- `sessionId`
+- `programId`
+- `expiresAt`
+- `usedAt`
+
+Never store or return the raw token after creation; only the SHA-256 hash is persisted.
+
+### `HabitNotificationPreference`
+
+Per-program Telegram reminder settings.
+
+Key fields:
+
+- `programId`
+- `telegramEnabled`
+- `reminderTime`
+- `timezone`
+- `quietHoursStart`
+- `quietHoursEnd`
+- `motivationFrequency`
+- `lastReminderAt`
+
+Unique behavior: one notification preference row per habit program.
 
 ## Runtime App Settings
 
@@ -305,6 +363,15 @@ Week summary LLM mode is optional and always falls back to rule-based summaries 
 - `POST /api/habits/freeze`
 - `POST /api/habits/navigator`
 
+### Telegram
+
+- `GET /api/telegram/status?programId=<programId>`
+- `POST /api/telegram/link-token`
+- `PATCH /api/telegram/preferences`
+- `POST /api/telegram/webhook/:secret`
+
+Telegram endpoints use the existing ORKEN session for web calls. The webhook maps Telegram users through `TelegramAccount` and uses the shared habit navigator service for Pingvi answers.
+
 ### Payments
 
 - `GET /api/payments/config`
@@ -316,6 +383,19 @@ Week summary LLM mode is optional and always falls back to rule-based summaries 
 
 - `GET /api/content/:locale`
 - `POST /api/events`
+
+### Protected Technical Documentation
+
+- `POST /api/docs/handoff`
+- `POST /api/docs/intake`
+
+Request body:
+
+- `password`
+
+`/api/docs/handoff` returns the whitelisted Markdown files from `docs/technical` only after password verification. The password is read from `DOCS_ACCESS_PASSWORD`; if it is absent, backend falls back to `ADMIN_API_TOKEN`.
+
+`/api/docs/intake` accepts founder bug reports/tasks/ideas from the protected `/docs` mini chat. The backend treats submitted text as untrusted content, splits bullet/numbered lists into separate tasks, masks likely secrets, classifies safety risks, rejects destructive/backdoor/secret-exfiltration instructions, appends the sanitized audit to `.runtime/uploads/founder-task-intake.md`, and queues `TAKE_NOW` items in `.runtime/uploads/founder-task-queue.md`.
 
 ### Admin
 
@@ -357,6 +437,11 @@ Important habit contracts:
 - `HabitMeResponse`
 - `HabitProgramResponse`
 - `HabitNavigatorResponse`
+- `TelegramAccountSummary`
+- `HabitNotificationPreferenceSummary`
+- `TelegramStatusResponse`
+- `TelegramLinkTokenResponse`
+- `TelegramPreferenceResponse`
 
 If a frontend feature needs a field not present in these contracts, update contracts and backend serialization first.
 
@@ -367,6 +452,7 @@ These names appear in external references but are not current Prisma models/rout
 - `weekly_plans`
 - `habit_logs`
 - `pingvi_memory`
+- `habit_navigator_memory`
 - `subscriptions` as a habits-specific table
 - `/api/habits/dashboard`
 - `/api/habits/path`
@@ -380,6 +466,9 @@ These names appear in external references but are not current Prisma models/rout
 - `/api/habits/rewards`
 - `/api/pingvi/context`
 - `/api/pingvi/chat`
+- `/api/telegram/open-webapp`
+- `/api/telegram/login-link`
+- `/api/docs/*` endpoints other than `/api/docs/handoff`
 - `/api/onboarding/diagnostic-route`
 - `/api/onboarding/quiz-route`
 - `/api/subscription/payment-method`
@@ -408,7 +497,7 @@ For new report prompt behavior:
 
 For new Pingvi behavior:
 
-1. Update `apps/backend/src/routes/habits.ts`.
+1. Update `apps/backend/src/services/habitNavigator.ts`.
 2. Keep LLM calls backend-side.
 3. Add prompt safety tests if adding memory/context.
 4. Do not rely on frontend-only context for authoritative user state.

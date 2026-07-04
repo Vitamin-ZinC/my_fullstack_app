@@ -11,6 +11,7 @@ import type {
   HabitConfigResponse,
   HabitMeResponse,
   HabitNavigatorResponse,
+  HabitNotificationPreferenceSummary,
   HabitProgramResponse,
   IkigaiAnswers,
   MagicLinkRequestResponse,
@@ -20,6 +21,8 @@ import type {
   PaymentIntentResponse,
   PromoCode,
   ReportContactResponse,
+  TelegramLinkTokenResponse,
+  TelegramStatusResponse,
   PromptTemplateInput,
   PromptTemplate
 } from "@levelup/contracts";
@@ -32,6 +35,38 @@ const LOCALE_KEY = "levelup_locale";
 export type TextLocale = "ru" | "en";
 export type AnalysisClientMetrics = {
   voiceDurationSeconds?: number;
+};
+export type HandoffDoc = {
+  title: string;
+  file: string;
+  content: string;
+};
+export type HandoffDocsResponse = {
+  updatedAt: string;
+  docs: HandoffDoc[];
+};
+export type FounderIntakeDecision = "TAKE_NOW" | "REVIEW_REQUIRED" | "REJECTED";
+export type FounderIntakeResponse = {
+  id: string;
+  createdAt: string;
+  type: "bug" | "task" | "idea";
+  title: string;
+  source: string;
+  decision: FounderIntakeDecision;
+  summary: string;
+  allowedWork: string[];
+  risks: string[];
+  blockedReasons: string[];
+  requiredChecks: string[];
+  howToMakeWorkable: string[];
+  queueStatus: "QUEUED" | "NOT_QUEUED";
+  sanitizedBody: string;
+};
+export type FounderIntakeBatchResponse = {
+  createdAt: string;
+  message: string;
+  queuedCount: number;
+  audits: FounderIntakeResponse[];
 };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -258,6 +293,64 @@ export const api = {
     method: "POST",
     body: JSON.stringify(payload)
   }),
+  handoffDocs: (password: string) => request<HandoffDocsResponse>("/api/docs/handoff", {
+    method: "POST",
+    body: JSON.stringify({ password })
+  }),
+  submitFounderIntake: (payload: {
+    password: string;
+    type: "bug" | "task" | "idea";
+    title: string;
+    body: string;
+    expected?: string;
+    actual?: string;
+    steps?: string;
+    source?: string;
+  }) => request<FounderIntakeBatchResponse>("/api/docs/intake", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  }),
+  sendFounderChat: (payload: {
+    password: string;
+    message: string;
+    type?: "bug" | "task" | "idea";
+  }) => request<FounderIntakeBatchResponse>("/api/docs/intake", {
+    method: "POST",
+    body: JSON.stringify({
+      password: payload.password,
+      type: payload.type ?? "bug",
+      title: payload.message.slice(0, 120),
+      body: payload.message,
+      source: "founder-docs-chat"
+    })
+  }),
+  telegramStatus: async (programId?: string) => {
+    await ensureGuestSession();
+    const query = programId ? `?programId=${encodeURIComponent(programId)}` : "";
+    return request<TelegramStatusResponse>(`/api/telegram/status${query}`);
+  },
+  createTelegramLinkToken: async (programId?: string) => {
+    await ensureGuestSession();
+    return request<TelegramLinkTokenResponse>("/api/telegram/link-token", {
+      method: "POST",
+      body: JSON.stringify({ programId })
+    });
+  },
+  updateTelegramPreferences: async (payload: {
+    programId: string;
+    telegramEnabled?: boolean;
+    reminderTime?: string;
+    timezone?: string;
+    quietHoursStart?: string | null;
+    quietHoursEnd?: string | null;
+    motivationFrequency?: "off" | "daily" | "weekdays" | "weekly";
+  }) => {
+    await ensureGuestSession();
+    return request<{ preferences: HabitNotificationPreferenceSummary }>("/api/telegram/preferences", {
+      method: "PATCH",
+      body: JSON.stringify(payload)
+    });
+  },
   createAnalysis: async () => {
     await ensureGuestSession();
     return request<{ analysisId: string; audioUploadUrl: string; photoUploadUrl: string }>("/api/analyses", {

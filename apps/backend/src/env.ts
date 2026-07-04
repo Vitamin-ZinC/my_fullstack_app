@@ -45,7 +45,11 @@ const schema = z.object({
   ANALYSIS_WORKER_CONCURRENCY: z.coerce.number().int().positive().default(1),
   ORKEN_API_KEY_FILE: z.string().default("C:\\Users\\User\\Documents\\API Gate\\.secrets\\orken-key.json"),
   ANTHROPIC_API_KEY: z.string().optional(),
-  ANTHROPIC_MODEL: z.string().default("claude-opus-4-6")
+  ANTHROPIC_MODEL: z.string().default("claude-opus-4-6"),
+  TELEGRAM_BOT_TOKEN: z.string().optional(),
+  TELEGRAM_BOT_USERNAME: z.string().optional(),
+  TELEGRAM_WEBHOOK_SECRET: z.string().optional(),
+  DOCS_ACCESS_PASSWORD: z.string().optional()
 });
 
 export const env = schema.parse(process.env);

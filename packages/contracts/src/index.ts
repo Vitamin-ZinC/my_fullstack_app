@@ -469,3 +469,43 @@ export type HabitNavigatorResponse = {
   model: string;
   threadId?: string;
 };
+
+export type TelegramAccountSummary = {
+  id: string;
+  telegramUserId: string;
+  chatId: string;
+  username?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  status: string;
+  linkedAt: string;
+  lastSeenAt: string;
+};
+
+export type HabitNotificationPreferenceSummary = {
+  programId: string;
+  telegramEnabled: boolean;
+  reminderTime: string;
+  timezone: string;
+  quietHoursStart?: string | null;
+  quietHoursEnd?: string | null;
+  motivationFrequency: string;
+  lastReminderAt?: string | null;
+};
+
+export type TelegramStatusResponse = {
+  configured: boolean;
+  linked: boolean;
+  account?: TelegramAccountSummary | null;
+  preferences?: HabitNotificationPreferenceSummary | null;
+};
+
+export type TelegramLinkTokenResponse = {
+  configured: boolean;
+  connectUrl: string;
+  expiresAt: string;
+};
+
+export type TelegramPreferenceResponse = {
+  preferences: HabitNotificationPreferenceSummary;
+};

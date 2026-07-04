@@ -5,6 +5,7 @@ import { prisma } from "../lib/prisma.js";
 import { env } from "../env.js";
 import { buildFallbackFreeReport, buildFallbackReport } from "../services/report.js";
 import { generateOpenAiReport } from "../services/aiReport.js";
+import { sendDueTelegramReminders } from "../services/telegramBot.js";
 
 const logs = [
   [15, "Analyzing facial micro-signals..."],
@@ -159,3 +160,10 @@ worker.on("failed", async (job, error) => {
     emitProgress(job.data.analysisId, { status: "FAILED", progress: 100, log: error.message });
   }
 });
+
+const telegramReminderTimer = setInterval(() => {
+  sendDueTelegramReminders().catch((error) => {
+    console.error("Telegram reminder sweep failed", error);
+  });
+}, 60 * 1000);
+telegramReminderTimer.unref?.();

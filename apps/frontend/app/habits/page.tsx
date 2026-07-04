@@ -18,7 +18,7 @@ import {
   Trophy,
   User
 } from "lucide-react";
-import type { HabitConfigResponse, HabitEnrollmentSummary, HabitProgramResponse, HabitProgramSummary } from "@levelup/contracts";
+import type { HabitConfigResponse, HabitEnrollmentSummary, HabitProgramResponse, HabitProgramSummary, TelegramStatusResponse } from "@levelup/contracts";
 import { api, getStoredLocale, restoreSessionFromUrl, type TextLocale } from "@/lib/api";
 import { useSiteText } from "@/lib/useSiteText";
 
@@ -26,6 +26,7 @@ type Tab = "dashboard" | "journey" | "habits" | "navigator" | "archive" | "guide
 type DetailTab = "essence" | "practice" | "why";
 type ArchiveFilter = "all" | "insights" | "rewards" | "weeks";
 type HabitStartFocus = "energy" | "focus" | "career" | "rhythm";
+type TelegramFrequency = "off" | "daily" | "weekdays" | "weekly";
 type ChatMessage = { role: "user" | "assistant"; text: string };
 type NavItem = { id: Tab; icon: string } | { id: Tab; penguin: true };
 
@@ -117,6 +118,8 @@ function HabitsContent() {
   const [error, setError] = useState("");
   const [savedMessage, setSavedMessage] = useState("");
   const [savedAt, setSavedAt] = useState<Date | null>(null);
+  const [telegramStatus, setTelegramStatus] = useState<TelegramStatusResponse | null>(null);
+  const [telegramBusy, setTelegramBusy] = useState(false);
 
   const [startFocus, setStartFocus] = useState<HabitStartFocus>("rhythm");
   const [startName, setStartName] = useState("");
@@ -194,6 +197,24 @@ function HabitsContent() {
     if (!program || typeof window === "undefined") return;
     const key = `orken_habits_coachmark_v1_${program.id}`;
     setShowCoachmark(window.localStorage.getItem(key) !== "1");
+  }, [program?.id]);
+
+  useEffect(() => {
+    if (!program) {
+      setTelegramStatus(null);
+      return;
+    }
+    let cancelled = false;
+    api.telegramStatus(program.id)
+      .then((status) => {
+        if (!cancelled) setTelegramStatus(status);
+      })
+      .catch(() => {
+        if (!cancelled) setTelegramStatus(null);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [program?.id]);
 
   const activeHabit = program?.activeEnrollment ?? program?.enrollments[0] ?? null;
@@ -355,6 +376,54 @@ function HabitsContent() {
       setError(readableError(reason, t.errors.settings));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function connectTelegram() {
+    if (!program) return;
+    setTelegramBusy(true);
+    setError("");
+    try {
+      const result = await api.createTelegramLinkToken(program.id);
+      if (typeof window !== "undefined") {
+        window.open(result.connectUrl, "_blank", "noopener,noreferrer");
+      }
+      markSaved(t.messages.telegramLinkCreated);
+      const status = await api.telegramStatus(program.id);
+      setTelegramStatus(status);
+    } catch (reason) {
+      setError(readableError(reason, t.errors.settings));
+    } finally {
+      setTelegramBusy(false);
+    }
+  }
+
+  async function saveTelegramPreferences(payload?: { telegramEnabled?: boolean; motivationFrequency?: TelegramFrequency }) {
+    if (!program) return;
+    setTelegramBusy(true);
+    setError("");
+    try {
+      const timezone = typeof Intl !== "undefined"
+        ? Intl.DateTimeFormat().resolvedOptions().timeZone || "Europe/Moscow"
+        : "Europe/Moscow";
+      const result = await api.updateTelegramPreferences({
+        programId: program.id,
+        telegramEnabled: payload?.telegramEnabled ?? telegramStatus?.preferences?.telegramEnabled ?? true,
+        reminderTime,
+        timezone,
+        motivationFrequency: payload?.motivationFrequency ?? normalizeTelegramFrequency(telegramStatus?.preferences?.motivationFrequency)
+      });
+      setTelegramStatus((previous) => ({
+        configured: previous?.configured ?? true,
+        linked: previous?.linked ?? false,
+        account: previous?.account,
+        preferences: result.preferences
+      }));
+      markSaved(t.messages.telegramSettingsSaved);
+    } catch (reason) {
+      setError(readableError(reason, t.errors.settings));
+    } finally {
+      setTelegramBusy(false);
     }
   }
 
@@ -528,6 +597,7 @@ function HabitsContent() {
           </div>
           <div className="habits-topbar-actions">
             <div className="habits-top-pill online"><PenguinHeadIcon size={20} />{t.dashboard.pingviOnline}</div>
+            <div className="habits-top-pill"><Trophy size={16} />{program.stats.xp} XP ? {program.stats.rank.title}</div>
             <div className="habits-top-pill"><span className="habits-pill-icon">⏳</span>{trialDaysLeft}/{config?.trialDays ?? trialDaysLeft} {t.dashboard.trialDays}</div>
             <div className="habits-top-pill accent"><span className="habits-pill-icon">🔥</span>{program.stats.streakDays} {t.stats.streak}</div>
             <button className="button habits-cta" type="button" disabled={busy} onClick={() => saveCheckin(activeHabit, !doneToday)}>
@@ -588,8 +658,21 @@ function HabitsContent() {
             activeHabit={activeHabit}
             detailTab={detailTab}
             setDetailTab={setDetailTab}
+            doneToday={doneToday}
+            energy={energy}
+            clarity={clarity}
+            stability={stability}
+            note={note}
+            insight={insight}
             busy={busy}
+            setEnergy={setEnergy}
+            setClarity={setClarity}
+            setStability={setStability}
+            setNote={setNote}
+            setInsight={setInsight}
+            saveMetric={saveMetric}
             saveCheckin={saveCheckin}
+            saveInsight={saveInsight}
             advanceWeek={advanceWeek}
             freezeWeek={freezeWeek}
           />
@@ -635,6 +718,8 @@ function HabitsContent() {
             avatar={settingsAvatar}
             reminderEnabled={reminderEnabled}
             reminderTime={reminderTime}
+            telegramStatus={telegramStatus}
+            telegramBusy={telegramBusy}
             busy={busy}
             setName={setSettingsName}
             setZone={setSettingsZone}
@@ -642,6 +727,8 @@ function HabitsContent() {
             setReminderEnabled={setReminderEnabled}
             setReminderTime={setReminderTime}
             saveSettings={saveSettings}
+            connectTelegram={connectTelegram}
+            saveTelegramPreferences={saveTelegramPreferences}
           />
         )}
       </section>
@@ -996,15 +1083,105 @@ function JourneyTab(props: {
   activeHabit: HabitEnrollmentSummary | null;
   detailTab: DetailTab;
   setDetailTab: (tab: DetailTab) => void;
+  doneToday: boolean;
+  energy: number;
+  clarity: number;
+  stability: number;
+  note: string;
+  insight: string;
   busy: boolean;
-  saveCheckin: (habit?: HabitEnrollmentSummary | null, completed?: boolean) => void;
+  setEnergy: (value: number) => void;
+  setClarity: (value: number) => void;
+  setStability: (value: number) => void;
+  setNote: (value: string) => void;
+  setInsight: (value: string) => void;
+  saveMetric: () => void;
+  saveCheckin: (habit?: HabitEnrollmentSummary | null, completed?: boolean, noteOverride?: string) => void;
+  saveInsight: () => void;
   advanceWeek: (force?: boolean) => void;
   freezeWeek: () => void;
 }) {
   const activeHabit = props.activeHabit;
   const canAdvance = (activeHabit?.checkinsDone ?? 0) >= 7;
+  const todayTask = activeHabit?.todayTask ?? props.program.todayTask ?? null;
   return (
     <div className="habits-grid">
+      <section className="habits-panel habits-wide habits-journey-daily">
+        <div className="row">
+          <div>
+            <div className="habit-week">{props.t.dashboard.todayFocus}</div>
+            <h2>{todayTask?.title ?? activeHabit?.title ?? props.t.journey.title}</h2>
+          </div>
+          <div className="habits-mini-reward">
+            <Trophy size={15} />
+            <span>{props.program.stats.xp} XP · {props.program.stats.rank.title}</span>
+          </div>
+        </div>
+        <div className="habits-current">
+          <strong>{todayTask?.microAction ?? activeHabit?.practice ?? props.t.dashboard.firstStep}</strong>
+          <span>{todayTask?.whyToday ?? activeHabit?.why ?? props.t.journey.copy}</span>
+        </div>
+        <textarea className="input habits-note" placeholder={props.t.dashboard.notePlaceholder} value={props.note} onChange={(event) => props.setNote(event.target.value)} />
+        <div className="habits-action-row">
+          <button className="button habits-cta" type="button" disabled={props.busy || !activeHabit} onClick={() => props.saveCheckin(activeHabit, !props.doneToday)}>
+            {props.doneToday ? <RotateCcw size={17} /> : <CheckCircle2 size={17} />}
+            {props.doneToday ? props.t.journey.undoToday : props.t.journey.markToday}
+          </button>
+          <button className="button secondary" type="button" disabled={props.busy || !activeHabit} onClick={() => props.saveCheckin(activeHabit, true)}>
+            <Save size={17} />
+            {props.t.dashboard.saveStep}
+          </button>
+        </div>
+      </section>
+
+      <section className="habits-panel">
+        <h2>{props.t.dashboard.metricTitle}</h2>
+        <p className="habits-muted">{props.t.dashboard.metricCopy}</p>
+        <MetricSlider
+          icon="⚡"
+          color="#00d4ff"
+          label={props.t.metrics.energy}
+          value={props.energy}
+          hint={metricValueHint(props.energy, props.t.dashboard.metricValueHints)}
+          scale={props.t.habitsUx.metricScales.energy}
+          numberHints={props.t.habitsUx.metricNumberHints.energy}
+          onChange={props.setEnergy}
+        />
+        <MetricSlider
+          icon="🧠"
+          color="#a855f7"
+          label={props.t.metrics.clarity}
+          value={props.clarity}
+          hint={metricValueHint(props.clarity, props.t.dashboard.metricValueHints)}
+          scale={props.t.habitsUx.metricScales.clarity}
+          numberHints={props.t.habitsUx.metricNumberHints.clarity}
+          onChange={props.setClarity}
+        />
+        <MetricSlider
+          icon="🌳"
+          color="#10b981"
+          label={props.t.metrics.stability}
+          value={props.stability}
+          hint={metricValueHint(props.stability, props.t.dashboard.metricValueHints)}
+          scale={props.t.habitsUx.metricScales.stability}
+          numberHints={props.t.habitsUx.metricNumberHints.stability}
+          onChange={props.setStability}
+        />
+        <button className="button secondary" type="button" disabled={props.busy} onClick={props.saveMetric}>
+          <Save size={17} />
+          {props.t.dashboard.saveMetric}
+        </button>
+      </section>
+
+      <section className="habits-panel">
+        <h2>{props.t.dashboard.insightTitle}</h2>
+        <textarea className="input habits-note" placeholder={props.t.dashboard.insightPlaceholder} value={props.insight} onChange={(event) => props.setInsight(event.target.value)} />
+        <button className="button secondary" type="button" disabled={props.busy || !props.insight.trim()} onClick={props.saveInsight}>
+          <Archive size={17} />
+          {props.t.dashboard.saveInsight}
+        </button>
+      </section>
+
       <section className="habits-panel">
         <h2>{props.t.journey.title}<HelpTip label={props.t.habitsUx.tooltips.journey} /></h2>
         <p className="habits-muted">{props.program.careerAction || props.t.journey.copy}</p>
@@ -1379,6 +1556,8 @@ function SettingsTab(props: {
   avatar: string;
   reminderEnabled: boolean;
   reminderTime: string;
+  telegramStatus: TelegramStatusResponse | null;
+  telegramBusy: boolean;
   busy: boolean;
   setName: (value: string) => void;
   setZone: (value: string) => void;
@@ -1386,7 +1565,12 @@ function SettingsTab(props: {
   setReminderEnabled: (value: boolean) => void;
   setReminderTime: (value: string) => void;
   saveSettings: () => void;
+  connectTelegram: () => void;
+  saveTelegramPreferences: (payload?: { telegramEnabled?: boolean; motivationFrequency?: TelegramFrequency }) => void;
 }) {
+  const telegramEnabled = props.telegramStatus?.preferences?.telegramEnabled ?? false;
+  const telegramFrequency = normalizeTelegramFrequency(props.telegramStatus?.preferences?.motivationFrequency);
+  const telegramLinked = Boolean(props.telegramStatus?.linked);
   return (
     <div className="habits-grid">
       <section className="habits-panel">
@@ -1417,6 +1601,57 @@ function SettingsTab(props: {
           <span>{props.t.settings.reminderTime}</span>
           <input className="input" type="time" value={props.reminderTime} onChange={(event) => props.setReminderTime(event.target.value)} />
         </label>
+      </section>
+      <section className="habits-panel">
+        <h2>{props.t.settings.telegramTitle}</h2>
+        <p className="habits-muted">{props.t.settings.telegramCopy}</p>
+        <div className="habits-current">
+          <div className="habit-detail">
+            <strong>{props.t.settings.telegramStatus}</strong>
+            {props.telegramStatus?.configured === false
+              ? props.t.settings.telegramNotConfigured
+              : telegramLinked
+                ? props.t.settings.telegramLinked
+                : props.t.settings.telegramNotLinked}
+          </div>
+          {props.telegramStatus?.account?.username && (
+            <div className="habit-detail">
+              <strong>@{props.telegramStatus.account.username}</strong>
+              {props.telegramStatus.account.status}
+            </div>
+          )}
+        </div>
+        <button className="button secondary" type="button" disabled={props.telegramBusy || props.telegramStatus?.configured === false} onClick={props.connectTelegram}>
+          <Bot size={17} />
+          {telegramLinked ? props.t.settings.telegramReconnect : props.t.settings.telegramConnect}
+        </button>
+        <label className="habits-toggle">
+          <input
+            type="checkbox"
+            checked={telegramEnabled}
+            disabled={!telegramLinked || props.telegramBusy}
+            onChange={(event) => props.saveTelegramPreferences({ telegramEnabled: event.target.checked })}
+          />
+          <span>{props.t.settings.telegramEnabled}</span>
+        </label>
+        <label className="habits-field">
+          <span>{props.t.settings.telegramFrequency}</span>
+          <select
+            className="input"
+            value={telegramFrequency}
+            disabled={!telegramLinked || props.telegramBusy}
+            onChange={(event) => props.saveTelegramPreferences({ motivationFrequency: event.target.value as TelegramFrequency })}
+          >
+            <option value="daily">{props.t.settings.telegramDaily}</option>
+            <option value="weekdays">{props.t.settings.telegramWeekdays}</option>
+            <option value="weekly">{props.t.settings.telegramWeekly}</option>
+            <option value="off">{props.t.settings.telegramOff}</option>
+          </select>
+        </label>
+        <button className="button" type="button" disabled={!telegramLinked || props.telegramBusy} onClick={() => props.saveTelegramPreferences()}>
+          <Save size={17} />
+          {props.t.settings.telegramSave}
+        </button>
       </section>
       <section className="habits-panel habits-wide">
         <h2>{props.t.settings.subscription}</h2>
@@ -1494,6 +1729,10 @@ function metricStatus(value: number) {
   if (value >= 7) return "🙂 Хорошо";
   if (value >= 5) return "😐 Норма";
   return "🌧 Низко";
+}
+
+function normalizeTelegramFrequency(value?: string | null): TelegramFrequency {
+  return value === "off" || value === "daily" || value === "weekdays" || value === "weekly" ? value : "daily";
 }
 
 function MetricSlider(props: { icon: string; color: string; label: string; value: number; hint: string; scale: readonly string[]; numberHints: readonly string[]; onChange: (value: number) => void }) {

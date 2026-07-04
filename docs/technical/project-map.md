@@ -49,6 +49,7 @@ Backend logic is in:
 
 - `apps/backend/src/routes/habits.ts`
 - `apps/backend/src/services/habitCatalog.ts`
+- `apps/backend/src/services/habitNavigator.ts`
 - `apps/backend/src/services/habitSettings.ts`
 - `apps/backend/src/services/pricing.ts`
 
@@ -60,7 +61,8 @@ Pingvi is the habits navigator. Runtime endpoint:
 
 - `POST /api/habits/navigator`
 
-Current prompt/context builder is hardcoded in `apps/backend/src/routes/habits.ts`.
+Current prompt/context builder lives in `apps/backend/src/services/habitNavigator.ts`.
+`apps/backend/src/routes/habits.ts` delegates web Pingvi requests to that shared service.
 Pingvi temperature is controlled by `AppSetting.habit_navigator_temperature`.
 
 Pingvi uses:
@@ -75,6 +77,37 @@ Pingvi uses:
 - current chat thread.
 
 Pingvi does not currently have a separate persisted long-term memory table.
+
+### Telegram Bot
+
+Telegram bot integration is backend-owned and uses the same habits program data as the web cabinet.
+
+Implemented pieces:
+
+- Prisma models: `TelegramAccount`, `TelegramLinkToken`, `HabitNotificationPreference`.
+- Web routes: `GET /api/telegram/status`, `POST /api/telegram/link-token`, `PATCH /api/telegram/preferences`.
+- Webhook route: `POST /api/telegram/webhook/:secret`.
+- Bot service: `apps/backend/src/services/telegramBot.ts`.
+- Web UI: Telegram section in `apps/frontend/app/habits/page.tsx` settings tab.
+- Reminder sweep: worker process calls `sendDueTelegramReminders()` once per minute.
+
+Environment variables:
+
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_BOT_USERNAME`
+- `TELEGRAM_WEBHOOK_SECRET`
+
+Bot commands currently handled by backend:
+
+- `/start <token>` links the Telegram account to the current user/session.
+- `/today` shows the current habit step.
+- `/checkin` marks today complete and awards XP once.
+- `/metrics` shows latest daily metrics.
+- `/insight <text>` stores an insight in the archive.
+- `/pingvi <question>` asks Pingvi through the shared navigator service.
+- `/stop` disables Telegram reminders for the active program.
+
+Not implemented yet: Telegram voice transcription, Telegram Mini App, short-lived Telegram-to-web login links, admin UI for Telegram policy/rate limits.
 
 ## LLM Configuration
 
@@ -121,6 +154,7 @@ The admin UI currently manages:
 - habits week summary mode: rule-based or LLM-based;
 - habits week summary model;
 - Pingvi navigator temperature.
+- Telegram bot settings are environment variables, not admin-editable settings.
 
 Do not create new settings tables for these; use `AppSetting` unless the value needs relational history or per-user state.
 
@@ -141,6 +175,26 @@ Current release is symlinked at:
 Docker Compose file:
 
 - `docker-compose.prod.yml`
+
+## Protected Documentation Link
+
+Frontend route:
+
+- `/docs`
+
+Backend route:
+
+- `POST /api/docs/handoff`
+- `POST /api/docs/intake`
+
+Password source:
+
+- `DOCS_ACCESS_PASSWORD`
+- fallback: `ADMIN_API_TOKEN`
+
+The route returns only whitelisted files from `docs/technical`: project map, backend API/schema reference, habits/Telegram roadmap, and founder/Codex intake guide.
+
+The `/docs` page also contains a founder mini chat for bug reports/tasks/ideas. Submitted text is not treated as instructions for Codex. Backend masks likely secrets, splits lists into separate tasks, blocks destructive/backdoor/secret-exfiltration requests, classifies risk, appends a sanitized audit record to `.runtime/uploads/founder-task-intake.md`, and queues safe `TAKE_NOW` items in `.runtime/uploads/founder-task-queue.md`.
 
 ## Before Adding Features
 

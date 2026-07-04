@@ -51,7 +51,7 @@ export async function docsRoutes(app: FastifyInstance) {
     const body = requestSchema.parse(request.body ?? {});
     if (!verifyDocsPassword(body.password, reply)) return;
 
-    const docsRoot = path.resolve(process.cwd(), "docs", "technical");
+    const docsRoot = await resolveTechnicalDocsRoot();
     const docs = await Promise.all(technicalDocs.map(async (doc) => {
       const content = await readFile(path.join(docsRoot, doc.file), "utf8");
       return { ...doc, content };
@@ -119,6 +119,22 @@ function safeEquals(left: string, right: string) {
   const rightBuffer = Buffer.from(right);
   if (leftBuffer.length !== rightBuffer.length) return false;
   return timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+async function resolveTechnicalDocsRoot() {
+  const candidates = [
+    path.resolve(process.cwd(), "docs", "technical"),
+    path.resolve(process.cwd(), "..", "..", "docs", "technical")
+  ];
+  for (const candidate of candidates) {
+    try {
+      const info = await stat(candidate);
+      if (info.isDirectory()) return candidate;
+    } catch {
+      // Try the next known workspace layout.
+    }
+  }
+  throw new Error("Technical docs directory not found");
 }
 
 function analyzeFounderTask(type: "bug" | "task" | "idea", title: string, body: string, source = "founder-docs"): FounderTaskAudit {

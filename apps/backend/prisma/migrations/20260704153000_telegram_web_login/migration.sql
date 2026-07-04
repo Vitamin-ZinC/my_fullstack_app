@@ -1,4 +1,4 @@
-﻿CREATE TABLE "TelegramWebLoginToken" (
+CREATE TABLE "TelegramWebLoginToken" (
     "id" TEXT NOT NULL,
     "tokenHash" TEXT NOT NULL,
     "telegramUserId" TEXT NOT NULL,

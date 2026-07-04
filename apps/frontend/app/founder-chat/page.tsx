@@ -219,30 +219,31 @@ function TaskColumn(props: {
       <h3>{props.title}</h3>
       {props.items.length === 0 ? (
         <p className="founder-board-empty">{props.empty}</p>
-      ) : props.items.map((item) => (
-        <article className="founder-task-card" key={item.id}>
-          <div className={`docs-decision ${item.decision.toLowerCase()}`}>{item.decision}</div>
-          {item.priority === "URGENT" && <div className="founder-priority">Срочно</div>}
-          <strong>{item.title}</strong>
-          <p>{item.summary || item.sanitizedBody}</p>
-          <small>ID: {item.id}</small>
-          <small>Codex: {item.codexStatus}</small>
-          <small>Bridge: {item.bridgeStatus}{item.bridgeAttempts ? ` · ${item.bridgeAttempts}` : ""}</small>
-          {item.codexReply && <small>Ответ Codex: {item.codexReply}</small>}
-          {item.bridgeLastError && <small className="docs-error">Bridge error: {item.bridgeLastError}</small>}
-          <div className="founder-task-actions">
-            {item.codexStatus !== "IN_PROGRESS" && item.codexStatus !== "DONE" && (
-              <button type="button" onClick={() => props.updateStatus(item.id, "IN_PROGRESS")}>Взять в работу</button>
+      ) : props.items.map((item) => {
+        const terminal = ["DONE", "IGNORED", "REJECTED", "ANSWERED_BY_BACKEND", "BLOCKED"].includes(item.codexStatus);
+        return (
+          <article className="founder-task-card" key={item.id}>
+            <div className={`docs-decision ${item.decision.toLowerCase()}`}>{item.decision}</div>
+            {item.priority === "URGENT" && <div className="founder-priority">Срочно</div>}
+            <strong>{item.title}</strong>
+            <p>{item.summary || item.sanitizedBody}</p>
+            <small>ID: {item.id}</small>
+            <small>Codex: {item.codexStatus}</small>
+            <small>Bridge: {item.bridgeStatus}{item.bridgeAttempts ? ` · ${item.bridgeAttempts}` : ""}</small>
+            {item.codexReply && <small>Ответ Codex: {item.codexReply}</small>}
+            {item.bridgeLastError && <small className="docs-error">Bridge error: {item.bridgeLastError}</small>}
+            {!terminal && (
+              <div className="founder-task-actions">
+                {item.codexStatus !== "IN_PROGRESS" && (
+                  <button type="button" onClick={() => props.updateStatus(item.id, "IN_PROGRESS")}>Взять в работу</button>
+                )}
+                <button type="button" onClick={() => props.updateStatus(item.id, "DONE")}>Готово</button>
+                <button type="button" onClick={() => props.updateStatus(item.id, "IGNORED")}>Игнорировать</button>
+              </div>
             )}
-            {item.codexStatus !== "DONE" && (
-              <button type="button" onClick={() => props.updateStatus(item.id, "DONE")}>Готово</button>
-            )}
-            {item.codexStatus !== "IGNORED" && item.codexStatus !== "DONE" && (
-              <button type="button" onClick={() => props.updateStatus(item.id, "IGNORED")}>Игнорировать</button>
-            )}
-          </div>
-        </article>
-      ))}
+          </article>
+        );
+      })}
     </div>
   );
 }

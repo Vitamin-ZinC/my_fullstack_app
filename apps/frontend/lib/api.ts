@@ -22,6 +22,7 @@ import type {
   PromoCode,
   ReportContactResponse,
   TelegramLinkTokenResponse,
+  TelegramWebLoginResponse,
   TelegramStatusResponse,
   PromptTemplateInput,
   PromptTemplate
@@ -164,6 +165,10 @@ export const defaultLocaleSettingKey = "default_locale";
 export const habitWeekSummaryModeSettingKey = "habit_week_summary_mode";
 export const habitWeekSummaryModelSettingKey = "habit_week_summary_model";
 export const habitNavigatorTemperatureSettingKey = "habit_navigator_temperature";
+export const telegramRateLimitWindowMsSettingKey = "telegram_rate_limit_window_ms";
+export const telegramRateLimitMaxSettingKey = "telegram_rate_limit_max";
+export const telegramReminderTemplateSettingKey = "telegram_reminder_template";
+export const telegramWebLoginEnabledSettingKey = "telegram_web_login_enabled";
 
 export const contentApi = {
   get: (locale: TextLocale) => request<{ locale: TextLocale; value: unknown | null }>(`/api/content/${locale}`)
@@ -264,6 +269,10 @@ export const api = {
     method: "POST",
     body: JSON.stringify(payload)
   }),
+  updateHabitDailyTaskVariant: (payload: { programId: string; taskId: string; mode: "SOFTEN" | "REPLACE" }) => request<HabitProgramResponse>("/api/habits/daily-task-variant", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  }),
   updateHabitSettings: (payload: {
     programId: string;
     name?: string;
@@ -350,6 +359,14 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(payload)
     });
+  },
+  verifyTelegramWebLogin: async (token: string) => {
+    const result = await request<TelegramWebLoginResponse>("/api/telegram/web-login/verify", {
+      method: "POST",
+      body: JSON.stringify({ token })
+    });
+    storeSession(result);
+    return result;
   },
   createAnalysis: async () => {
     await ensureGuestSession();

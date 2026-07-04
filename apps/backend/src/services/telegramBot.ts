@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { env } from "../env.js";
 import { prisma } from "../lib/prisma.js";
+import { getTelegramPolicySettings } from "./habitSettings.js";
 import { askHabitNavigator } from "./habitNavigator.js";
 import { getOpenAiApiKey } from "./openaiClient.js";
 
@@ -52,6 +53,25 @@ export function buildTelegramConnectUrl(token: string) {
   return `https://t.me/${env.TELEGRAM_BOT_USERNAME}?start=${encodeURIComponent(token)}`;
 }
 
+async function buildTelegramWebLoginUrl(account?: { telegramUserId?: string; userId?: string | null; sessionId?: string | null } | null) {
+  const baseUrl = env.PUBLIC_API_URL?.replace(/\/$/, "");
+  if (!baseUrl) return "";
+  const settings = await getTelegramPolicySettings();
+  if (!settings.webLoginEnabled || !account?.telegramUserId || !account.sessionId) return `${baseUrl}/habits`;
+
+  const token = createTelegramRawToken();
+  await prisma.telegramWebLoginToken.create({
+    data: {
+      tokenHash: hashTelegramToken(token),
+      telegramUserId: account.telegramUserId,
+      userId: account.userId ?? undefined,
+      sessionId: account.sessionId,
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000)
+    }
+  });
+  return `${baseUrl}/habits?telegramLogin=${encodeURIComponent(token)}`;
+}
+
 export async function sendTelegramMessage(chatId: string, text: string, replyMarkup?: unknown) {
   if (!env.TELEGRAM_BOT_TOKEN) return { ok: false, skipped: true };
   const response = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
@@ -91,11 +111,11 @@ async function processTelegramCallback(callback: TelegramCallbackQuery) {
   }
   const data = callback.data ?? "";
   if (data === "today") {
-    await sendTelegramMessage(chatId, await buildTodayText(account), defaultKeyboard());
+    await sendTelegramMessage(chatId, await buildTodayText(account), await defaultKeyboard(account));
   } else if (data === "checkin") {
-    await sendTelegramMessage(chatId, await completeTodayFromTelegram(account), defaultKeyboard());
+    await sendTelegramMessage(chatId, await completeTodayFromTelegram(account), await defaultKeyboard(account));
   } else if (data === "metrics") {
-    await sendTelegramMessage(chatId, await buildMetricsText(account), defaultKeyboard());
+    await sendTelegramMessage(chatId, await buildMetricsText(account), await defaultKeyboard(account));
   }
   return { ok: true };
 }
@@ -126,7 +146,7 @@ async function processTelegramMessage(message: TelegramMessage) {
     data: { chatId, lastSeenAt: new Date(), status: "ACTIVE" }
   });
 
-  if (!allowTelegramAction(telegramUserId)) {
+  if (!(await allowTelegramAction(telegramUserId))) {
     await sendTelegramMessage(chatId, "Слишком много сообщений подряд. Попробуй ещё раз через несколько минут.");
     return { ok: true, rateLimited: true };
   }
@@ -140,20 +160,20 @@ async function processTelegramMessage(message: TelegramMessage) {
       await sendTelegramMessage(chatId, "Не получилось разобрать голосовое. Напиши вопрос текстом или попробуй ещё раз короче.");
       return { ok: true };
     }
-    await sendTelegramMessage(chatId, await askPingviFromTelegram(account, `Голосовое сообщение пользователя:\n${transcript}`), defaultKeyboard());
+    await sendTelegramMessage(chatId, await askPingviFromTelegram(account, `Голосовое сообщение пользователя:\n${transcript}`), await defaultKeyboard(account));
     return { ok: true };
   }
 
   if (text === "/today") {
-    await sendTelegramMessage(chatId, await buildTodayText(account), defaultKeyboard());
+    await sendTelegramMessage(chatId, await buildTodayText(account), await defaultKeyboard(account));
     return { ok: true };
   }
   if (text === "/checkin") {
-    await sendTelegramMessage(chatId, await completeTodayFromTelegram(account), defaultKeyboard());
+    await sendTelegramMessage(chatId, await completeTodayFromTelegram(account), await defaultKeyboard(account));
     return { ok: true };
   }
   if (text === "/metrics") {
-    await sendTelegramMessage(chatId, await buildMetricsText(account), defaultKeyboard());
+    await sendTelegramMessage(chatId, await buildMetricsText(account), await defaultKeyboard(account));
     return { ok: true };
   }
   if (text === "/stop") {
@@ -163,20 +183,20 @@ async function processTelegramMessage(message: TelegramMessage) {
   }
   if (text.startsWith("/insight")) {
     const insight = text.replace(/^\/insight\b/i, "").trim();
-    await sendTelegramMessage(chatId, await saveInsightFromTelegram(account, insight), defaultKeyboard());
+    await sendTelegramMessage(chatId, await saveInsightFromTelegram(account, insight), await defaultKeyboard(account));
     return { ok: true };
   }
   if (text.startsWith("/pingvi")) {
     const question = text.replace(/^\/pingvi\b/i, "").trim() || "Что мне сделать сегодня?";
-    await sendTelegramMessage(chatId, await askPingviFromTelegram(account, question), defaultKeyboard());
+    await sendTelegramMessage(chatId, await askPingviFromTelegram(account, question), await defaultKeyboard(account));
     return { ok: true };
   }
   if (text.startsWith("/")) {
-    await sendTelegramMessage(chatId, helpText(), defaultKeyboard());
+    await sendTelegramMessage(chatId, helpText(), await defaultKeyboard(account));
     return { ok: true };
   }
 
-  await sendTelegramMessage(chatId, await askPingviFromTelegram(account, text || "Что мне сделать сегодня?"), defaultKeyboard());
+  await sendTelegramMessage(chatId, await askPingviFromTelegram(account, text || "Что мне сделать сегодня?"), await defaultKeyboard(account));
   return { ok: true };
 }
 
@@ -227,7 +247,7 @@ async function linkTelegramAccount(token: string, chatId: string, from?: Telegra
     "Я вижу твой кабинет через backend и могу напоминать про текущий шаг.",
     "",
     "Команды: /today, /checkin, /metrics, /insight текст, /pingvi вопрос, /stop."
-  ].join("\n"), defaultKeyboard());
+  ].join("\n"), await defaultKeyboard(account));
   return { ok: true, linked: true };
 }
 
@@ -433,16 +453,15 @@ export async function sendDueTelegramReminders(now = new Date()) {
     const enrollment = activeEnrollment(preference.program);
     const task = nextTask(enrollment);
     const metric = preference.program.dailyMetrics[0];
-    const text = [
-      "Пингви на связи. Сегодняшний мягкий шаг:",
-      enrollment ? `• ${enrollment.title}` : null,
-      task ? `${task.title}\n${task.microAction}` : enrollment?.practice,
-      metric ? `\nПоследняя метрика: энергия ${metric.energy}/10, ясность ${metric.clarity}/10, устойчивость ${metric.stability}/10.` : null,
-      "\nКоманды: /checkin, /today, /metrics или просто задай вопрос."
-    ].filter(Boolean).join("\n");
+    const settings = await getTelegramPolicySettings();
+    const text = renderTelegramTemplate(settings.reminderTemplate, {
+      habitTitle: enrollment ? `• ${enrollment.title}` : "Открой кабинет и выбери мягкий шаг.",
+      taskText: task ? `${task.title}\n${task.microAction}` : enrollment?.practice ?? "",
+      metricText: metric ? `Последняя метрика: энергия ${metric.energy}/10, ясность ${metric.clarity}/10, устойчивость ${metric.stability}/10.` : ""
+    });
 
     try {
-      await sendTelegramMessage(account.chatId, text, defaultKeyboard());
+      await sendTelegramMessage(account.chatId, text, await defaultKeyboard(account));
       await prisma.habitNotificationPreference.update({
         where: { id: preference.id },
         data: { lastReminderAt: now }
@@ -519,14 +538,15 @@ function timeToMinutes(value: string) {
   return Number(hours) * 60 + Number(minutes);
 }
 
-function allowTelegramAction(telegramUserId: string) {
+async function allowTelegramAction(telegramUserId: string) {
+  const settings = await getTelegramPolicySettings();
   const now = Date.now();
   const current = telegramRateLimit.get(telegramUserId);
   if (!current || current.resetAt <= now) {
-    telegramRateLimit.set(telegramUserId, { count: 1, resetAt: now + 10 * 60 * 1000 });
+    telegramRateLimit.set(telegramUserId, { count: 1, resetAt: now + settings.rateLimitWindowMs });
     return true;
   }
-  if (current.count >= 20) return false;
+  if (current.count >= settings.rateLimitMax) return false;
   current.count += 1;
   return true;
 }
@@ -559,7 +579,11 @@ async function transcribeTelegramAudio(fileId: string, mimeType?: string) {
   return data.text?.trim() || null;
 }
 
-function defaultKeyboard() {
+function renderTelegramTemplate(template: string, variables: Record<string, string>) {
+  return template.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (match, key) => variables[key] ?? match).trim();
+}
+
+async function defaultKeyboard(account?: { telegramUserId?: string; userId?: string | null; sessionId?: string | null } | null) {
   const keyboard = {
     inline_keyboard: [
       [
@@ -571,9 +595,10 @@ function defaultKeyboard() {
       ]
     ] as Array<Array<{ text: string; callback_data?: string; url?: string }>>
   };
-  if (env.PUBLIC_API_URL) {
+  const cabinetUrl = await buildTelegramWebLoginUrl(account);
+  if (cabinetUrl) {
     keyboard.inline_keyboard.push([
-      { text: "Open cabinet", url: env.PUBLIC_API_URL.replace(/\/$/, "") + "/habits" }
+      { text: "Open cabinet", url: cabinetUrl }
     ]);
   }
   return keyboard;

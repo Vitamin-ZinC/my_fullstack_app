@@ -755,6 +755,7 @@ export const ruSiteText = {
         settingsSaved: "Настройки сохранены",
         telegramLinkCreated: "Открыли Telegram-бота. Нажми Start в Telegram, чтобы связать кабинет.",
         telegramSettingsSaved: "Telegram-настройки сохранены",
+        taskVariantSaved: "Вариант шага сохранен",
         weekAdvanced: "Открыта следующая неделя",
         weekFrozen: "Неделя заморожена без потери ритма"
       },

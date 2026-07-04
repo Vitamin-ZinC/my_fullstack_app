@@ -204,6 +204,11 @@ export type AdminStats = {
   revenueSucceeded: number;
   eventsLast24h: number;
   failedAnalyses: number;
+  habitProgramsTotal: number;
+  habitProgramsActive: number;
+  habitXpTotal: number;
+  habitCheckinsTotal: number;
+  habitInsightsTotal: number;
 };
 
 export type AppSettingValue = string | number | boolean | null | AppSettingValue[] | { [key: string]: AppSettingValue };
@@ -508,4 +513,11 @@ export type TelegramLinkTokenResponse = {
 
 export type TelegramPreferenceResponse = {
   preferences: HabitNotificationPreferenceSummary;
+};
+
+export type TelegramWebLoginResponse = {
+  sessionId: string;
+  guestToken: string;
+  userId?: string | null;
+  locale: string;
 };

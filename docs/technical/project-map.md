@@ -84,8 +84,8 @@ Telegram bot integration is backend-owned and uses the same habits program data 
 
 Implemented pieces:
 
-- Prisma models: `TelegramAccount`, `TelegramLinkToken`, `HabitNotificationPreference`.
-- Web routes: `GET /api/telegram/status`, `POST /api/telegram/link-token`, `PATCH /api/telegram/preferences`.
+- Prisma models: `TelegramAccount`, `TelegramLinkToken`, `TelegramWebLoginToken`, `HabitNotificationPreference`.
+- Web routes: `GET /api/telegram/status`, `POST /api/telegram/link-token`, `PATCH /api/telegram/preferences`, `POST /api/telegram/web-login/verify`.
 - Webhook route: `POST /api/telegram/webhook/:secret`.
 - Bot service: `apps/backend/src/services/telegramBot.ts`.
 - Web UI: Telegram section in `apps/frontend/app/habits/page.tsx` settings tab.
@@ -107,7 +107,7 @@ Bot commands currently handled by backend:
 - `/pingvi <question>` asks Pingvi through the shared navigator service.
 - `/stop` disables Telegram reminders for the active program.
 
-Not implemented yet: Telegram voice transcription, Telegram Mini App, short-lived Telegram-to-web login links, admin UI for Telegram policy/rate limits.
+Not implemented yet: full Telegram Mini App UI inside Telegram WebView. Telegram voice transcription, short-lived Telegram-to-web login links, and admin UI for Telegram policy/rate limits are implemented.
 
 ## LLM Configuration
 
@@ -153,8 +153,12 @@ The admin UI currently manages:
 - enabled/default locales;
 - habits week summary mode: rule-based or LLM-based;
 - habits week summary model;
-- Pingvi navigator temperature.
-- Telegram bot settings are environment variables, not admin-editable settings.
+- Pingvi navigator temperature;
+- Telegram reminder template;
+- Telegram rate limit window and max messages;
+- Telegram short-lived web-login toggle.
+
+Telegram bot token, bot username, webhook secret, provider keys, and private network URLs remain environment variables, not admin-editable settings.
 
 Do not create new settings tables for these; use `AppSetting` unless the value needs relational history or per-user state.
 

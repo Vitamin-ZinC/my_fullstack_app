@@ -14,7 +14,11 @@ import {
   habitWeekSummaryModeSettingKey,
   habitWeekSummaryModelSettingKey,
   reportPriceAmountSettingKey,
-  reportPriceCurrencySettingKey
+  reportPriceCurrencySettingKey,
+  telegramRateLimitMaxSettingKey,
+  telegramRateLimitWindowMsSettingKey,
+  telegramReminderTemplateSettingKey,
+  telegramWebLoginEnabledSettingKey
 } from "@/lib/api";
 import { defaultSiteText } from "@/lib/messages";
 
@@ -62,6 +66,19 @@ export default function AdminPage() {
     weekSummaryModel: "gpt-4o-mini",
     navigatorTemperature: "0.45"
   });
+  const [telegramPolicyForm, setTelegramPolicyForm] = useState({
+    rateLimitWindowMs: "600000",
+    rateLimitMax: "20",
+    reminderTemplate: [
+      "Пингви на связи. Сегодняшний мягкий шаг:",
+      "{{habitTitle}}",
+      "{{taskText}}",
+      "{{metricText}}",
+      "",
+      "Команды: /checkin, /today, /metrics или просто задай вопрос."
+    ].join("\n"),
+    webLoginEnabled: true
+  });
   const [promoForm, setPromoForm] = useState({
     code: "",
     description: "",
@@ -106,6 +123,7 @@ export default function AdminPage() {
       hydratePriceForm(nextSettings);
       hydrateHabitPriceForm(nextSettings);
       hydrateHabitAiForm(nextSettings);
+      hydrateTelegramPolicyForm(nextSettings);
       hydratePromptForm(nextPrompts, nextPromptDefaults);
     } catch (reason) {
       setAuthenticated(false);
@@ -178,6 +196,19 @@ export default function AdminPage() {
       weekSummaryModel: typeof weekSummaryModel === "string" && weekSummaryModel.trim() ? weekSummaryModel : "gpt-4o-mini",
       navigatorTemperature: typeof navigatorTemperature === "number" || typeof navigatorTemperature === "string" ? String(navigatorTemperature) : "0.45"
     });
+  }
+
+  function hydrateTelegramPolicyForm(nextSettings: AppSetting[]) {
+    const rateLimitWindowMs = nextSettings.find((item) => item.key === telegramRateLimitWindowMsSettingKey)?.value;
+    const rateLimitMax = nextSettings.find((item) => item.key === telegramRateLimitMaxSettingKey)?.value;
+    const reminderTemplate = nextSettings.find((item) => item.key === telegramReminderTemplateSettingKey)?.value;
+    const webLoginEnabled = nextSettings.find((item) => item.key === telegramWebLoginEnabledSettingKey)?.value;
+    setTelegramPolicyForm((current) => ({
+      rateLimitWindowMs: typeof rateLimitWindowMs === "number" || typeof rateLimitWindowMs === "string" ? String(rateLimitWindowMs) : current.rateLimitWindowMs,
+      rateLimitMax: typeof rateLimitMax === "number" || typeof rateLimitMax === "string" ? String(rateLimitMax) : current.rateLimitMax,
+      reminderTemplate: typeof reminderTemplate === "string" && reminderTemplate.trim() ? reminderTemplate : current.reminderTemplate,
+      webLoginEnabled: typeof webLoginEnabled === "boolean" ? webLoginEnabled : current.webLoginEnabled
+    }));
   }
 
   function toPromptForm(prompt: PromptTemplate | PromptTemplateInput): PromptTemplateInput {
@@ -388,6 +419,31 @@ export default function AdminPage() {
     await refresh();
   }
 
+  async function saveTelegramPolicySettings() {
+    setMessage("");
+    const rateLimitWindowMs = Number(telegramPolicyForm.rateLimitWindowMs);
+    const rateLimitMax = Number(telegramPolicyForm.rateLimitMax);
+    if (!Number.isInteger(rateLimitWindowMs) || rateLimitWindowMs < 60000 || rateLimitWindowMs > 86400000) {
+      setMessage("Telegram rate limit window must be between 60000 and 86400000 ms");
+      return;
+    }
+    if (!Number.isInteger(rateLimitMax) || rateLimitMax < 1 || rateLimitMax > 500) {
+      setMessage("Telegram max messages must be between 1 and 500");
+      return;
+    }
+    if (!telegramPolicyForm.reminderTemplate.trim()) {
+      setMessage("Telegram reminder template is required");
+      return;
+    }
+
+    await adminApi.upsertSetting(telegramRateLimitWindowMsSettingKey, rateLimitWindowMs);
+    await adminApi.upsertSetting(telegramRateLimitMaxSettingKey, rateLimitMax);
+    await adminApi.upsertSetting(telegramReminderTemplateSettingKey, telegramPolicyForm.reminderTemplate);
+    await adminApi.upsertSetting(telegramWebLoginEnabledSettingKey, telegramPolicyForm.webLoginEnabled);
+    setMessage("Telegram policy settings saved");
+    await refresh();
+  }
+
   function resetTexts(locale: string) {
     setTextDrafts((current) => ({
       ...current,
@@ -456,6 +512,10 @@ export default function AdminPage() {
               <Metric label={adminText.stats[3]} value={stats.eventsLast24h} />
               <Metric label={adminText.stats[4]} value={stats.failedAnalyses} />
               <Metric label={adminText.stats[5]} value={stats.analysesByStatus.map((item) => `${item.status}:${item.count}`).join(" ")} />
+              <Metric label="Habit programs" value={`${stats.habitProgramsActive}/${stats.habitProgramsTotal}`} />
+              <Metric label="Habit XP total" value={stats.habitXpTotal} />
+              <Metric label="Habit checkins" value={stats.habitCheckinsTotal} />
+              <Metric label="Habit insights" value={stats.habitInsightsTotal} />
             </section>
           )}
 
@@ -531,6 +591,38 @@ export default function AdminPage() {
               </label>
               <button className="button" onClick={saveHabitAiSettings}>Save Habit AI settings</button>
             </div>
+          </section>
+
+          <section className="card stack">
+            <div>
+              <h2>Telegram policy</h2>
+              <p className="muted">Controls bot rate limits, reminder copy, and short-lived Telegram-to-web login links. Bot token and provider secrets stay only in backend environment variables.</p>
+            </div>
+            <div className="grid grid-3">
+              <label className="stack">
+                <span className="eyebrow">Rate window, ms</span>
+                <input className="input" value={telegramPolicyForm.rateLimitWindowMs} onChange={(event) => setTelegramPolicyForm({ ...telegramPolicyForm, rateLimitWindowMs: event.target.value })} inputMode="numeric" />
+              </label>
+              <label className="stack">
+                <span className="eyebrow">Max messages/window</span>
+                <input className="input" value={telegramPolicyForm.rateLimitMax} onChange={(event) => setTelegramPolicyForm({ ...telegramPolicyForm, rateLimitMax: event.target.value })} inputMode="numeric" />
+              </label>
+              <label className="stack">
+                <span className="eyebrow">Web login links</span>
+                <select className="input" value={telegramPolicyForm.webLoginEnabled ? "true" : "false"} onChange={(event) => setTelegramPolicyForm({ ...telegramPolicyForm, webLoginEnabled: event.target.value === "true" })}>
+                  <option value="true">Enabled</option>
+                  <option value="false">Disabled</option>
+                </select>
+              </label>
+            </div>
+            <textarea
+              className="input text-editor"
+              value={telegramPolicyForm.reminderTemplate}
+              onChange={(event) => setTelegramPolicyForm({ ...telegramPolicyForm, reminderTemplate: event.target.value })}
+              spellCheck={false}
+            />
+            <p className="muted">Placeholders: {"{{habitTitle}}"}, {"{{taskText}}"}, {"{{metricText}}"}</p>
+            <button className="button" onClick={saveTelegramPolicySettings}>Save Telegram policy</button>
           </section>
 
           <section className="card stack">

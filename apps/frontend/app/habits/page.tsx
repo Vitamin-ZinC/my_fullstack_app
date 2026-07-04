@@ -156,6 +156,13 @@ function HabitsContent() {
       setError("");
       try {
         restoreSessionFromUrl();
+        const telegramLoginToken = typeof window !== "undefined" ? new URL(window.location.href).searchParams.get("telegramLogin") : null;
+        if (telegramLoginToken) {
+          await api.verifyTelegramWebLogin(telegramLoginToken);
+          const url = new URL(window.location.href);
+          url.searchParams.delete("telegramLogin");
+          window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+        }
         if (analysisId) {
           const result = await api.activateHabitsFromReport(analysisId);
           if (!cancelled) applyProgramResponse(result);
@@ -455,10 +462,28 @@ function HabitsContent() {
     }
   }
 
+  async function updateTodayTaskVariant(mode: "SOFTEN" | "REPLACE") {
+    const task = activeHabit?.todayTask ?? program?.todayTask ?? null;
+    if (!program || !task) {
+      setMicroStepIndex((value) => value + 1);
+      return;
+    }
+    setBusy(true);
+    try {
+      const result = await api.updateHabitDailyTaskVariant({ programId: program.id, taskId: task.id, mode });
+      applyProgramResponse(result);
+      markSaved(mode === "SOFTEN" ? t.dashboard.softStepSaved : t.messages.taskVariantSaved);
+    } catch (reason) {
+      setError(readableError(reason, t.errors.settings));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function softenTodayStep() {
     const softNote = `Облегченный шаг: ${microSteps[1]}`;
     setNote(softNote);
-    markSaved(t.dashboard.softStepSaved);
+    void updateTodayTaskVariant("SOFTEN");
   }
 
   async function askNavigator(prompt?: string) {
@@ -646,7 +671,7 @@ function HabitsContent() {
             saveCheckin={saveCheckin}
             saveInsight={saveInsight}
             softenTodayStep={softenTodayStep}
-            rotateTodayStep={() => setMicroStepIndex((value) => value + 1)}
+            rotateTodayStep={() => updateTodayTaskVariant("REPLACE")}
             personalizeFromReport={startFromLatestReport}
             openNavigator={() => setTab("navigator")}
           />

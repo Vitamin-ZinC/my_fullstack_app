@@ -30,6 +30,10 @@ const preferencesSchema = z.object({
   motivationFrequency: z.enum(["off", "daily", "weekdays", "weekly"]).optional()
 });
 
+const webLoginSchema = z.object({
+  token: z.string().min(16).max(200)
+});
+
 export async function telegramRoutes(app: FastifyInstance) {
   app.get("/api/telegram/status", async (request, reply) => {
     const session = await requireSession(request, reply);
@@ -111,6 +115,34 @@ export async function telegramRoutes(app: FastifyInstance) {
       }
     });
     return { preferences: serializePreferences(preferences) };
+  });
+
+  app.post("/api/telegram/web-login/verify", async (request, reply) => {
+    const body = webLoginSchema.parse(request.body ?? {});
+    const tokenHash = hashTelegramToken(body.token);
+    const loginToken = await prisma.telegramWebLoginToken.findFirst({
+      where: { tokenHash, usedAt: null, expiresAt: { gt: new Date() } }
+    });
+    if (!loginToken) {
+      return reply.code(401).send({ error: "Invalid or expired Telegram login token" });
+    }
+
+    const session = await prisma.session.findFirst({
+      where: { id: loginToken.sessionId, expiresAt: { gt: new Date() } },
+      select: { id: true, guestToken: true, userId: true, locale: true }
+    });
+    if (!session) {
+      await prisma.telegramWebLoginToken.update({ where: { id: loginToken.id }, data: { usedAt: new Date() } });
+      return reply.code(401).send({ error: "Linked web session has expired" });
+    }
+
+    await prisma.telegramWebLoginToken.update({ where: { id: loginToken.id }, data: { usedAt: new Date() } });
+    return {
+      sessionId: session.id,
+      guestToken: session.guestToken,
+      userId: session.userId,
+      locale: session.locale
+    };
   });
 
   app.post("/api/telegram/webhook/:secret", async (request, reply) => {

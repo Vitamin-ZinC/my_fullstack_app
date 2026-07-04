@@ -491,6 +491,20 @@ model TelegramLinkToken {
   @@index([programId, expiresAt])
 }
 
+model TelegramWebLoginToken {
+  id             String    @id @default(cuid())
+  tokenHash      String    @unique
+  telegramUserId String
+  userId         String?
+  sessionId      String
+  createdAt      DateTime  @default(now())
+  expiresAt      DateTime
+  usedAt         DateTime?
+
+  @@index([telegramUserId, expiresAt])
+  @@index([sessionId, expiresAt])
+}
+
 model HabitNotificationPreference {
   id                  String       @id @default(cuid())
   programId           String       @unique

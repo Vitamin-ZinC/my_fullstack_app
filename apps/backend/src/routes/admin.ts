@@ -102,13 +102,30 @@ export async function adminRoutes(app: FastifyInstance) {
 
   app.get("/api/admin/stats", async () => {
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const [analysesTotal, analysesByStatus, paymentsSucceeded, revenue, eventsLast24h, failedAnalyses] = await Promise.all([
+    const [
+      analysesTotal,
+      analysesByStatus,
+      paymentsSucceeded,
+      revenue,
+      eventsLast24h,
+      failedAnalyses,
+      habitProgramsTotal,
+      habitProgramsActive,
+      habitXp,
+      habitCheckinsTotal,
+      habitInsightsTotal
+    ] = await Promise.all([
       prisma.analysis.count(),
       prisma.analysis.groupBy({ by: ["status"], _count: { _all: true } }),
       prisma.payment.count({ where: { status: "SUCCEEDED" } }),
       prisma.payment.aggregate({ where: { status: "SUCCEEDED" }, _sum: { amount: true } }),
       prisma.analyticsEvent.count({ where: { createdAt: { gte: since } } }),
-      prisma.analysis.count({ where: { status: "FAILED" } })
+      prisma.analysis.count({ where: { status: "FAILED" } }),
+      prisma.habitProgram.count(),
+      prisma.habitProgram.count({ where: { status: "ACTIVE" } }),
+      prisma.habitRewardEvent.aggregate({ _sum: { xp: true } }),
+      prisma.habitCheckin.count({ where: { completed: true } }),
+      prisma.habitInsight.count()
     ]);
 
     return {
@@ -117,7 +134,12 @@ export async function adminRoutes(app: FastifyInstance) {
       paymentsSucceeded,
       revenueSucceeded: revenue._sum.amount ?? 0,
       eventsLast24h,
-      failedAnalyses
+      failedAnalyses,
+      habitProgramsTotal,
+      habitProgramsActive,
+      habitXpTotal: habitXp._sum.xp ?? 0,
+      habitCheckinsTotal,
+      habitInsightsTotal
     };
   });
 

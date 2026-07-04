@@ -11,8 +11,8 @@ Implemented after the initial plan:
 - Shared Pingvi service: `apps/backend/src/services/habitNavigator.ts`.
 - Web Pingvi and Telegram Pingvi use the same `HabitNavigatorThread` / `HabitNavigatorMessage` persistence.
 - `HabitNavigatorMessage.channel` stores `"WEB"` or `"TELEGRAM"`.
-- Telegram models exist: `TelegramAccount`, `TelegramLinkToken`, `HabitNotificationPreference`.
-- Telegram API routes exist: `GET /api/telegram/status`, `POST /api/telegram/link-token`, `PATCH /api/telegram/preferences`, `POST /api/telegram/webhook/:secret`.
+- Telegram models exist: `TelegramAccount`, `TelegramLinkToken`, `TelegramWebLoginToken`, `HabitNotificationPreference`.
+- Telegram API routes exist: `GET /api/telegram/status`, `POST /api/telegram/link-token`, `PATCH /api/telegram/preferences`, `POST /api/telegram/web-login/verify`, `POST /api/telegram/webhook/:secret`.
 - Telegram bot service exists: `apps/backend/src/services/telegramBot.ts`.
 - Implemented bot commands: `/start`, `/today`, `/checkin`, `/metrics`, `/insight`, `/pingvi`, `/stop`.
 - Telegram reminders are implemented through the worker sweep calling `sendDueTelegramReminders()`.
@@ -21,16 +21,20 @@ Implemented after the initial plan:
 - Founder mini chat exists at `/docs`, backed by `POST /api/docs/intake`.
 - Founder chat splits task lists into separate safety audits and queues `TAKE_NOW` items.
 - Telegram voice/audio messages are downloaded, transcribed through the OpenAI-compatible audio endpoint, and passed to Pingvi.
-- Telegram inline keyboard includes quick actions and a cabinet link when `PUBLIC_API_URL` is configured.
-- Telegram chat/voice requests have a simple in-memory rate limit.
+- Telegram inline keyboard includes quick actions and a cabinet link through a short-lived one-time web-login token when possible.
+- Telegram chat/voice requests have an admin-configurable in-memory rate limit.
+- Telegram reminder template is admin-configurable.
 - The habits "Мой путь" tab now contains the daily completion flow: habit step, note/checkin, internal state metrics, and insight.
+- Pingvi system prompt is available as `PromptTemplate` key `habits.navigator.system`.
+- Dedicated Pingvi prompt safety tests exist.
+- `Сделать проще` / `Заменить` persist the current `HabitDailyTask` variant through backend.
 
 Still backlog:
 
-- Telegram Mini App / native signed Telegram-to-web login.
-- Telegram rate limits and dedicated prompt safety tests.
-- Admin UI for Telegram policy, reminder templates, and rate limits.
-- Persisted backend editing for "mini-step" / "another variant"; current buttons are honest frontend-only helpers.
+- Full Telegram Mini App UI inside Telegram WebView. Current implementation uses a short-lived web-login link into the web cabinet.
+- Persisted long-term `HabitNavigatorMemory` model. Current memory uses navigator threads, messages, metrics, insights, reports, and week summaries.
+- Admin controls for XP values, reward labels, WebView/PDF flags, validation thresholds, and habit catalog active/version controls.
+- Final pixel-level Playwright audit across desktop, mobile, and Telegram WebView.
 
 ## Already Implemented
 
@@ -40,16 +44,16 @@ Still backlog:
 - `HabitWeekSummary`: created on `advance`/`freeze`, shown in archive, and passed to Pingvi.
 - Pingvi through `/api/habits/navigator` with backend context: program, habit, metrics, insights, reports, daily task, week summaries, and thread history.
 - Backend-side XP/rewards for metrics, checkins, insights, week completion, soft advance, and freeze.
-- Admin settings for localizations, content JSON, rule/LLM week summaries, week summary model, and Pingvi temperature.
+- Admin settings for localizations, content JSON, rule/LLM week summaries, week summary model, Pingvi temperature, Telegram policy, Telegram reminder template, Telegram rate limits, and Telegram web-login.
 - LLM/API keys remain backend-side.
 
 ## Partially Covered
 
 - Visual/UX parity with the old reference: the structure exists, but final pixel/Playwright audit is still needed.
-- Archive: insights, rewards, and week summaries exist, but filters and polished empty states need another pass.
+- Archive: insights, rewards, closed weeks, filters, and copy actions exist, but polished empty states can still be improved.
 - Guide and scale hints exist, but reference-level copy can be improved.
 - Pingvi memory: thread history and week summaries are available, but there is no dedicated long-term `HabitNavigatorMemory` model.
-- `Сделать проще` / `Заменить` buttons are clickable but do not persist backend state. Either persist task variants through `HabitDailyTask` or remove them from the main UI.
+- `Сделать проще` / `Заменить` buttons now persist a changed `HabitDailyTask` without awarding XP.
 
 ## Habits Cabinet Improvements
 

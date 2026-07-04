@@ -93,6 +93,12 @@ const freezeProgramSchema = z.object({
   programId: z.string()
 });
 
+const dailyTaskVariantSchema = z.object({
+  programId: z.string(),
+  taskId: z.string(),
+  mode: z.enum(["SOFTEN", "REPLACE"])
+});
+
 type NavigatorContext = z.infer<typeof navigatorContextSchema>;
 
 export async function habitsRoutes(app: FastifyInstance) {
@@ -481,6 +487,41 @@ export async function habitsRoutes(app: FastifyInstance) {
         sessionId: session.id,
         userId: session.userId,
         properties: { programId: body.programId, enrollmentId: body.enrollmentId ?? null, source: body.source }
+      }
+    });
+
+    return buildProgramResponse(await loadProgram(body.programId));
+  });
+
+  app.post("/api/habits/daily-task-variant", async (request, reply) => {
+    const session = await requireSession(request, reply);
+    if (!session) return;
+    const body = dailyTaskVariantSchema.parse(request.body ?? {});
+    const programAccess = await requireHabitProgram(session, reply, body.programId);
+    if (!programAccess) return;
+
+    const task = await prisma.habitDailyTask.findFirst({
+      where: { id: body.taskId, programId: body.programId },
+      include: { enrollment: true }
+    });
+    if (!task) return reply.code(404).send({ error: "Daily task not found" });
+    if (task.completedAt) return reply.code(409).send({ error: "Completed task cannot be changed" });
+
+    const patch = body.mode === "SOFTEN"
+      ? buildSoftDailyTaskPatch(task)
+      : buildReplacementDailyTaskPatch(task.enrollment, task.dayIndex);
+
+    await prisma.habitDailyTask.update({
+      where: { id: task.id },
+      data: patch
+    });
+    await prisma.analyticsEvent.create({
+      data: {
+        name: body.mode === "SOFTEN" ? "habit_daily_task_softened" : "habit_daily_task_replaced",
+        locale: session.locale,
+        sessionId: session.id,
+        userId: session.userId,
+        properties: { programId: body.programId, taskId: body.taskId }
       }
     });
 
@@ -952,6 +993,27 @@ function buildDailyTaskData(enrollment: { title: string; practice: string; essen
     taskText: `${enrollment.title}. ${enrollment.practice}`,
     microAction: variant.microAction,
     whyToday: `${variant.whyToday} ${enrollment.essence}`
+  };
+}
+
+function buildSoftDailyTaskPatch(task: { title: string; taskText: string; microAction: string; whyToday: string }) {
+  const baseAction = task.microAction.replace(/^Мини-версия:\s*/i, "").trim();
+  return {
+    title: task.title.startsWith("Мягкий формат:") ? task.title : `Мягкий формат: ${task.title}`,
+    taskText: task.taskText,
+    microAction: `Мини-версия: ${baseAction} Если сил мало, сделай только 2 минуты и остановись.`,
+    whyToday: "Этот вариант сохранен в кабинете: цель не в идеальном выполнении, а в сохранении контакта с привычкой без давления."
+  };
+}
+
+function buildReplacementDailyTaskPatch(enrollment: { title: string; practice: string; essence: string; why: string }, currentDayIndex: number) {
+  const replacementIndex = (currentDayIndex % 7) + 1;
+  const replacement = buildDailyTaskData(enrollment, replacementIndex);
+  return {
+    title: `Другой вариант: ${replacement.title}`,
+    taskText: replacement.taskText,
+    microAction: replacement.microAction,
+    whyToday: replacement.whyToday
   };
 }
 

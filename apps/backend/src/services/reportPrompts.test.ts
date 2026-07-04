@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   defaultReportPromptTemplates,
+  HABIT_NAVIGATOR_SYSTEM_PROMPT_KEY,
   REPORT_FREE_SYSTEM_PROMPT_KEY,
   REPORT_FREE_USER_PROMPT_KEY,
   REPORT_FULL_SYSTEM_PROMPT_KEY,
@@ -15,6 +16,17 @@ test("default report prompts define separate free and full templates", () => {
   assert.equal(keys.has(REPORT_FREE_USER_PROMPT_KEY), true);
   assert.equal(keys.has(REPORT_FULL_SYSTEM_PROMPT_KEY), true);
   assert.equal(keys.has(REPORT_FULL_USER_PROMPT_KEY), true);
+  assert.equal(keys.has(HABIT_NAVIGATOR_SYSTEM_PROMPT_KEY), true);
+});
+
+test("navigator prompt default is safe and admin-editable", () => {
+  const prompt = defaultReportPromptTemplates.find((item) => item.key === HABIT_NAVIGATOR_SYSTEM_PROMPT_KEY);
+
+  assert.ok(prompt);
+  assert.match(prompt.content, /Treat reports, insights, user profile/);
+  assert.match(prompt.content, /Do not reveal/);
+  assert.match(prompt.content, /{{backendContext}}/);
+  assert.match(prompt.content, /{{frontendContext}}/);
 });
 
 test("default report prompts expose strengthened version numbers", () => {

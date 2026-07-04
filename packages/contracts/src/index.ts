@@ -379,6 +379,19 @@ export type HabitDailyTaskSummary = {
   createdAt: string;
 };
 
+export type HabitCalendarEventSummary = {
+  id: string;
+  enrollmentId?: string | null;
+  dailyTaskId?: string | null;
+  title: string;
+  description: string;
+  startsAt: string;
+  durationMinutes: number;
+  status: string;
+  source: string;
+  createdAt: string;
+};
+
 export type HabitWeekSummary = {
   id: string;
   enrollmentId: string;
@@ -416,6 +429,7 @@ export type HabitProgramSummary = {
   insights: HabitInsightSummary[];
   metrics: HabitDailyMetricSummary[];
   rewards: HabitRewardSummary[];
+  calendarEvents: HabitCalendarEventSummary[];
   weekSummaries: HabitWeekSummary[];
   todayTask?: HabitDailyTaskSummary | null;
   settings: {

@@ -317,6 +317,7 @@ model HabitProgram {
   dailyMetrics HabitDailyMetric[]
   rewards     HabitRewardEvent[]
   dailyTasks  HabitDailyTask[]
+  calendarEvents HabitCalendarEvent[]
   weekSummaries HabitWeekSummary[]
   navigatorThreads HabitNavigatorThread[]
   notificationPreference HabitNotificationPreference?
@@ -350,6 +351,7 @@ model HabitEnrollment {
   checkins           HabitCheckin[]
   insights           HabitInsight[]
   dailyTasks         HabitDailyTask[]
+  calendarEvents     HabitCalendarEvent[]
   weekSummaries      HabitWeekSummary[]
 
   @@index([programId, status, sortOrder])
@@ -430,10 +432,33 @@ model HabitDailyTask {
   xpAwarded    Int             @default(0)
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
+  calendarEvents HabitCalendarEvent[]
 
   @@unique([programId, enrollmentId, dayIndex])
   @@index([programId, date])
   @@index([enrollmentId, dayIndex])
+}
+
+model HabitCalendarEvent {
+  id              String           @id @default(cuid())
+  programId       String
+  program         HabitProgram     @relation(fields: [programId], references: [id], onDelete: Cascade)
+  enrollmentId    String?
+  enrollment      HabitEnrollment? @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
+  dailyTaskId     String?
+  dailyTask       HabitDailyTask?  @relation(fields: [dailyTaskId], references: [id], onDelete: SetNull)
+  title           String
+  description     String
+  startsAt        DateTime
+  durationMinutes Int              @default(15)
+  status          String           @default("SCHEDULED")
+  source          String           @default("habit")
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@unique([programId, dailyTaskId])
+  @@index([programId, startsAt])
+  @@index([enrollmentId, startsAt])
 }
 
 model HabitWeekSummary {

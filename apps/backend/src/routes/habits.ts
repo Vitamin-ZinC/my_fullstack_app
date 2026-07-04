@@ -99,6 +99,14 @@ const dailyTaskVariantSchema = z.object({
   mode: z.enum(["SOFTEN", "REPLACE"])
 });
 
+const calendarEventSchema = z.object({
+  programId: z.string(),
+  enrollmentId: z.string().optional(),
+  dailyTaskId: z.string().optional(),
+  startsAt: z.string().datetime().optional(),
+  durationMinutes: z.number().int().min(5).max(180).default(15)
+});
+
 type NavigatorContext = z.infer<typeof navigatorContextSchema>;
 
 export async function habitsRoutes(app: FastifyInstance) {
@@ -528,6 +536,95 @@ export async function habitsRoutes(app: FastifyInstance) {
     return buildProgramResponse(await loadProgram(body.programId));
   });
 
+  app.post("/api/habits/calendar-events", async (request, reply) => {
+    const session = await requireSession(request, reply);
+    if (!session) return;
+    const body = calendarEventSchema.parse(request.body ?? {});
+    const programAccess = await requireHabitProgram(session, reply, body.programId);
+    if (!programAccess) return;
+
+    const [program, task, enrollment] = await Promise.all([
+      prisma.habitProgram.findUniqueOrThrow({
+        where: { id: body.programId },
+        select: { id: true, reminderTime: true }
+      }),
+      body.dailyTaskId
+        ? prisma.habitDailyTask.findFirst({
+          where: { id: body.dailyTaskId, programId: body.programId },
+          include: { enrollment: true }
+        })
+        : Promise.resolve(null),
+      body.enrollmentId
+        ? prisma.habitEnrollment.findFirst({
+          where: { id: body.enrollmentId, programId: body.programId },
+          select: { id: true, title: true }
+        })
+        : Promise.resolve(null)
+    ]);
+
+    if (body.dailyTaskId && !task) return reply.code(404).send({ error: "Daily task not found" });
+    if (body.enrollmentId && !enrollment) return reply.code(404).send({ error: "Habit enrollment not found" });
+
+    const startsAt = body.startsAt ? new Date(body.startsAt) : buildFallbackCalendarStart(program.reminderTime);
+    const enrollmentId = task?.enrollmentId ?? enrollment?.id ?? null;
+    const title = task?.title ?? enrollment?.title ?? "Orken habit";
+    const description = [
+      task?.microAction,
+      task?.whyToday
+    ].filter(Boolean).join("\n\n") || "Daily Orken habit practice";
+
+    const existing = task
+      ? await prisma.habitCalendarEvent.findFirst({ where: { programId: body.programId, dailyTaskId: task.id } })
+      : null;
+
+    if (task) {
+      await prisma.habitDailyTask.update({
+        where: { id: task.id },
+        data: { date: startsAt }
+      });
+    }
+
+    if (existing) {
+      await prisma.habitCalendarEvent.update({
+        where: { id: existing.id },
+        data: {
+          enrollmentId,
+          title,
+          description,
+          startsAt,
+          durationMinutes: body.durationMinutes,
+          status: "SCHEDULED"
+        }
+      });
+    } else {
+      await prisma.habitCalendarEvent.create({
+        data: {
+          programId: body.programId,
+          enrollmentId,
+          dailyTaskId: task?.id ?? null,
+          title,
+          description,
+          startsAt,
+          durationMinutes: body.durationMinutes,
+          status: "SCHEDULED",
+          source: "habit"
+        }
+      });
+    }
+
+    await prisma.analyticsEvent.create({
+      data: {
+        name: "habit_calendar_event_saved",
+        locale: session.locale,
+        sessionId: session.id,
+        userId: session.userId,
+        properties: { programId: body.programId, enrollmentId, dailyTaskId: task?.id ?? null }
+      }
+    });
+
+    return buildProgramResponse(await loadProgram(body.programId));
+  });
+
   app.patch("/api/habits/settings", async (request, reply) => {
     const session = await requireSession(request, reply);
     if (!session) return;
@@ -771,6 +868,7 @@ function programInclude() {
     },
     dailyMetrics: { orderBy: { date: "desc" as const }, take: 14 },
     rewards: { orderBy: { createdAt: "desc" as const } },
+    calendarEvents: { orderBy: { startsAt: "asc" as const }, take: 12 },
     weekSummaries: {
       orderBy: { createdAt: "desc" as const },
       include: { enrollment: { select: { title: true } } }
@@ -1241,6 +1339,18 @@ function serializeProgram(program: any) {
       xp: reward.xp,
       createdAt: reward.createdAt.toISOString()
     })),
+    calendarEvents: (program.calendarEvents ?? []).map((event: any) => ({
+      id: event.id,
+      enrollmentId: event.enrollmentId ?? null,
+      dailyTaskId: event.dailyTaskId ?? null,
+      title: event.title,
+      description: event.description,
+      startsAt: event.startsAt.toISOString(),
+      durationMinutes: event.durationMinutes,
+      status: event.status,
+      source: event.source,
+      createdAt: event.createdAt.toISOString()
+    })),
     weekSummaries: (program.weekSummaries ?? []).map((summary: any) => ({
       id: summary.id,
       enrollmentId: summary.enrollmentId,
@@ -1462,6 +1572,19 @@ function personalizeHabitTitle(title: string, weakZone: string | null, index: nu
 function dayFromInput(value?: string) {
   const source = value ?? new Date().toISOString().slice(0, 10);
   return new Date(`${source}T00:00:00.000Z`);
+}
+
+function buildFallbackCalendarStart(reminderTime: string | null | undefined) {
+  const now = new Date();
+  const [hoursRaw, minutesRaw] = (reminderTime ?? "09:00").split(":");
+  const hours = clampInteger(Number(hoursRaw), 0, 23);
+  const minutes = clampInteger(Number(minutesRaw), 0, 59);
+  const startsAt = new Date(now);
+  startsAt.setHours(hours, minutes, 0, 0);
+  if (startsAt.getTime() < now.getTime() - 300000) {
+    startsAt.setDate(startsAt.getDate() + 1);
+  }
+  return startsAt;
 }
 
 function daysBetween(start: Date, end: Date) {

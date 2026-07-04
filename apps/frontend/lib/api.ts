@@ -289,6 +289,16 @@ export const api = {
     method: "POST",
     body: JSON.stringify(payload)
   }),
+  createHabitCalendarEvent: (payload: {
+    programId: string;
+    enrollmentId?: string;
+    dailyTaskId?: string;
+    startsAt?: string;
+    durationMinutes?: number;
+  }) => request<HabitProgramResponse>("/api/habits/calendar-events", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  }),
   updateHabitSettings: (payload: {
     programId: string;
     name?: string;

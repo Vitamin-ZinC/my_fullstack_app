@@ -126,6 +126,7 @@ function HabitsContent() {
   const [error, setError] = useState("");
   const [savedMessage, setSavedMessage] = useState("");
   const [savedAt, setSavedAt] = useState<Date | null>(null);
+  const [dailyFeedback, setDailyFeedback] = useState("");
   const [telegramStatus, setTelegramStatus] = useState<TelegramStatusResponse | null>(null);
   const [telegramBusy, setTelegramBusy] = useState(false);
 
@@ -215,6 +216,10 @@ function HabitsContent() {
   }, [program?.id]);
 
   useEffect(() => {
+    if (tab !== "dashboard") setShowCoachmark(false);
+  }, [tab]);
+
+  useEffect(() => {
     if (!program) {
       setTelegramStatus(null);
       return;
@@ -250,7 +255,7 @@ function HabitsContent() {
   const microStepText = microSteps[microStepIndex % microSteps.length];
   const navigatorContext = useMemo(() => ({
     mode: tab === "dashboard" ? "state" : tab === "journey" ? "path" : "chat",
-    cycle: program ? `Цикл ${program.currentCycle}` : undefined,
+    cycle: program ? `${t.stats.cycle} ${program.currentCycle}` : undefined,
     week: program?.currentWeek,
     habit: activeHabit?.title,
     weakZone: program?.weakZone ?? undefined,
@@ -346,7 +351,9 @@ function HabitsContent() {
       });
       applyProgramResponse(result);
       setNote("");
-      markSaved(completed ? t.messages.checkinSaved : t.messages.checkinRemoved);
+      const message = completed ? t.messages.checkinSaved : t.messages.checkinRemoved;
+      setDailyFeedback(message);
+      markSaved(message);
     } catch (reason) {
       setError(readableError(reason, t.errors.checkin));
     } finally {
@@ -365,6 +372,7 @@ function HabitsContent() {
       });
       applyProgramResponse(result);
       setInsight("");
+      setDailyFeedback(t.messages.insightSaved);
       markSaved(t.messages.insightSaved);
     } catch (reason) {
       setError(readableError(reason, t.errors.insight));
@@ -480,7 +488,9 @@ function HabitsContent() {
     try {
       const result = await api.updateHabitDailyTaskVariant({ programId: program.id, taskId: task.id, mode });
       applyProgramResponse(result);
-      markSaved(mode === "SOFTEN" ? t.dashboard.softStepSaved : t.messages.taskVariantSaved);
+      const message = mode === "SOFTEN" ? t.dashboard.softStepSaved : t.messages.taskVariantSaved;
+      setDailyFeedback(message);
+      markSaved(message);
     } catch (reason) {
       setError(readableError(reason, t.errors.settings));
     } finally {
@@ -492,6 +502,30 @@ function HabitsContent() {
     const softNote = `Облегченный шаг: ${microSteps[1]}`;
     setNote(softNote);
     void updateTodayTaskVariant("SOFTEN");
+  }
+
+  async function addCalendarEvent() {
+    if (!program || !activeHabit) return;
+    const task = activeHabit.todayTask ?? program.todayTask ?? null;
+    setBusy(true);
+    try {
+      const startsAt = buildNextHabitEventStart(program.settings.reminderTime);
+      const result = await api.createHabitCalendarEvent({
+        programId: program.id,
+        enrollmentId: activeHabit.id,
+        dailyTaskId: task?.id,
+        startsAt: startsAt.toISOString(),
+        durationMinutes: 15
+      });
+      applyProgramResponse(result);
+      const message = `${t.messages.calendarAdded} ${formatCalendarDateTime(startsAt)}.`;
+      setDailyFeedback(message);
+      markSaved(message);
+    } catch (reason) {
+      setError(readableError(reason, t.errors.settings));
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function askNavigator(prompt?: string) {
@@ -710,6 +744,11 @@ function HabitsContent() {
             saveInsight={saveInsight}
             softenTodayStep={softenTodayStep}
             rotateTodayStep={() => updateTodayTaskVariant("REPLACE")}
+            dailyFeedback={dailyFeedback}
+            telegramStatus={telegramStatus}
+            telegramBusy={telegramBusy}
+            connectTelegram={connectTelegram}
+            addCalendarEvent={addCalendarEvent}
             advanceWeek={advanceWeek}
             freezeWeek={freezeWeek}
           />
@@ -1051,12 +1090,23 @@ function JourneyTab(props: {
   saveInsight: () => void;
   softenTodayStep: () => void;
   rotateTodayStep: () => void;
+  dailyFeedback: string;
+  telegramStatus: TelegramStatusResponse | null;
+  telegramBusy: boolean;
+  connectTelegram: () => void;
+  addCalendarEvent: () => void;
   advanceWeek: (force?: boolean) => void;
   freezeWeek: () => void;
 }) {
   const activeHabit = props.activeHabit;
   const canAdvance = (activeHabit?.checkinsDone ?? 0) >= 7;
   const todayTask = activeHabit?.todayTask ?? props.program.todayTask ?? null;
+  const telegramLinked = Boolean(props.telegramStatus?.linked);
+  const telegramConfigured = props.telegramStatus?.configured !== false;
+  const calendarEvents = props.program.calendarEvents ?? [];
+  const scheduledEvent = calendarEvents.find((event) => event.dailyTaskId === todayTask?.id)
+    ?? calendarEvents.find((event) => event.enrollmentId === activeHabit?.id && event.status === "SCHEDULED")
+    ?? null;
   return (
     <div className="habits-grid">
       <section className="habits-panel habits-wide habits-journey-daily">
@@ -1074,6 +1124,34 @@ function JourneyTab(props: {
           <strong>{todayTask?.microAction ?? activeHabit?.practice ?? props.t.dashboard.firstStep}</strong>
           <span>{todayTask?.whyToday ?? activeHabit?.why ?? props.t.journey.copy}</span>
         </div>
+        {activeHabit && (
+          <div className="habits-current habits-journey-card">
+            <div className="habit-week">{props.t.stats.cycle} {activeHabit.cycle} · {props.t.stats.week} {activeHabit.week}</div>
+            <h3>{activeHabit.title}</h3>
+            <div className="habits-tabs">
+              {(["essence", "practice", "why"] as DetailTab[]).map((tab) => (
+                <button className={`btn-back ${props.detailTab === tab ? "active-control" : ""}`} type="button" key={tab} onClick={() => props.setDetailTab(tab)}>
+                  {props.t.journey[tab]}
+                </button>
+              ))}
+            </div>
+            <div className="habit-detail">{activeHabit[props.detailTab]}</div>
+            <div className="habits-week-card">
+              <div className="row">
+                <strong>{props.t.journey.weekCalendar}</strong>
+                <span>{activeHabit.checkinsDone}/7</span>
+              </div>
+              <WeekDots habit={activeHabit} />
+              <div className="progress-bg"><div className="progress-fill" style={{ width: `${props.program.stats.weekProgress}%` }} /></div>
+              {canAdvance && (
+                <div className="habits-mini-reward">
+                  <Trophy size={15} />
+                  <span>{props.t.journey.completeReady}. {props.t.journey.completeCopy}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
         <textarea className="input habits-note" placeholder={props.t.dashboard.notePlaceholder} value={props.note} onChange={(event) => props.setNote(event.target.value)} />
         <div className="habits-action-row">
           <button className="button habits-cta" type="button" disabled={props.busy || !activeHabit} onClick={() => props.saveCheckin(activeHabit, !props.doneToday)}>
@@ -1088,6 +1166,7 @@ function JourneyTab(props: {
             {props.t.dashboard.replace}
           </button>
         </div>
+        {props.dailyFeedback && <div className="habits-inline-feedback">{props.dailyFeedback}</div>}
       </section>
 
       <section className="habits-panel">
@@ -1140,13 +1219,13 @@ function JourneyTab(props: {
         </button>
       </section>
 
-      <section className="habits-panel">
+      <section className="habits-panel habits-journey-details-duplicate">
         <div className="habit-week">{props.t.habitsUx.journeySteps.details}</div>
         <h2>{props.t.journey.title}<HelpTip label={props.t.habitsUx.tooltips.journey} /></h2>
         <p className="habits-muted">{props.program.careerAction || props.t.journey.copy}</p>
         {activeHabit && (
           <div className="habits-current">
-            <div className="habit-week">Цикл {activeHabit.cycle} · Неделя {activeHabit.week}</div>
+            <div className="habit-week">{props.t.stats.cycle} {activeHabit.cycle} · {props.t.stats.week} {activeHabit.week}</div>
             <h3>{activeHabit.title}</h3>
             <p>{activeHabit.focus}</p>
             <div className="habits-tabs">
@@ -1206,12 +1285,36 @@ function JourneyTab(props: {
             {props.program.settings.weeklyFreezes > 0 ? `${props.t.journey.freeze} (${props.program.settings.weeklyFreezes})` : props.t.journey.noFreezes}
           </button>
           {activeHabit && (
-            <a className="button secondary" title={props.t.habitsUx.tooltips.calendar} href={buildCalendarUrl(props.program, activeHabit)} target="_blank" rel="noreferrer">
+            <button className="button secondary" type="button" title={props.t.habitsUx.tooltips.calendar} disabled={props.busy} onClick={props.addCalendarEvent}>
               <CalendarPlus size={17} />
               {props.t.journey.calendar}
-            </a>
+            </button>
+          )}
+          {scheduledEvent && (
+            <div className="habits-mini-reward habits-scheduled-event">
+              <CalendarPlus size={15} />
+              <span>{props.t.messages.calendarScheduled} {formatCalendarDateTime(new Date(scheduledEvent.startsAt))}</span>
+            </div>
           )}
         </div>
+      </section>
+
+      <section className="habits-panel">
+        <h2>{props.t.settings.telegramTitle}<HelpTip label={props.t.habitsUx.tooltips.telegram} /></h2>
+        <div className="habits-current">
+          <div className="habit-detail">
+            <strong>{props.t.settings.telegramStatus}</strong>
+            {!telegramConfigured
+              ? props.t.settings.telegramNotConfigured
+              : telegramLinked
+                ? props.t.settings.telegramLinked
+                : props.t.settings.telegramNotLinked}
+          </div>
+        </div>
+        <button className="button secondary" type="button" disabled={props.telegramBusy || !telegramConfigured} onClick={props.connectTelegram}>
+          <Bot size={17} />
+          {telegramLinked ? props.t.settings.telegramReconnect : props.t.settings.telegramConnect}
+        </button>
       </section>
 
     </div>
@@ -1247,7 +1350,7 @@ function HabitsCatalogTab(props: {
           const expanded = props.expandedHabitId === habit.id;
           return (
             <article className={`habits-card ${habit.sortOrder === props.program.currentSortOrder ? "active" : ""}`} key={habit.id}>
-              <div className="habit-week">Цикл {habit.cycle} · Неделя {habit.week}</div>
+              <div className="habit-week">{props.t.stats.cycle} {habit.cycle} · {props.t.stats.week} {habit.week}</div>
               <h3>{habit.title}</h3>
               <p>{habit.focus}</p>
               {expanded && <HabitDetailsCard habit={habit} t={props.t} />}
@@ -1373,7 +1476,7 @@ function ArchiveTab(props: {
           <div className="habits-closed-weeks">
             {weekSummaries.length > 0 ? weekSummaries.map((summary) => (
               <article className="habits-card habits-closed-week" key={summary.id}>
-                <div className="habit-week">Цикл {summary.cycle} · Неделя {summary.week} · {summary.completionMode}</div>
+                <div className="habit-week">{props.t.stats.cycle} {summary.cycle} · {props.t.stats.week} {summary.week} · {summary.completionMode}</div>
                 <h3>{summary.habitTitle}</h3>
                 <p>{summary.summary}</p>
                 <div className="habits-current">
@@ -1391,7 +1494,7 @@ function ArchiveTab(props: {
               <div className="habits-current">{props.t.habitsUx.archive.closedWeeksEmpty}</div>
             ) : closedWeeks.map((habit) => (
               <article className="habits-card habits-closed-week" key={habit.id}>
-                <div className="habit-week">Цикл {habit.cycle} · Неделя {habit.week}</div>
+                <div className="habit-week">{props.t.stats.cycle} {habit.cycle} · {props.t.stats.week} {habit.week}</div>
                 <h3>{habit.title}</h3>
                 <p>{habit.focus}</p>
                 <div className="row">
@@ -1715,25 +1818,29 @@ function Stat({ label, value }: { label: string; value: string | number }) {
   );
 }
 
-function buildCalendarUrl(program: HabitProgramSummary, habit: HabitEnrollmentSummary) {
-  const date = new Date();
-  const [hour, minute] = program.settings.reminderTime.split(":").map(Number);
-  date.setHours(hour || 9, minute || 0, 0, 0);
-  const end = new Date(date.getTime() + 15 * 60000);
-  const fmt = (value: Date) => value.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
-  const params = new URLSearchParams({
-    action: "TEMPLATE",
-    text: `ORKEN.LIFE: ${habit.title}`,
-    details: habit.practice,
-    dates: `${fmt(date)}/${fmt(end)}`
-  });
-  return `https://calendar.google.com/calendar/render?${params.toString()}`;
+function buildNextHabitEventStart(reminderTime: string) {
+  const [hourRaw, minuteRaw] = reminderTime.split(":").map(Number);
+  const startsAt = new Date();
+  startsAt.setHours(Number.isFinite(hourRaw) ? hourRaw : 9, Number.isFinite(minuteRaw) ? minuteRaw : 0, 0, 0);
+  if (startsAt.getTime() < Date.now() - 300000) {
+    startsAt.setDate(startsAt.getDate() + 1);
+  }
+  return startsAt;
+}
+
+function formatCalendarDateTime(value: Date) {
+  return new Intl.DateTimeFormat("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(value);
 }
 
 function buildWeekShareText(program: HabitProgramSummary, habit: HabitEnrollmentSummary) {
   return [
     `ORKEN.LIFE - ${program.title}`,
-    `Цикл ${habit.cycle}, неделя ${habit.week}: ${habit.title}`,
+    `\u0426\u0438\u043a\u043b ${habit.cycle}, \u043d\u0435\u0434\u0435\u043b\u044f ${habit.week}: ${habit.title}`,
     `Фокус: ${habit.focus}`,
     `Отметки: ${habit.checkinsDone}/7`,
     `XP: ${program.stats.xp}`,

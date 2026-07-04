@@ -2935,6 +2935,31 @@ svg {
   margin-top: -8px;
 }
 
+.habits-inline-feedback {
+  border: 1px solid rgba(16, 185, 129, 0.26);
+  border-radius: 12px;
+  background: rgba(16, 185, 129, 0.08);
+  color: rgba(209, 250, 229, 0.92);
+  font-size: 12px;
+  line-height: 1.45;
+  padding: 10px 12px;
+}
+
+.habits-journey-daily {
+  background:
+    radial-gradient(circle at 10% 0%, rgba(0, 212, 255, 0.1), transparent 36%),
+    rgba(255, 255, 255, 0.04);
+}
+
+.habits-journey-daily .habits-current {
+  border-color: rgba(0, 212, 255, 0.16);
+  background: rgba(0, 212, 255, 0.06);
+}
+
+.habits-journey-details-duplicate {
+  display: none;
+}
+
 .habits-action-row {
   display: flex;
   align-items: center;
@@ -3798,6 +3823,14 @@ svg {
   color: rgba(255, 255, 255, 0.74);
   padding: 10px 12px;
   font-size: 12px;
+}
+
+.habits-scheduled-event {
+  justify-content: flex-start;
+  width: 100%;
+  border-color: rgba(0, 212, 255, 0.18);
+  background: rgba(0, 212, 255, 0.06);
+  color: rgba(226, 232, 240, 0.78);
 }
 
 .habits-mini-reward strong {

@@ -6,6 +6,7 @@ import { GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from 
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { env } from "../env.js";
 import { prisma } from "../lib/prisma.js";
+import { validatePhotoBuffer } from "./imageValidation.js";
 
 const client = new S3Client({
   region: env.S3_REGION,
@@ -73,7 +74,8 @@ export async function verifyRequiredMedia(analysisId: string) {
 
   if (!hasS3Config) {
     const bothUploaded = [audio, photo].every((asset) => asset.status === "UPLOADED" || asset.status === "VERIFIED");
-    return bothUploaded ? { ok: true } : { ok: false, reason: "Media files are not uploaded" };
+    if (!bothUploaded) return { ok: false, reason: "Media files are not uploaded" };
+    return validateUploadedPhoto(photo.id, photo.key);
   }
 
   for (const asset of [audio, photo]) {
@@ -96,7 +98,7 @@ export async function verifyRequiredMedia(analysisId: string) {
     }
   }
 
-  return { ok: true };
+  return validateUploadedPhoto(photo.id, photo.key);
 }
 
 export async function readMediaAssetBuffer(key: string) {
@@ -123,4 +125,24 @@ export async function getMediaAssetPublicUrl(key: string) {
     Bucket: env.S3_BUCKET,
     Key: key
   }), { expiresIn: 900 });
+}
+
+export async function validateUploadedPhoto(mediaAssetId: string, key: string) {
+  const buffer = await readMediaAssetBuffer(key);
+  if (!buffer) return { ok: false, reason: "Missing uploaded photo file" };
+
+  const validation = validatePhotoBuffer(buffer);
+  if (!validation.ok) return validation;
+
+  await prisma.mediaAsset.update({
+    where: { id: mediaAssetId },
+    data: {
+      status: "VERIFIED",
+      size: buffer.length,
+      mimeType: `image/${validation.format === "jpeg" ? "jpeg" : validation.format}`,
+      verifiedAt: new Date()
+    }
+  });
+
+  return { ok: true };
 }

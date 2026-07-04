@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { mkdir, writeFile } from "node:fs/promises";
-import { join, normalize } from "node:path";
+import { join, resolve, sep } from "node:path";
 import { z } from "zod";
 import { env } from "../env.js";
 import { getRequestedLocale, requireAdmin, requireAnalysisAccess, requireSession } from "../lib/auth.js";
@@ -8,6 +8,7 @@ import { analysisQueue } from "../lib/queue.js";
 import { subscribeProgress } from "../lib/progress.js";
 import { prisma } from "../lib/prisma.js";
 import { createMediaUploadUrls, readMediaAssetBuffer, verifyRequiredMedia } from "../services/media.js";
+import { validatePhotoBuffer } from "../services/imageValidation.js";
 import { sendReportEmail } from "../services/email.js";
 import { buildFallbackFreeReport, buildFallbackReport } from "../services/report.js";
 
@@ -244,8 +245,16 @@ export async function analysisRoutes(app: FastifyInstance) {
     const contentTypeHeader = request.headers["content-type"];
     const contentType = Array.isArray(contentTypeHeader) ? contentTypeHeader[0] : contentTypeHeader;
     const body = request.body instanceof Buffer ? request.body : Buffer.from([]);
+    const existingAsset = await prisma.mediaAsset.findUnique({ where: { key: params.key } });
+    if (!existingAsset) return reply.code(404).send({ error: "Upload asset not found" });
+    if (existingAsset.type === "PHOTO") {
+      const validation = validatePhotoBuffer(body);
+      if (!validation.ok) return reply.code(400).send({ error: validation.reason });
+    }
     await mkdir(env.LOCAL_UPLOAD_DIR, { recursive: true });
-    const uploadPath = normalize(join(env.LOCAL_UPLOAD_DIR, params.key));
+    const uploadRoot = resolve(env.LOCAL_UPLOAD_DIR);
+    const uploadPath = resolve(join(uploadRoot, params.key));
+    if (!uploadPath.startsWith(`${uploadRoot}${sep}`)) return reply.code(400).send({ error: "Invalid upload key" });
     await writeFile(uploadPath, body);
     const asset = await prisma.mediaAsset.update({
       where: { key: params.key },

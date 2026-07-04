@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 const baseUrl = (process.env.SMOKE_BASE_URL || process.argv[2] || "https://orken.life").replace(/\/$/, "");
 const promoCode = process.env.SMOKE_PROMO_CODE || "";
 const allowFallback = process.env.SMOKE_ALLOW_FALLBACK === "true";
@@ -32,10 +34,7 @@ async function upload(url, body, contentType) {
   return text ? JSON.parse(text) : null;
 }
 
-const jpeg1x1 = Buffer.from(
-  "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAX/xAAVEAEBAAAAAAAAAAAAAAAAAAAAAf/aAAwDAQACEAMQAAAB9A//xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAEFAqf/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAEDAQE/ASP/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAECAQE/ASP/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAY/Al//xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAE/IV//2gAMAwEAAgADAAAAEP/EABQRAQAAAAAAAAAAAAAAAAAAABD/2gAIAQMBAT8QH//EABQRAQAAAAAAAAAAAAAAAAAAABD/2gAIAQIBAT8QH//EABQQAQAAAAAAAAAAAAAAAAAAABD/2gAIAQEAAT8QH//Z",
-  "base64"
-);
+const smokePhoto = readFileSync(new URL("../assets/ikigai-cones.jpg", import.meta.url));
 
 const session = await request("/api/auth/guest", {
   method: "POST",
@@ -48,7 +47,7 @@ const analysis = await request("/api/analyses", {
 }, session);
 
 await upload(analysis.audioUploadUrl, Buffer.alloc(4096, 1), "audio/webm");
-await upload(analysis.photoUploadUrl, jpeg1x1, "image/jpeg");
+await upload(analysis.photoUploadUrl, smokePhoto, "image/jpeg");
 
 await request(`/api/analyses/${analysis.analysisId}/confirm`, {
   method: "POST",

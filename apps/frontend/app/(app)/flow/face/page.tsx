@@ -13,6 +13,11 @@ type FaceMetrics = {
   tone: number;
 };
 
+const MIN_PHOTO_BYTES = 8 * 1024;
+const MIN_PHOTO_DIMENSION = 160;
+const MAX_PHOTO_DIMENSION = 1280;
+const PHOTO_TOO_SMALL_ERROR = "Фото получилось слишком маленьким или пустым. Загрузите реальное фото или переснимите при хорошем освещении.";
+
 export default function FacePage() {
   const text = useSiteText().flow.face;
   const fileInput = useRef<HTMLInputElement>(null);
@@ -51,8 +56,12 @@ export default function FacePage() {
       return;
     }
 
-    const dataUrl = await blobToDataUrl(file);
-    await uploadPhoto(file, dataUrl);
+    try {
+      const prepared = await preparePhotoFile(file);
+      await uploadPhoto(prepared.blob, prepared.dataUrl);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : text.uploadError);
+    }
   }
 
   async function openCamera() {
@@ -80,6 +89,10 @@ export default function FacePage() {
       setError(text.cameraNotReady);
       return;
     }
+    if (video.current.videoWidth < MIN_PHOTO_DIMENSION || video.current.videoHeight < MIN_PHOTO_DIMENSION) {
+      setError(PHOTO_TOO_SMALL_ERROR);
+      return;
+    }
 
     const canvas = document.createElement("canvas");
     canvas.width = video.current.videoWidth;
@@ -89,6 +102,10 @@ export default function FacePage() {
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.9));
     if (!blob) {
       setError(text.uploadError);
+      return;
+    }
+    if (blob.size < MIN_PHOTO_BYTES) {
+      setError(PHOTO_TOO_SMALL_ERROR);
       return;
     }
     await uploadPhoto(blob, dataUrl);
@@ -238,12 +255,43 @@ function Metric({ label, value }: { label: string; value: number }) {
   );
 }
 
-function blobToDataUrl(blob: Blob) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(blob);
+async function preparePhotoFile(file: File) {
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const image = await loadImage(objectUrl);
+    const width = image.naturalWidth || image.width;
+    const height = image.naturalHeight || image.height;
+    if (width < MIN_PHOTO_DIMENSION || height < MIN_PHOTO_DIMENSION) {
+      throw new Error(PHOTO_TOO_SMALL_ERROR);
+    }
+
+    const scale = Math.min(1, MAX_PHOTO_DIMENSION / Math.max(width, height));
+    const targetWidth = Math.max(MIN_PHOTO_DIMENSION, Math.round(width * scale));
+    const targetHeight = Math.max(MIN_PHOTO_DIMENSION, Math.round(height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error(PHOTO_TOO_SMALL_ERROR);
+    ctx.drawImage(image, 0, 0, targetWidth, targetHeight);
+
+    const blob = await canvasToJpegBlob(canvas);
+    if (blob.size < MIN_PHOTO_BYTES) throw new Error(PHOTO_TOO_SMALL_ERROR);
+    return { blob, dataUrl: canvas.toDataURL("image/jpeg", 0.9) };
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+function canvasToJpegBlob(canvas: HTMLCanvasElement) {
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        reject(new Error(PHOTO_TOO_SMALL_ERROR));
+        return;
+      }
+      resolve(blob);
+    }, "image/jpeg", 0.9);
   });
 }
 

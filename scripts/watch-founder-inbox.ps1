@@ -36,7 +36,9 @@ $body = @{
 
 $response = Invoke-RestMethod -Method Post -Uri "$($ApiUrl.TrimEnd('/'))/api/docs/intake/list" -ContentType "application/json" -Body $body
 $items = @($response.items)
+$terminalStatuses = @("DONE", "IGNORED", "REJECTED", "ANSWERED_BY_BACKEND")
 $candidates = $items | Where-Object {
+  $terminalStatuses -notcontains $_.codexStatus -and
   ($_.codexStatus -eq "QUEUED" -or $_.queueStatus -eq "QUEUED" -or $_.priority -eq "URGENT") -and
   ($IncludeNormal -or $_.priority -eq "URGENT" -or $_.codexStatus -eq "QUEUED") -and
   -not $seen.ContainsKey($_.id)

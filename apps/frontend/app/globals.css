@@ -349,7 +349,7 @@ svg {
   color: rgba(247, 251, 255, 0.88);
   line-height: 1.55;
   font-size: 14px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: "Mulish", "Segoe UI", Arial, Helvetica, sans-serif;
 }
 
 @media (max-width: 700px) {

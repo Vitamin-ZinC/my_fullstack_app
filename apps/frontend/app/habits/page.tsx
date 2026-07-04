@@ -829,6 +829,11 @@ function DashboardTab(props: {
               {props.t.dashboard.replace}
             </button>
           </div>
+          <div className="habits-button-explainers" aria-label={props.t.habitsUx.actionHelp.title}>
+            <span><strong>{props.t.dashboard.done}</strong>{props.t.habitsUx.tooltips.done}</span>
+            <span><strong>{props.t.dashboard.tooMuch}</strong>{props.t.habitsUx.tooltips.tooMuch}</span>
+            <span><strong>{props.t.dashboard.replace}</strong>{props.t.habitsUx.tooltips.replace}</span>
+          </div>
           <p className="habits-action-help">{props.t.dashboard.softStepHelp}</p>
         </div>
         {props.activeHabit && <HabitDetailsCard habit={props.activeHabit} t={props.t} />}
@@ -877,6 +882,7 @@ function DashboardTab(props: {
           value={props.energy}
           hint={metricValueHint(props.energy, props.t.dashboard.metricValueHints)}
           scale={props.t.habitsUx.metricScales.energy}
+          numberHints={props.t.habitsUx.metricNumberHints.energy}
           onChange={props.setEnergy}
         />
         <MetricSlider
@@ -886,6 +892,7 @@ function DashboardTab(props: {
           value={props.clarity}
           hint={metricValueHint(props.clarity, props.t.dashboard.metricValueHints)}
           scale={props.t.habitsUx.metricScales.clarity}
+          numberHints={props.t.habitsUx.metricNumberHints.clarity}
           onChange={props.setClarity}
         />
         <MetricSlider
@@ -895,6 +902,7 @@ function DashboardTab(props: {
           value={props.stability}
           hint={metricValueHint(props.stability, props.t.dashboard.metricValueHints)}
           scale={props.t.habitsUx.metricScales.stability}
+          numberHints={props.t.habitsUx.metricNumberHints.stability}
           onChange={props.setStability}
         />
         {props.latestMetric && (
@@ -1307,6 +1315,32 @@ function GuideTab({ t, program }: { t: ReturnType<typeof useSiteText>["habits"][
           ))}
         </div>
       </section>
+      <section className="habits-panel habits-wide">
+        <h2>{t.dashboard.metricScaleTitle}</h2>
+        <div className="habits-guide-metric-grid">
+          {([
+            ["energy", t.metrics.energy, t.habitsUx.metricScales.energy],
+            ["clarity", t.metrics.clarity, t.habitsUx.metricScales.clarity],
+            ["stability", t.metrics.stability, t.habitsUx.metricScales.stability]
+          ] as const).map(([id, label, scale]) => (
+            <details className="habits-metric-help" open={id === "energy"} key={id}>
+              <summary>{label}</summary>
+              <ul>
+                {scale.map((item) => <li key={item}>{item}</li>)}
+              </ul>
+            </details>
+          ))}
+        </div>
+      </section>
+      <section className="habits-panel habits-wide">
+        <h2>{t.habitsUx.actionHelp.title}</h2>
+        <div className="habits-action-help-grid">
+          <p><strong>{t.journey.advance}</strong>{t.habitsUx.actionHelp.advance}</p>
+          <p><strong>{t.journey.softAdvance}</strong>{t.habitsUx.actionHelp.softAdvance}</p>
+          <p><strong>{t.journey.freeze}</strong>{t.habitsUx.actionHelp.freeze}</p>
+          <p><strong>{t.journey.calendar}</strong>{t.habitsUx.actionHelp.calendar}</p>
+        </div>
+      </section>
     </div>
   );
 }
@@ -1438,8 +1472,9 @@ function metricStatus(value: number) {
   return "🌧 Низко";
 }
 
-function MetricSlider(props: { icon: string; color: string; label: string; value: number; hint: string; scale: readonly string[]; onChange: (value: number) => void }) {
+function MetricSlider(props: { icon: string; color: string; label: string; value: number; hint: string; scale: readonly string[]; numberHints: readonly string[]; onChange: (value: number) => void }) {
   const progress = Math.max(0, Math.min(100, props.value * 10));
+  const selectedNumberHint = props.numberHints[props.value] ?? props.hint;
   return (
     <div className="habits-slider" style={{ "--metric-color": props.color, "--metric-progress": `${progress}%` } as CSSProperties}>
       <label htmlFor={`metric-${props.label}`}><span className="habits-inline-icon">{props.icon}</span>{props.label}</label>
@@ -1447,6 +1482,17 @@ function MetricSlider(props: { icon: string; color: string; label: string; value
       <strong>{props.value}/10</strong>
       <input id={`metric-${props.label}`} type="range" min={0} max={10} value={props.value} onChange={(event) => props.onChange(Number(event.target.value))} />
       <small>{props.hint}</small>
+      <div className="habits-metric-ticks" aria-label={`Подсказки шкалы ${props.label}`}>
+        {props.numberHints.map((hint, index) => (
+          <span className={index === props.value ? "active" : ""} title={hint} aria-label={`${index}: ${hint}`} key={`${props.label}-${index}`}>
+            {index}
+          </span>
+        ))}
+      </div>
+      <div className="habits-metric-selected-hint">
+        <strong>{props.value}</strong>
+        <span>{selectedNumberHint}</span>
+      </div>
       <details className="habits-metric-help">
         <summary>Что значит шкала {props.label.toLowerCase()}</summary>
         <ul>

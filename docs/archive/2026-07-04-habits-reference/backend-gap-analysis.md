@@ -22,6 +22,13 @@ This file lists requirements from the reference materials that are not fully sup
 - `HabitNavigatorThread` and `HabitNavigatorMessage` store chat threads and messages.
 - `/api/habits/navigator` builds context from active program, metrics, insights, reports, and thread history.
 - LLM call is backend-side through OpenAI-compatible chat completions.
+- Navigator temperature is admin-managed through `AppSetting.habit_navigator_temperature`.
+
+### Admin Settings
+
+- `AppSetting` stores prices, trial duration, localized content, enabled/default locales, habits week summary mode/model, and Pingvi temperature.
+- `PromptTemplate` stores report prompt templates.
+- Week summaries can run in rule-based mode or LLM mode; LLM failures fall back to rule-based summaries.
 
 ### Existing Routes
 
@@ -43,27 +50,12 @@ This file lists requirements from the reference materials that are not fully sup
 
 Reference requirement: one weekly habit should have 7 different daily task variations.
 
-Current state: frontend can rotate/soften a micro-step, but task variants are not persisted as backend entities.
+Current state: implemented as `HabitDailyTask`. The active habit gets seven persisted task variants, check-in completion marks the next unfinished task, and `/api/habits/me` returns tasks through the existing program payload. Dedicated daily-task endpoints are still intentionally not introduced.
 
-Suggested design:
+Possible next design:
 
-- Add `HabitDailyTask`.
-- Fields:
-  - `id`
-  - `programId`
-  - `enrollmentId`
-  - `date`
-  - `dayIndex`
-  - `title`
-  - `taskText`
-  - `microAction`
-  - `whyToday`
-  - `completedAt`
-  - `xpAwarded`
-  - `createdAt`
-  - `updatedAt`
-- Add unique constraint on `programId + enrollmentId + date`.
-- Serialize today's task in `HabitProgramSummary` or a dedicated endpoint.
+- Split daily task reads/writes into dedicated endpoints only if `/api/habits/me` payload becomes too heavy.
+- Add task replacement persistence if product needs to remember why a user chose a softer variant.
 
 Routes:
 
@@ -71,39 +63,25 @@ Routes:
 - `POST /api/habits/daily-task/complete`
 - optional `POST /api/habits/daily-task/replace`
 
-Implementation risk: medium. Requires schema, contracts, generation logic, UI state, and migration.
+Implementation risk for the remaining endpoint split: low-medium.
 
 ### 2. Week Summary / Hall Of Fame
 
 Reference requirement: completed weeks should have summaries, rewards, archive cards, and shareable result.
 
-Current state: `HabitEnrollment.completedAt` exists and rewards exist, but no dedicated weekly summary text or week archive entity.
+Current state: implemented as `HabitWeekSummary`. Advance/freeze creates or updates a summary, archive UI can show it, Pingvi receives recent summaries in backend context, and admin settings can switch week summary generation between rule-based and LLM-based mode.
 
-Suggested design:
+Possible next design:
 
-- Add `HabitWeekSummary`.
-- Fields:
-  - `id`
-  - `programId`
-  - `enrollmentId`
-  - `cycle`
-  - `week`
-  - `checkinsDone`
-  - `completionMode` (`FULL`, `SOFT`, `FROZEN`)
-  - `summary`
-  - `pingviFeedback`
-  - `rewardLabel`
-  - `xpAwarded`
-  - `createdAt`
-- Create summary during `/api/habits/advance` and `/api/habits/freeze`.
-- Expose in `/api/habits/me` or dedicated archive endpoint.
+- Add share-card rendering if public sharing becomes a product requirement.
+- Add a dedicated week summary endpoint only if archive pagination becomes necessary.
 
 Routes:
 
 - `GET /api/habits/week-summaries`
 - optional `POST /api/habits/week-summary/:id/share`
 
-Implementation risk: medium.
+Implementation risk for richer AI-generated summaries/share cards: medium.
 
 ### 3. Durable Pingvi Memory
 
@@ -138,7 +116,7 @@ Implementation risk: medium-high.
 
 Reference requirement: Pingvi behavior should be controllable and auditable like report prompts.
 
-Current state: report prompts are managed through `PromptTemplate`; Pingvi prompt is hardcoded in `apps/backend/src/routes/habits.ts`.
+Current state: report prompts are managed through `PromptTemplate`; Pingvi temperature is admin-managed; Pingvi system prompt is still hardcoded in `apps/backend/src/routes/habits.ts`.
 
 Suggested design:
 
@@ -170,7 +148,7 @@ Implementation risk: low-medium.
 
 Reference requirement: profile, avatar/photo, reminders, subscription, notification settings.
 
-Current state: reminder fields and profile JSON exist; subscription config exists. Full notification scheduling and avatar upload are not complete habits-specific features.
+Current state: reminder fields and profile JSON exist; subscription config exists; localized content, locale availability, habit pricing, trial duration, week summary mode/model, and Pingvi temperature are admin-managed. Full notification scheduling and avatar upload are not complete habits-specific features.
 
 Suggested design:
 
@@ -217,16 +195,14 @@ Implementation risk: low.
 
 ### Phase 2: Archive And Week Summaries
 
-- Add `HabitWeekSummary`.
-- Create summaries on advance/freeze.
-- Expose in archive UI.
+- Keep `HabitWeekSummary` archive rendering covered.
+- Add share cards only if needed.
 - Add Playwright checks.
 
 ### Phase 3: Daily Task Variations
 
-- Add `HabitDailyTask`.
-- Generate 7 daily variants per enrollment.
-- Replace frontend-only micro-step rotation with persisted tasks.
+- Keep `HabitDailyTask` generation covered.
+- Add replacement persistence only if users can choose alternate tasks.
 
 ### Phase 4: Pingvi Memory
 
@@ -238,3 +214,10 @@ Implementation risk: low.
 
 - Move Pingvi prompt templates into `PromptTemplate`.
 - Add admin controls and versioning for habits prompts.
+
+### Phase 6: Admin-Managed Product Settings
+
+- Move report model, report fallback policy, async timeout, and retry limits from environment-only configuration into audited `AppSetting` controls where safe.
+- Add admin controls for photo/audio validation thresholds, WebView/PDF fallback flags, onboarding copy, scale hints, and habit reward XP amounts.
+- Add catalog activation/version controls for habit definitions before editing live habit content through the admin UI.
+- Keep secrets, provider keys, and private network base URLs out of admin-editable settings.

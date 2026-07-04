@@ -688,6 +688,7 @@ function DashboardTab(props: {
   const activeCycleProgress = Math.min(100, Math.round(((props.program.currentWeek - 1 + props.program.stats.weekProgress / 100) / activeCycleWeeks) * 100));
   const weekProgress = Math.min(100, Math.max(0, props.program.stats.weekProgress));
   const nextRank = props.program.stats.rank.nextTitle ?? props.t.dashboard.rankComplete;
+  const todayTask = props.activeHabit?.todayTask ?? props.program.todayTask ?? null;
   const weakZoneId = zoneIds.includes(props.program.weakZone as (typeof zoneIds)[number])
     ? props.program.weakZone as (typeof zoneIds)[number]
     : "ikigai";
@@ -815,8 +816,14 @@ function DashboardTab(props: {
         <h2>{props.t.dashboard.todayFocus}<HelpTip label={props.t.habitsUx.tooltips.done} /></h2>
         <div className="habits-first-step">
           <div>
-            <div className="habit-week">{props.t.dashboard.firstStep}</div>
-            <p>{props.microStepText}</p>
+            <div className="habit-week">{todayTask ? todayTask.title : props.t.dashboard.firstStep}</div>
+            <p>{todayTask ? todayTask.taskText : props.microStepText}</p>
+            {todayTask && (
+              <div className="habits-current">
+                <strong>{todayTask.microAction}</strong>
+                <span>{todayTask.whyToday}</span>
+              </div>
+            )}
           </div>
           <div className="habits-action-row">
             <button className="button habits-cta" type="button" title={props.t.habitsUx.tooltips.done} disabled={props.busy} onClick={() => props.saveCheckin(props.activeHabit, !props.doneToday)}>
@@ -1194,6 +1201,7 @@ function ArchiveTab(props: {
   const showRewards = props.filter === "all" || props.filter === "rewards";
   const showWeeks = props.filter === "all" || props.filter === "weeks";
   const closedWeeks = props.program.enrollments.filter((habit) => habit.status === "COMPLETED");
+  const weekSummaries = props.program.weekSummaries ?? [];
   return (
     <div className="habits-grid">
       <section className="habits-panel habits-wide">
@@ -1241,7 +1249,23 @@ function ArchiveTab(props: {
         <section className="habits-panel habits-wide">
           <h2>{props.t.habitsUx.archive.closedWeeksTitle}<HelpTip label={props.t.habitsUx.tooltips.archive} /></h2>
           <div className="habits-closed-weeks">
-            {closedWeeks.length === 0 ? (
+            {weekSummaries.length > 0 ? weekSummaries.map((summary) => (
+              <article className="habits-card habits-closed-week" key={summary.id}>
+                <div className="habit-week">Цикл {summary.cycle} · Неделя {summary.week} · {summary.completionMode}</div>
+                <h3>{summary.habitTitle}</h3>
+                <p>{summary.summary}</p>
+                <div className="habits-current">
+                  <strong>{summary.rewardLabel} · +{summary.xpAwarded} XP</strong>
+                  <span>{summary.pingviFeedback}</span>
+                </div>
+                <div className="row">
+                  <span>{summary.checkinsDone}/7</span>
+                  <button className="btn-back" type="button" onClick={() => copyInsight(`${summary.summary}\n\n${summary.pingviFeedback}`, props.markSaved, props.t.habitsUx.archive.weekCopied)}>
+                    {props.t.habitsUx.archive.shareWeek}
+                  </button>
+                </div>
+              </article>
+            )) : closedWeeks.length === 0 ? (
               <div className="habits-current">{props.t.habitsUx.archive.closedWeeksEmpty}</div>
             ) : closedWeeks.map((habit) => (
               <article className="habits-card habits-closed-week" key={habit.id}>

@@ -280,6 +280,8 @@ model HabitProgram {
   insights    HabitInsight[]
   dailyMetrics HabitDailyMetric[]
   rewards     HabitRewardEvent[]
+  dailyTasks  HabitDailyTask[]
+  weekSummaries HabitWeekSummary[]
   navigatorThreads HabitNavigatorThread[]
 
   @@index([userId, status, createdAt])
@@ -310,6 +312,8 @@ model HabitEnrollment {
   updatedAt          DateTime              @updatedAt
   checkins           HabitCheckin[]
   insights           HabitInsight[]
+  dailyTasks         HabitDailyTask[]
+  weekSummaries      HabitWeekSummary[]
 
   @@index([programId, status, sortOrder])
 }
@@ -370,6 +374,48 @@ model HabitRewardEvent {
   xp        Int          @default(0)
   createdAt DateTime     @default(now())
 
+  @@index([programId, createdAt])
+}
+
+model HabitDailyTask {
+  id           String          @id @default(cuid())
+  programId    String
+  program      HabitProgram    @relation(fields: [programId], references: [id], onDelete: Cascade)
+  enrollmentId String
+  enrollment   HabitEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  date         DateTime?
+  dayIndex     Int
+  title        String
+  taskText     String
+  microAction  String
+  whyToday     String
+  completedAt  DateTime?
+  xpAwarded    Int             @default(0)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@unique([programId, enrollmentId, dayIndex])
+  @@index([programId, date])
+  @@index([enrollmentId, dayIndex])
+}
+
+model HabitWeekSummary {
+  id             String          @id @default(cuid())
+  programId      String
+  program        HabitProgram    @relation(fields: [programId], references: [id], onDelete: Cascade)
+  enrollmentId   String
+  enrollment     HabitEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  cycle          Int
+  week           Int
+  checkinsDone   Int
+  completionMode String
+  summary        String
+  pingviFeedback String
+  rewardLabel    String
+  xpAwarded      Int             @default(0)
+  createdAt      DateTime        @default(now())
+
+  @@unique([programId, enrollmentId])
   @@index([programId, createdAt])
 }
 

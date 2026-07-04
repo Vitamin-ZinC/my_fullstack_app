@@ -49,6 +49,7 @@ Backend logic is in:
 
 - `apps/backend/src/routes/habits.ts`
 - `apps/backend/src/services/habitCatalog.ts`
+- `apps/backend/src/services/habitSettings.ts`
 - `apps/backend/src/services/pricing.ts`
 
 Shared habit types are in `packages/contracts/src/index.ts`.
@@ -60,11 +61,14 @@ Pingvi is the habits navigator. Runtime endpoint:
 - `POST /api/habits/navigator`
 
 Current prompt/context builder is hardcoded in `apps/backend/src/routes/habits.ts`.
+Pingvi temperature is controlled by `AppSetting.habit_navigator_temperature`.
 
 Pingvi uses:
 
 - current habit program;
 - active habit/enrollment;
+- persisted daily task variants;
+- persisted week summaries;
 - recent metrics;
 - recent insights;
 - latest reports;
@@ -101,7 +105,24 @@ Runtime content overrides use:
 
 - `GET /api/content/:locale`
 
-Admin prompt/content/settings are separate from frontend language constants.
+Admin prompt/content/settings are separate from frontend language constants. Locale availability is controlled by `AppSetting.enabled_locales` and `AppSetting.default_locale`; localized text overrides are stored in `site_texts_<locale>` settings. The admin editor builds translation tabs from `enabled_locales`; unknown locales start from the Russian default text shape until edited.
+
+## Admin-Managed Settings
+
+The admin UI currently manages:
+
+- report price and currency;
+- habits subscription price, currency, and trial days;
+- promo codes;
+- feature flags;
+- report prompt templates;
+- localized content JSON;
+- enabled/default locales;
+- habits week summary mode: rule-based or LLM-based;
+- habits week summary model;
+- Pingvi navigator temperature.
+
+Do not create new settings tables for these; use `AppSetting` unless the value needs relational history or per-user state.
 
 ## Production Deployment
 

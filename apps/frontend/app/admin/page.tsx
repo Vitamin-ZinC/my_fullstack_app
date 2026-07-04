@@ -5,16 +5,19 @@ import type { AdminStats, AppSetting, FeatureFlag, PromoCode, PromptTemplate, Pr
 import {
   adminApi,
   contentSettingKey,
+  defaultLocaleSettingKey,
+  enabledLocalesSettingKey,
+  habitNavigatorTemperatureSettingKey,
   habitPriceAmountSettingKey,
   habitPriceCurrencySettingKey,
   habitTrialDaysSettingKey,
+  habitWeekSummaryModeSettingKey,
+  habitWeekSummaryModelSettingKey,
   reportPriceAmountSettingKey,
-  reportPriceCurrencySettingKey,
-  type TextLocale
+  reportPriceCurrencySettingKey
 } from "@/lib/api";
 import { defaultSiteText } from "@/lib/messages";
 
-const textLocales: TextLocale[] = ["ru", "en"];
 const emptyPromptForm: PromptTemplateInput = {
   key: "ikigai.report.free.user",
   locale: "ru",
@@ -36,8 +39,8 @@ export default function AdminPage() {
   const [promptDefaults, setPromptDefaults] = useState<PromptTemplateInput[]>([]);
   const [promptForm, setPromptForm] = useState<PromptTemplateInput>(emptyPromptForm);
   const [promoCodes, setPromoCodes] = useState<PromoCode[]>([]);
-  const [activeTextLocale, setActiveTextLocale] = useState<TextLocale>("ru");
-  const [textDrafts, setTextDrafts] = useState<Record<TextLocale, string>>({
+  const [activeTextLocale, setActiveTextLocale] = useState("ru");
+  const [textDrafts, setTextDrafts] = useState<Record<string, string>>({
     ru: JSON.stringify(defaultSiteText.ru, null, 2),
     en: JSON.stringify(defaultSiteText.en, null, 2)
   });
@@ -49,6 +52,15 @@ export default function AdminPage() {
     amount: "800",
     currency: "usd",
     trialDays: "30"
+  });
+  const [localeForm, setLocaleForm] = useState({
+    enabledLocales: "ru,en",
+    defaultLocale: "ru"
+  });
+  const [habitAiForm, setHabitAiForm] = useState({
+    weekSummaryMode: "rule" as "rule" | "llm",
+    weekSummaryModel: "gpt-4o-mini",
+    navigatorTemperature: "0.45"
   });
   const [promoForm, setPromoForm] = useState({
     code: "",
@@ -90,8 +102,10 @@ export default function AdminPage() {
       setPromptDefaults(nextPromptDefaults);
       setPromoCodes(nextPromoCodes);
       hydrateTextDrafts(nextSettings);
+      hydrateLocaleForm(nextSettings);
       hydratePriceForm(nextSettings);
       hydrateHabitPriceForm(nextSettings);
+      hydrateHabitAiForm(nextSettings);
       hydratePromptForm(nextPrompts, nextPromptDefaults);
     } catch (reason) {
       setAuthenticated(false);
@@ -101,15 +115,38 @@ export default function AdminPage() {
   }
 
   function hydrateTextDrafts(nextSettings: AppSetting[]) {
-    setTextDrafts({
-      ru: JSON.stringify(readTextSetting(nextSettings, "ru"), null, 2),
-      en: JSON.stringify(readTextSetting(nextSettings, "en"), null, 2)
-    });
+    const locales = readEnabledLocales(nextSettings);
+    setTextDrafts(Object.fromEntries(locales.map((locale) => [
+      locale,
+      JSON.stringify(readTextSetting(nextSettings, locale), null, 2)
+    ])));
+    if (!locales.includes(activeTextLocale)) setActiveTextLocale(locales[0] ?? "ru");
   }
 
-  function readTextSetting(nextSettings: AppSetting[], locale: TextLocale) {
+  function readTextSetting(nextSettings: AppSetting[], locale: string) {
     const setting = nextSettings.find((item) => item.key === contentSettingKey(locale));
-    return setting?.value && typeof setting.value === "object" ? setting.value : defaultSiteText[locale];
+    return setting?.value && typeof setting.value === "object" ? setting.value : defaultTextForLocale(locale);
+  }
+
+  function defaultTextForLocale(locale: string) {
+    return locale === "en" ? defaultSiteText.en : defaultSiteText.ru;
+  }
+
+  function readEnabledLocales(nextSettings: AppSetting[]) {
+    const enabled = nextSettings.find((item) => item.key === enabledLocalesSettingKey)?.value;
+    const locales = Array.isArray(enabled)
+      ? enabled.filter((item): item is string => typeof item === "string" && item.trim().length > 0).map((item) => item.trim().toLowerCase())
+      : [];
+    return Array.from(new Set(locales.length > 0 ? locales : ["ru", "en"]));
+  }
+
+  function hydrateLocaleForm(nextSettings: AppSetting[]) {
+    const defaultLocale = nextSettings.find((item) => item.key === defaultLocaleSettingKey)?.value;
+    const enabledLocales = readEnabledLocales(nextSettings);
+    setLocaleForm({
+      enabledLocales: enabledLocales.join(","),
+      defaultLocale: typeof defaultLocale === "string" ? defaultLocale : "ru"
+    });
   }
 
   function hydratePriceForm(nextSettings: AppSetting[]) {
@@ -129,6 +166,17 @@ export default function AdminPage() {
       amount: typeof amount === "number" || typeof amount === "string" ? String(amount) : "800",
       currency: typeof currency === "string" ? currency : "usd",
       trialDays: typeof trialDays === "number" || typeof trialDays === "string" ? String(trialDays) : "30"
+    });
+  }
+
+  function hydrateHabitAiForm(nextSettings: AppSetting[]) {
+    const weekSummaryMode = nextSettings.find((item) => item.key === habitWeekSummaryModeSettingKey)?.value;
+    const weekSummaryModel = nextSettings.find((item) => item.key === habitWeekSummaryModelSettingKey)?.value;
+    const navigatorTemperature = nextSettings.find((item) => item.key === habitNavigatorTemperatureSettingKey)?.value;
+    setHabitAiForm({
+      weekSummaryMode: weekSummaryMode === "llm" ? "llm" : "rule",
+      weekSummaryModel: typeof weekSummaryModel === "string" && weekSummaryModel.trim() ? weekSummaryModel : "gpt-4o-mini",
+      navigatorTemperature: typeof navigatorTemperature === "number" || typeof navigatorTemperature === "string" ? String(navigatorTemperature) : "0.45"
     });
   }
 
@@ -173,8 +221,26 @@ export default function AdminPage() {
   }
 
   async function upsertLocaleSettings() {
-    await adminApi.upsertSetting("enabled_locales", ["ru", "en"]);
-    await adminApi.upsertSetting("default_locale", "ru");
+    await adminApi.upsertSetting(enabledLocalesSettingKey, ["ru", "en"]);
+    await adminApi.upsertSetting(defaultLocaleSettingKey, "ru");
+    await refresh();
+  }
+
+  async function saveLocaleSettings() {
+    setMessage("");
+    const enabledLocales = localeForm.enabledLocales.split(",").map((item) => item.trim().toLowerCase()).filter(Boolean);
+    const defaultLocale = localeForm.defaultLocale.trim().toLowerCase();
+    if (enabledLocales.length === 0 || !enabledLocales.every((locale) => /^[a-z]{2,12}$/.test(locale))) {
+      setMessage("Enabled locales must be comma-separated locale codes");
+      return;
+    }
+    if (!enabledLocales.includes(defaultLocale)) {
+      setMessage("Default locale must be included in enabled locales");
+      return;
+    }
+    await adminApi.upsertSetting(enabledLocalesSettingKey, enabledLocales);
+    await adminApi.upsertSetting(defaultLocaleSettingKey, defaultLocale);
+    setMessage("Locale settings saved");
     await refresh();
   }
 
@@ -246,10 +312,10 @@ export default function AdminPage() {
     await refresh();
   }
 
-  async function saveTexts(locale: TextLocale) {
+  async function saveTexts(locale: string) {
     setMessage("");
     try {
-      const parsed = JSON.parse(textDrafts[locale]);
+      const parsed = JSON.parse(textDrafts[locale] ?? JSON.stringify(defaultTextForLocale(locale)));
       await adminApi.saveContent(locale, parsed);
       setMessage(adminText.savedTexts);
       await refresh();
@@ -302,10 +368,30 @@ export default function AdminPage() {
     await refresh();
   }
 
-  function resetTexts(locale: TextLocale) {
+  async function saveHabitAiSettings() {
+    setMessage("");
+    const temperature = Number(habitAiForm.navigatorTemperature);
+    if (!Number.isFinite(temperature) || temperature < 0 || temperature > 1) {
+      setMessage("Navigator temperature must be between 0 and 1");
+      return;
+    }
+    const model = habitAiForm.weekSummaryModel.trim();
+    if (!model) {
+      setMessage("Week summary model is required");
+      return;
+    }
+
+    await adminApi.upsertSetting(habitWeekSummaryModeSettingKey, habitAiForm.weekSummaryMode);
+    await adminApi.upsertSetting(habitWeekSummaryModelSettingKey, model);
+    await adminApi.upsertSetting(habitNavigatorTemperatureSettingKey, temperature);
+    setMessage("Habit AI settings saved");
+    await refresh();
+  }
+
+  function resetTexts(locale: string) {
     setTextDrafts((current) => ({
       ...current,
-      [locale]: JSON.stringify(defaultSiteText[locale], null, 2)
+      [locale]: JSON.stringify(defaultTextForLocale(locale), null, 2)
     }));
   }
 
@@ -381,6 +467,24 @@ export default function AdminPage() {
 
           <section className="card stack">
             <div>
+              <h2>Localization settings</h2>
+              <p className="muted">Controls which locales are enabled and which locale is used by default. Translation JSON is edited below in Texts and translations.</p>
+            </div>
+            <div className="grid grid-3">
+              <label className="stack">
+                <span className="eyebrow">Enabled locales</span>
+                <input className="input" value={localeForm.enabledLocales} onChange={(event) => setLocaleForm({ ...localeForm, enabledLocales: event.target.value })} placeholder="ru,en" />
+              </label>
+              <label className="stack">
+                <span className="eyebrow">Default locale</span>
+                <input className="input" value={localeForm.defaultLocale} onChange={(event) => setLocaleForm({ ...localeForm, defaultLocale: event.target.value.toLowerCase() })} placeholder="ru" />
+              </label>
+              <button className="button" onClick={saveLocaleSettings}>Save locale settings</button>
+            </div>
+          </section>
+
+          <section className="card stack">
+            <div>
               <h2>{adminText.priceTitle}</h2>
               <p className="muted">{adminText.priceCopy}</p>
             </div>
@@ -401,6 +505,31 @@ export default function AdminPage() {
               <input className="input" value={habitPriceForm.currency} onChange={(event) => setHabitPriceForm({ ...habitPriceForm, currency: event.target.value.toLowerCase() })} placeholder={adminText.priceCurrency} />
               <input className="input" value={habitPriceForm.trialDays} onChange={(event) => setHabitPriceForm({ ...habitPriceForm, trialDays: event.target.value })} placeholder={adminText.habitTrialDays} inputMode="numeric" />
               <button className="button" onClick={saveHabitPrice}>{adminText.saveHabitPrice}</button>
+            </div>
+          </section>
+
+          <section className="card stack">
+            <div>
+              <h2>Habit AI settings</h2>
+              <p className="muted">Switch week summaries between deterministic rules and LLM generation. LLM mode falls back to rules if the provider is unavailable.</p>
+            </div>
+            <div className="grid grid-3">
+              <label className="stack">
+                <span className="eyebrow">Week summary mode</span>
+                <select className="input" value={habitAiForm.weekSummaryMode} onChange={(event) => setHabitAiForm({ ...habitAiForm, weekSummaryMode: event.target.value as "rule" | "llm" })}>
+                  <option value="rule">Rule based</option>
+                  <option value="llm">LLM based</option>
+                </select>
+              </label>
+              <label className="stack">
+                <span className="eyebrow">Week summary model</span>
+                <input className="input" value={habitAiForm.weekSummaryModel} onChange={(event) => setHabitAiForm({ ...habitAiForm, weekSummaryModel: event.target.value })} placeholder="gpt-4o-mini" />
+              </label>
+              <label className="stack">
+                <span className="eyebrow">Pingvi temperature</span>
+                <input className="input" value={habitAiForm.navigatorTemperature} onChange={(event) => setHabitAiForm({ ...habitAiForm, navigatorTemperature: event.target.value })} placeholder="0.45" inputMode="decimal" />
+              </label>
+              <button className="button" onClick={saveHabitAiSettings}>Save Habit AI settings</button>
             </div>
           </section>
 
@@ -482,7 +611,7 @@ export default function AdminPage() {
               <p className="muted">{adminText.textCopy}</p>
             </div>
             <div className="row" style={{ justifyContent: "flex-start" }}>
-              {textLocales.map((locale) => (
+              {Object.keys(textDrafts).map((locale) => (
                 <button
                   className={`button secondary ${activeTextLocale === locale ? "active-control" : ""}`}
                   key={locale}
@@ -495,7 +624,7 @@ export default function AdminPage() {
             </div>
             <textarea
               className="input text-editor"
-              value={textDrafts[activeTextLocale]}
+              value={textDrafts[activeTextLocale] ?? ""}
               onChange={(event) => setTextDrafts((current) => ({ ...current, [activeTextLocale]: event.target.value }))}
               spellCheck={false}
             />

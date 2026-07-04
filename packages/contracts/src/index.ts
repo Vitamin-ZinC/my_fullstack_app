@@ -331,6 +331,8 @@ export type HabitEnrollmentSummary = HabitDefinitionSummary & {
   checkinsDone: number;
   lastCheckinAt?: string | null;
   checkins: HabitCheckinSummary[];
+  dailyTasks: HabitDailyTaskSummary[];
+  todayTask?: HabitDailyTaskSummary | null;
 };
 
 export type HabitInsightSummary = {
@@ -358,6 +360,35 @@ export type HabitRewardSummary = {
   createdAt: string;
 };
 
+export type HabitDailyTaskSummary = {
+  id: string;
+  enrollmentId: string;
+  date?: string | null;
+  dayIndex: number;
+  title: string;
+  taskText: string;
+  microAction: string;
+  whyToday: string;
+  completedAt?: string | null;
+  xpAwarded: number;
+  createdAt: string;
+};
+
+export type HabitWeekSummary = {
+  id: string;
+  enrollmentId: string;
+  habitTitle?: string | null;
+  cycle: number;
+  week: number;
+  checkinsDone: number;
+  completionMode: "FULL" | "SOFT" | "FROZEN" | string;
+  summary: string;
+  pingviFeedback: string;
+  rewardLabel: string;
+  xpAwarded: number;
+  createdAt: string;
+};
+
 export type HabitProgramSummary = {
   id: string;
   status: HabitProgramStatus;
@@ -380,6 +411,8 @@ export type HabitProgramSummary = {
   insights: HabitInsightSummary[];
   metrics: HabitDailyMetricSummary[];
   rewards: HabitRewardSummary[];
+  weekSummaries: HabitWeekSummary[];
+  todayTask?: HabitDailyTaskSummary | null;
   settings: {
     reminderEnabled: boolean;
     reminderTime: string;

@@ -118,12 +118,17 @@ export async function ensureGuestSession() {
   return session;
 }
 
-export const contentSettingKey = (locale: TextLocale) => `site_texts_${locale}`;
+export const contentSettingKey = (locale: string) => `site_texts_${locale}`;
 export const reportPriceAmountSettingKey = "report_price_amount";
 export const reportPriceCurrencySettingKey = "report_price_currency";
 export const habitPriceAmountSettingKey = "habit_subscription_price_amount";
 export const habitPriceCurrencySettingKey = "habit_subscription_price_currency";
 export const habitTrialDaysSettingKey = "habit_trial_days";
+export const enabledLocalesSettingKey = "enabled_locales";
+export const defaultLocaleSettingKey = "default_locale";
+export const habitWeekSummaryModeSettingKey = "habit_week_summary_mode";
+export const habitWeekSummaryModelSettingKey = "habit_week_summary_model";
+export const habitNavigatorTemperatureSettingKey = "habit_navigator_temperature";
 
 export const contentApi = {
   get: (locale: TextLocale) => request<{ locale: TextLocale; value: unknown | null }>(`/api/content/${locale}`)
@@ -386,5 +391,5 @@ export const adminApi = {
     method: "PUT",
     body: JSON.stringify({ active })
   }),
-  saveContent: (locale: TextLocale, value: unknown) => adminApi.upsertSetting(contentSettingKey(locale), value)
+  saveContent: (locale: string, value: unknown) => adminApi.upsertSetting(contentSettingKey(locale), value)
 };

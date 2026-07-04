@@ -29,6 +29,8 @@ Current models in `apps/backend/prisma/schema.prisma`:
 - `HabitInsight`
 - `HabitDailyMetric`
 - `HabitRewardEvent`
+- `HabitDailyTask`
+- `HabitWeekSummary`
 - `HabitNavigatorThread`
 - `HabitNavigatorMessage`
 
@@ -101,6 +103,8 @@ Relations:
 - `insights`
 - `dailyMetrics`
 - `rewards`
+- `dailyTasks`
+- `weekSummaries`
 - `navigatorThreads`
 
 ### `HabitEnrollment`
@@ -124,6 +128,12 @@ Key fields:
 - `status`
 - `startedAt`
 - `completedAt`
+
+Relations:
+
+- `checkins`
+- `dailyTasks`
+- `weekSummaries`
 
 ### `HabitCheckin`
 
@@ -180,6 +190,44 @@ Key fields:
 - `xp`
 - `createdAt`
 
+### `HabitDailyTask`
+
+Persisted 7-day task plan for a concrete habit week.
+
+Key fields:
+
+- `programId`
+- `enrollmentId`
+- `date`
+- `dayIndex`
+- `title`
+- `taskText`
+- `microAction`
+- `whyToday`
+- `completedAt`
+- `xpAwarded`
+
+Unique behavior: one task per program/enrollment/dayIndex.
+
+### `HabitWeekSummary`
+
+Persisted archive summary for a completed, softly advanced, or frozen week.
+
+Key fields:
+
+- `programId`
+- `enrollmentId`
+- `cycle`
+- `week`
+- `checkinsDone`
+- `completionMode`
+- `summary`
+- `pingviFeedback`
+- `rewardLabel`
+- `xpAwarded`
+
+Unique behavior: one summary per program/enrollment.
+
 ### `HabitNavigatorThread` / `HabitNavigatorMessage`
 
 Pingvi chat persistence.
@@ -193,6 +241,24 @@ Messages store:
 - `text`
 - `model`
 - `createdAt`
+
+## Runtime App Settings
+
+Runtime settings are stored in `AppSetting` and edited through the admin settings API/UI. Current implemented keys:
+
+- `site_texts_<locale>` - localized text override object for a locale, for example `site_texts_ru`.
+- `enabled_locales` - enabled locale codes, for example `["ru","en"]`.
+- `default_locale` - default locale code, for example `"ru"`.
+- `report_price_amount` - report price in minor currency units.
+- `report_price_currency` - report price currency.
+- `habit_subscription_price_amount` - habits subscription price in minor currency units.
+- `habit_subscription_price_currency` - habits subscription currency.
+- `habit_trial_days` - habits trial duration in days.
+- `habit_week_summary_mode` - `"rule"` or `"llm"` for completed/frozen week summaries.
+- `habit_week_summary_model` - OpenAI-compatible chat model used when `habit_week_summary_mode` is `"llm"`.
+- `habit_navigator_temperature` - Pingvi chat temperature, clamped between `0` and `1` by backend settings resolution.
+
+Week summary LLM mode is optional and always falls back to rule-based summaries if the provider fails.
 
 ## Implemented API Endpoints
 
@@ -284,6 +350,8 @@ Important habit contracts:
 - `HabitInsightSummary`
 - `HabitDailyMetricSummary`
 - `HabitRewardSummary`
+- `HabitDailyTaskSummary`
+- `HabitWeekSummary`
 - `HabitProgramSummary`
 - `HabitLatestReport`
 - `HabitMeResponse`
@@ -297,7 +365,6 @@ If a frontend feature needs a field not present in these contracts, update contr
 These names appear in external references but are not current Prisma models/routes:
 
 - `weekly_plans`
-- `daily_tasks`
 - `habit_logs`
 - `pingvi_memory`
 - `subscriptions` as a habits-specific table

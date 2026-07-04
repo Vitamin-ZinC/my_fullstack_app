@@ -229,6 +229,38 @@ model AdminAuditLog {
   @@index([action, createdAt])
 }
 
+model FounderIntakeItem {
+  id                  String   @id
+  type                String
+  title               String
+  source              String
+  decision            String
+  queueStatus         String   @default("NOT_QUEUED")
+  codexStatus         String   @default("NEW")
+  bridgeStatus        String   @default("NOT_CONFIGURED")
+  bridgeAttempts      Int      @default(0)
+  bridgeLastError     String?
+  bridgeDeliveredAt   DateTime?
+  bridgeRespondedAt   DateTime?
+  codexReply          String?
+  summary             String
+  sanitizedBody       String
+  answer              String?
+  allowedWork         Json
+  risks               Json
+  blockedReasons      Json
+  requiredChecks      Json
+  howToMakeWorkable   Json
+  clarifyingQuestions Json
+  rawAudit            Json
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([decision, queueStatus, createdAt])
+  @@index([codexStatus, createdAt])
+  @@index([bridgeStatus, createdAt])
+}
+
 model HabitDefinition {
   id          String   @id @default(cuid())
   slug        String   @unique

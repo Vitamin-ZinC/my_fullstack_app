@@ -49,7 +49,9 @@ const schema = z.object({
   TELEGRAM_BOT_TOKEN: z.string().optional(),
   TELEGRAM_BOT_USERNAME: z.string().optional(),
   TELEGRAM_WEBHOOK_SECRET: z.string().optional(),
-  DOCS_ACCESS_PASSWORD: z.string().optional()
+  DOCS_ACCESS_PASSWORD: z.string().optional(),
+  CODEX_BRIDGE_WEBHOOK_URL: z.string().url().optional(),
+  CODEX_BRIDGE_WEBHOOK_SECRET: z.string().optional()
 });
 
 export const env = schema.parse(process.env);

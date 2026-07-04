@@ -198,7 +198,9 @@ Password source:
 
 The route returns only whitelisted files from `docs/technical`: project map, backend API/schema reference, habits/Telegram roadmap, and founder/Codex intake guide.
 
-The `/docs` page also contains a founder mini chat for bug reports/tasks/ideas. Submitted text is not treated as instructions for Codex. Backend masks likely secrets, splits lists into separate tasks, blocks destructive/backdoor/secret-exfiltration requests, classifies risk, appends a sanitized audit record to `.runtime/uploads/founder-task-intake.md`, and queues safe `TAKE_NOW` items in `.runtime/uploads/founder-task-queue.md`.
+The `/docs` page links to the separate `/founder-chat` mini chat for bug reports/tasks/ideas. Submitted text is not treated as instructions for Codex. Backend masks likely secrets, splits lists into separate tasks, blocks destructive/backdoor/secret-exfiltration requests, classifies risk, persists sanitized records in `FounderIntakeItem`, appends a sanitized audit record to `.runtime/uploads/founder-task-intake.md`, and queues safe `TAKE_NOW` items in `.runtime/uploads/founder-task-queue.md`. The `/founder-chat` page shows a minimal inbox board with `В очереди`, `В процессе`, and `Готово` columns.
+
+Codex bridge integration is outbound-only from backend to `CODEX_BRIDGE_WEBHOOK_URL` and callback-only through `POST /api/docs/bridge/callback` with `CODEX_BRIDGE_WEBHOOK_SECRET`. The bridge receives sanitized analysis payloads and cannot execute code through the web request.
 
 ## Before Adding Features
 

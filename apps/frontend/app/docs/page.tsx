@@ -98,6 +98,7 @@ export default function DocsPage() {
           <h1>Техническая документация</h1>
           <p>Постоянная защищенная ссылка для передачи Codex/разработчику.</p>
         </div>
+        <Link className="button secondary" href="/founder-chat">Founder chat</Link>
       </header>
 
       <section className="docs-panel">

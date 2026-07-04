@@ -71,6 +71,19 @@ export type FounderIntakeBatchResponse = {
   queuedCount: number;
   audits: FounderIntakeResponse[];
 };
+export type FounderIntakeItem = FounderIntakeResponse & {
+  codexStatus: string;
+  bridgeStatus: string;
+  bridgeAttempts: number;
+  bridgeLastError?: string | null;
+  bridgeDeliveredAt?: string | null;
+  bridgeRespondedAt?: string | null;
+  codexReply?: string | null;
+  updatedAt: string;
+};
+export type FounderIntakeListResponse = {
+  items: FounderIntakeItem[];
+};
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
@@ -334,6 +347,16 @@ export const api = {
       body: payload.message,
       source: "founder-docs-chat"
     })
+  }),
+  listFounderIntake: (payload: {
+    password: string;
+    limit?: number;
+    decision?: string;
+    codexStatus?: string;
+    queueStatus?: string;
+  }) => request<FounderIntakeListResponse>("/api/docs/intake/list", {
+    method: "POST",
+    body: JSON.stringify(payload)
   }),
   telegramStatus: async (programId?: string) => {
     await ensureGuestSession();

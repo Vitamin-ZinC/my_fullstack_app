@@ -1,9 +1,15 @@
 import { timingSafeEqual } from "node:crypto";
 import { appendFile, mkdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
-import type { FastifyInstance, FastifyReply } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { env } from "../env.js";
+import {
+  dispatchCodexBridge,
+  listFounderIntakeItems,
+  persistFounderIntakeItem,
+  updateFounderIntakeFromBridge
+} from "../services/codexBridge.js";
 
 const requestSchema = z.object({
   password: z.string().min(1).max(500)
@@ -17,6 +23,20 @@ const intakeSchema = requestSchema.extend({
   actual: z.string().max(5000).optional(),
   steps: z.string().max(5000).optional(),
   source: z.string().max(120).optional()
+});
+
+const intakeListSchema = requestSchema.extend({
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  decision: z.string().max(40).optional(),
+  codexStatus: z.string().max(80).optional(),
+  queueStatus: z.string().max(40).optional()
+});
+
+const bridgeCallbackSchema = z.object({
+  id: z.string().min(1).max(120),
+  codexStatus: z.enum(["ACKNOWLEDGED", "ANALYZED", "QUEUED", "IN_PROGRESS", "DONE", "BLOCKED", "IGNORED", "WAITING_CLARIFICATION"]),
+  reply: z.string().max(5000).optional(),
+  notes: z.string().max(5000).optional()
 });
 
 const technicalDocs = [
@@ -90,9 +110,14 @@ export async function docsRoutes(app: FastifyInstance) {
       if (audit.decision === "TAKE_NOW") {
         audit.queueStatus = "QUEUED";
       }
+      await persistFounderIntakeItem(audit);
       await appendFounderIntake(audit);
       if (audit.queueStatus === "QUEUED") {
         await appendFounderQueue(audit);
+      }
+      const bridgeResult = await dispatchCodexBridge(audit);
+      if (bridgeResult.status === "FAILED") {
+        request.log.warn({ id: audit.id, error: bridgeResult.error }, "Codex bridge dispatch failed");
       }
     }
 
@@ -102,6 +127,32 @@ export async function docsRoutes(app: FastifyInstance) {
       queuedCount: audits.filter((audit) => audit.queueStatus === "QUEUED").length,
       audits
     };
+  });
+
+  app.post("/api/docs/intake/list", async (request, reply) => {
+    const body = intakeListSchema.parse(request.body ?? {});
+    if (!verifyDocsPassword(body.password, reply)) return;
+
+    const items = await listFounderIntakeItems({
+      limit: body.limit,
+      decision: body.decision,
+      codexStatus: body.codexStatus,
+      queueStatus: body.queueStatus
+    });
+    return { items };
+  });
+
+  app.post("/api/docs/bridge/callback", async (request, reply) => {
+    if (!verifyCodexBridgeSecret(request, reply)) return;
+    const body = bridgeCallbackSchema.parse(request.body ?? {});
+    const item = await updateFounderIntakeFromBridge(body);
+    await appendFounderBridgeCallback({
+      id: body.id,
+      codexStatus: body.codexStatus,
+      reply: body.reply ?? body.notes ?? "",
+      at: new Date().toISOString()
+    });
+    return { ok: true, item };
   });
 }
 
@@ -113,6 +164,20 @@ function verifyDocsPassword(value: string, reply: FastifyReply) {
   }
   if (!safeEquals(value, password)) {
     reply.code(401).send({ error: "Invalid documentation password" });
+    return false;
+  }
+  return true;
+}
+
+function verifyCodexBridgeSecret(request: FastifyRequest, reply: FastifyReply) {
+  if (!env.CODEX_BRIDGE_WEBHOOK_SECRET) {
+    reply.code(503).send({ error: "Codex bridge callback secret is not configured" });
+    return false;
+  }
+  const header = request.headers.authorization ?? "";
+  const value = header.startsWith("Bearer ") ? header.slice("Bearer ".length) : "";
+  if (!safeEquals(value, env.CODEX_BRIDGE_WEBHOOK_SECRET)) {
+    reply.code(401).send({ error: "Invalid Codex bridge callback token" });
     return false;
   }
   return true;
@@ -440,6 +505,12 @@ async function appendFounderQueue(audit: FounderTaskAudit) {
   await appendFile(filePath, renderFounderQueueItem(audit), "utf8");
 }
 
+async function appendFounderBridgeCallback(event: { id: string; codexStatus: string; reply: string; at: string }) {
+  const filePath = founderIntakePath();
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await appendFile(filePath, renderFounderBridgeCallback(event), "utf8");
+}
+
 function founderIntakePath() {
   return path.resolve(process.cwd(), env.LOCAL_UPLOAD_DIR, "founder-task-intake.md");
 }
@@ -497,6 +568,19 @@ function renderFounderIntake(audit: FounderTaskAudit) {
     "```",
     audit.sanitizedBody,
     "```",
+    ""
+  ].join("\n");
+}
+
+function renderFounderBridgeCallback(event: { id: string; codexStatus: string; reply: string; at: string }) {
+  return [
+    "",
+    `### Codex Bridge Callback: ${event.id}`,
+    "",
+    `- At: ${event.at}`,
+    `- Codex Status: ${event.codexStatus}`,
+    "",
+    event.reply || "No reply.",
     ""
   ].join("\n");
 }

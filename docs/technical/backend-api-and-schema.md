@@ -410,6 +410,8 @@ Telegram endpoints use the existing ORKEN session for web calls. The webhook map
 
 - `POST /api/docs/handoff`
 - `POST /api/docs/intake`
+- `POST /api/docs/intake/list`
+- `POST /api/docs/bridge/callback`
 
 Request body:
 
@@ -418,6 +420,18 @@ Request body:
 `/api/docs/handoff` returns the whitelisted Markdown files from `docs/technical` only after password verification. The password is read from `DOCS_ACCESS_PASSWORD`; if it is absent, backend falls back to `ADMIN_API_TOKEN`.
 
 `/api/docs/intake` accepts founder bug reports/tasks/ideas from the protected `/docs` mini chat. The backend treats submitted text as untrusted content, splits bullet/numbered lists into separate tasks, masks likely secrets, classifies safety risks, recognizes greetings/questions as `ANSWER_ONLY`, asks clarifying questions for incomplete work as `CLARIFY_FIRST`, rejects destructive/backdoor/secret-exfiltration instructions as `REJECTED`, appends the sanitized audit to `.runtime/uploads/founder-task-intake.md`, and queues only concrete `TAKE_NOW` items in `.runtime/uploads/founder-task-queue.md`. High-risk work is `REVIEW_REQUIRED` and is not queued.
+
+Founder intake is also persisted in `FounderIntakeItem`. `/api/docs/intake/list` returns the protected inbox for the separate `/founder-chat` page. `POST /api/docs/bridge/callback` is for an external Codex bridge and requires `Authorization: Bearer <CODEX_BRIDGE_WEBHOOK_SECRET>`. The outbound bridge webhook is configured only through environment variables:
+
+- `CODEX_BRIDGE_WEBHOOK_URL`
+- `CODEX_BRIDGE_WEBHOOK_SECRET`
+
+Admin-editable settings:
+
+- `codex_bridge_enabled` - boolean. Defaults to enabled only when `CODEX_BRIDGE_WEBHOOK_URL` exists.
+- `codex_bridge_dispatch_decisions` - array of decisions to send to the bridge. Default: `TAKE_NOW`, `CLARIFY_FIRST`, `REVIEW_REQUIRED`, `ANSWER_ONLY`.
+
+The bridge payload is sanitized and analysis-only. It must not execute shell, git, deploy, SQL, or filesystem actions from founder text.
 
 ### Admin
 

@@ -291,6 +291,104 @@ svg {
   color: #ff9abc;
 }
 
+.founder-chat-page .docs-header {
+  align-items: flex-start;
+}
+
+.founder-board {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
+  background: rgba(8, 15, 28, 0.82);
+  padding: 22px;
+}
+
+.founder-board-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.founder-board-head span {
+  display: block;
+  color: #00d4ff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.founder-board-head h2 {
+  margin: 4px 0 0;
+}
+
+.founder-board-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.founder-board-column {
+  min-height: 240px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.035);
+  padding: 14px;
+}
+
+.founder-board-column h3 {
+  margin: 0 0 12px;
+  font-size: 15px;
+}
+
+.founder-board-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.founder-task-card {
+  display: grid;
+  gap: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(4, 9, 18, 0.72);
+  padding: 12px;
+}
+
+.founder-task-card + .founder-task-card {
+  margin-top: 10px;
+}
+
+.founder-task-card strong {
+  color: #f7fbff;
+}
+
+.founder-task-card p {
+  margin: 0;
+  color: #c6d2e1;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.founder-task-card small {
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 900px) {
+  .founder-board-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .founder-board-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
 .docs-chat-audits {
   display: grid;
   gap: 8px;

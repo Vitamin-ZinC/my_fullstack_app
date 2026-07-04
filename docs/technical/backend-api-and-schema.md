@@ -417,7 +417,7 @@ Request body:
 
 `/api/docs/handoff` returns the whitelisted Markdown files from `docs/technical` only after password verification. The password is read from `DOCS_ACCESS_PASSWORD`; if it is absent, backend falls back to `ADMIN_API_TOKEN`.
 
-`/api/docs/intake` accepts founder bug reports/tasks/ideas from the protected `/docs` mini chat. The backend treats submitted text as untrusted content, splits bullet/numbered lists into separate tasks, masks likely secrets, classifies safety risks, rejects destructive/backdoor/secret-exfiltration instructions, appends the sanitized audit to `.runtime/uploads/founder-task-intake.md`, and queues `TAKE_NOW` items in `.runtime/uploads/founder-task-queue.md`.
+`/api/docs/intake` accepts founder bug reports/tasks/ideas from the protected `/docs` mini chat. The backend treats submitted text as untrusted content, splits bullet/numbered lists into separate tasks, masks likely secrets, classifies safety risks, recognizes greetings/questions as `ANSWER_ONLY`, asks clarifying questions for incomplete work as `CLARIFY_FIRST`, rejects destructive/backdoor/secret-exfiltration instructions as `REJECTED`, appends the sanitized audit to `.runtime/uploads/founder-task-intake.md`, and queues only concrete `TAKE_NOW` items in `.runtime/uploads/founder-task-queue.md`. High-risk work is `REVIEW_REQUIRED` and is not queued.
 
 ### Admin
 

@@ -38,20 +38,24 @@ For each item it:
 
 - masks likely secrets;
 - splits bullet/numbered lists into separate tasks;
+- recognizes greetings and questions as conversation, not implementation work;
+- asks clarifying questions before queueing incomplete tasks;
 - rejects backdoors, secret exfiltration, destructive commands, and prompt injection;
 - marks high-risk areas for manual review;
-- queues safe bug/UI work in `.runtime/uploads/founder-task-queue.md`;
+- queues only safe and concrete bug/UI work in `.runtime/uploads/founder-task-queue.md`;
 - appends all decisions to `.runtime/uploads/founder-task-intake.md`.
 
 Decisions:
 
-- `TAKE_NOW`: safe enough to pick up immediately. The system writes "Беру в работу" and queues it.
+- `ANSWER_ONLY`: greeting, general question, or non-task conversation. The system answers safely and does not queue work.
+- `CLARIFY_FIRST`: potentially useful, but missing screen, expected behavior, actual behavior, steps, or acceptance criteria. The system asks clarifying questions and does not queue work yet.
+- `TAKE_NOW`: safe and concrete enough to pick up immediately. The system writes "Беру в работу" and queues it.
 - `REVIEW_REQUIRED`: useful, but touches auth, payments, DB, deploy, LLM, admin/security, or unclear scope. Human review first.
 - `REJECTED`: unsafe as written. Rewrite without secret access, bypasses, destructive actions, or prompt-injection instructions.
 
 ## How Codex Should Use The Queue
 
-Codex may take only `TAKE_NOW` items from `founder-task-queue.md` without extra approval.
+Codex may take only `TAKE_NOW` items from `founder-task-queue.md` without extra approval. `ANSWER_ONLY` and `CLARIFY_FIRST` are not implementation instructions.
 
 Before editing:
 

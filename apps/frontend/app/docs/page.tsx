@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { api, type FounderIntakeBatchResponse, type FounderIntakeResponse, type HandoffDoc } from "@/lib/api";
+import { api, type FounderIntakeBatchResponse, type HandoffDoc } from "@/lib/api";
 
 const passwordKey = "orken_docs_password";
 
@@ -158,8 +158,10 @@ export default function DocsPage() {
                             {audit.decision}{audit.queueStatus === "QUEUED" ? " · QUEUED" : ""}
                           </div>
                           <span>{audit.title}</span>
+                          {audit.answer && <small>Ответ: {audit.answer}</small>}
                           {audit.risks.length > 0 && <small>Риски: {audit.risks.join(", ")}</small>}
                           {audit.blockedReasons.length > 0 && <small>Блокеры: {audit.blockedReasons.join(", ")}</small>}
+                          {audit.clarifyingQuestions.length > 0 && <small>Уточнить: {audit.clarifyingQuestions.join(" ")}</small>}
                           {audit.howToMakeWorkable.length > 0 && <small>Как сделать рабочим: {audit.howToMakeWorkable.join(" ")}</small>}
                         </div>
                       ))}
@@ -196,15 +198,4 @@ export default function DocsPage() {
       )}
     </main>
   );
-}
-
-function buildAuditReply(audit: FounderIntakeResponse) {
-  const decision = audit.decision === "TAKE_NOW"
-    ? "Можно брать в работу сразу"
-    : audit.decision === "REVIEW_REQUIRED"
-      ? "Нужен ручной review перед работой"
-      : "Заблокировано по safety";
-  const risks = audit.risks.length ? ` Риски: ${audit.risks.join(", ")}.` : "";
-  const blocked = audit.blockedReasons.length ? ` Блокеры: ${audit.blockedReasons.join(", ")}.` : "";
-  return `${decision}. Запись сохранена: ${audit.id}.${risks}${blocked}`;
 }

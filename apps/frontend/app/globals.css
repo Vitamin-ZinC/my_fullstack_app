@@ -271,6 +271,16 @@ svg {
   color: #70ffba;
 }
 
+.docs-decision.answer_only {
+  background: rgba(0, 212, 255, 0.14);
+  color: #7ee8ff;
+}
+
+.docs-decision.clarify_first {
+  background: rgba(255, 255, 255, 0.12);
+  color: #d9e7ff;
+}
+
 .docs-decision.review_required {
   background: rgba(255, 184, 0, 0.16);
   color: #ffd36b;

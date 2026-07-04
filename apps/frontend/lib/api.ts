@@ -46,7 +46,7 @@ export type HandoffDocsResponse = {
   updatedAt: string;
   docs: HandoffDoc[];
 };
-export type FounderIntakeDecision = "TAKE_NOW" | "REVIEW_REQUIRED" | "REJECTED";
+export type FounderIntakeDecision = "TAKE_NOW" | "CLARIFY_FIRST" | "REVIEW_REQUIRED" | "REJECTED" | "ANSWER_ONLY";
 export type FounderIntakeResponse = {
   id: string;
   createdAt: string;
@@ -60,6 +60,8 @@ export type FounderIntakeResponse = {
   blockedReasons: string[];
   requiredChecks: string[];
   howToMakeWorkable: string[];
+  clarifyingQuestions: string[];
+  answer?: string;
   queueStatus: "QUEUED" | "NOT_QUEUED";
   sanitizedBody: string;
 };

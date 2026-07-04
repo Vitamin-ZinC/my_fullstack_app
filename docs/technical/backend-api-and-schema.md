@@ -411,6 +411,7 @@ Telegram endpoints use the existing ORKEN session for web calls. The webhook map
 - `POST /api/docs/handoff`
 - `POST /api/docs/intake`
 - `POST /api/docs/intake/list`
+- `POST /api/docs/intake/status`
 - `POST /api/docs/bridge/callback`
 
 Request body:
@@ -421,7 +422,7 @@ Request body:
 
 `/api/docs/intake` accepts founder bug reports/tasks/ideas from the protected `/docs` mini chat. The backend treats submitted text as untrusted content, splits bullet/numbered lists into separate tasks, masks likely secrets, classifies safety risks, recognizes greetings/questions as `ANSWER_ONLY`, asks clarifying questions for incomplete work as `CLARIFY_FIRST`, rejects destructive/backdoor/secret-exfiltration instructions as `REJECTED`, appends the sanitized audit to `.runtime/uploads/founder-task-intake.md`, and queues only concrete `TAKE_NOW` items in `.runtime/uploads/founder-task-queue.md`. High-risk work is `REVIEW_REQUIRED` and is not queued.
 
-Founder intake is also persisted in `FounderIntakeItem`. `/api/docs/intake/list` returns the protected inbox for the separate `/founder-chat` page. `POST /api/docs/bridge/callback` is for an external Codex bridge and requires `Authorization: Bearer <CODEX_BRIDGE_WEBHOOK_SECRET>`. The outbound bridge webhook is configured only through environment variables:
+Founder intake is also persisted in `FounderIntakeItem`. Items have `priority=NORMAL|URGENT`; urgent can be submitted explicitly or detected from words such as urgent/asap/срочно/критично and production/payment failure signals. `/api/docs/intake/list` returns the protected inbox for the separate `/founder-chat` page. `/api/docs/intake/status` changes `codexStatus` to `ACKNOWLEDGED`, `IN_PROGRESS`, `DONE`, `IGNORED`, etc. `POST /api/docs/bridge/callback` is for an external Codex bridge and requires `Authorization: Bearer <CODEX_BRIDGE_WEBHOOK_SECRET>`. The outbound bridge webhook is configured only through environment variables:
 
 - `CODEX_BRIDGE_WEBHOOK_URL`
 - `CODEX_BRIDGE_WEBHOOK_SECRET`
@@ -432,6 +433,14 @@ Admin-editable settings:
 - `codex_bridge_dispatch_decisions` - array of decisions to send to the bridge. Default: `TAKE_NOW`, `CLARIFY_FIRST`, `REVIEW_REQUIRED`, `ANSWER_ONLY`.
 
 The bridge payload is sanitized and analysis-only. It must not execute shell, git, deploy, SQL, or filesystem actions from founder text.
+
+Local watcher for this workstation:
+
+- `scripts/watch-founder-inbox.ps1`
+- reads `.runtime/docs-access-password.txt`
+- polls `POST /api/docs/intake/list`
+- remembers seen item ids in `.runtime/founder-inbox-watcher-seen.json`
+- emits JSON with new urgent/queued items for Codex automation
 
 ### Admin
 

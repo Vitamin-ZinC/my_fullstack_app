@@ -54,6 +54,7 @@ export type FounderIntakeResponse = {
   title: string;
   source: string;
   decision: FounderIntakeDecision;
+  priority: "NORMAL" | "URGENT";
   summary: string;
   allowedWork: string[];
   risks: string[];
@@ -329,6 +330,7 @@ export const api = {
     expected?: string;
     actual?: string;
     steps?: string;
+    priority?: "NORMAL" | "URGENT";
     source?: string;
   }) => request<FounderIntakeBatchResponse>("/api/docs/intake", {
     method: "POST",
@@ -338,6 +340,7 @@ export const api = {
     password: string;
     message: string;
     type?: "bug" | "task" | "idea";
+    priority?: "NORMAL" | "URGENT";
   }) => request<FounderIntakeBatchResponse>("/api/docs/intake", {
     method: "POST",
     body: JSON.stringify({
@@ -345,6 +348,7 @@ export const api = {
       type: payload.type ?? "bug",
       title: payload.message.slice(0, 120),
       body: payload.message,
+      priority: payload.priority,
       source: "founder-docs-chat"
     })
   }),
@@ -355,6 +359,17 @@ export const api = {
     codexStatus?: string;
     queueStatus?: string;
   }) => request<FounderIntakeListResponse>("/api/docs/intake/list", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  }),
+  updateFounderIntakeStatus: (payload: {
+    password: string;
+    id: string;
+    codexStatus: "ACKNOWLEDGED" | "ANALYZED" | "QUEUED" | "IN_PROGRESS" | "DONE" | "BLOCKED" | "IGNORED" | "WAITING_CLARIFICATION";
+    priority?: "NORMAL" | "URGENT";
+    reply?: string;
+    notes?: string;
+  }) => request<{ ok: true; item: FounderIntakeItem }>("/api/docs/intake/status", {
     method: "POST",
     body: JSON.stringify(payload)
   }),

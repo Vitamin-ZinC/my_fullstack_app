@@ -10,6 +10,7 @@ export type CodexBridgeAudit = {
   title: string;
   source: string;
   decision: CodexBridgeDecision;
+  priority: "NORMAL" | "URGENT";
   summary: string;
   allowedWork: string[];
   risks: string[];
@@ -41,6 +42,7 @@ export async function persistFounderIntakeItem(audit: CodexBridgeAudit) {
       title: audit.title,
       source: audit.source,
       decision: audit.decision,
+      priority: audit.priority,
       queueStatus: audit.queueStatus,
       codexStatus,
       summary: audit.summary,
@@ -60,6 +62,7 @@ export async function persistFounderIntakeItem(audit: CodexBridgeAudit) {
       title: audit.title,
       source: audit.source,
       decision: audit.decision,
+      priority: audit.priority,
       queueStatus: audit.queueStatus,
       codexStatus,
       summary: audit.summary,
@@ -163,11 +166,13 @@ export async function updateFounderIntakeFromBridge(input: {
   codexStatus: string;
   reply?: string;
   notes?: string;
+  priority?: string;
 }) {
   return prisma.founderIntakeItem.update({
     where: { id: input.id },
     data: {
       codexStatus: input.codexStatus,
+      ...(input.priority ? { priority: input.priority } : {}),
       codexReply: input.reply ?? input.notes ?? null,
       bridgeStatus: "CALLBACK_RECEIVED",
       bridgeRespondedAt: new Date(),
@@ -222,6 +227,7 @@ function buildCodexBridgePayload(audit: CodexBridgeAudit) {
       title: audit.title,
       source: audit.source,
       decision: audit.decision,
+      priority: audit.priority,
       queueStatus: audit.queueStatus,
       summary: audit.summary,
       sanitizedBody: audit.sanitizedBody,

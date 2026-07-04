@@ -22,6 +22,7 @@ const intakeSchema = requestSchema.extend({
   expected: z.string().max(5000).optional(),
   actual: z.string().max(5000).optional(),
   steps: z.string().max(5000).optional(),
+  priority: z.enum(["NORMAL", "URGENT"]).optional(),
   source: z.string().max(120).optional()
 });
 
@@ -35,6 +36,15 @@ const intakeListSchema = requestSchema.extend({
 const bridgeCallbackSchema = z.object({
   id: z.string().min(1).max(120),
   codexStatus: z.enum(["ACKNOWLEDGED", "ANALYZED", "QUEUED", "IN_PROGRESS", "DONE", "BLOCKED", "IGNORED", "WAITING_CLARIFICATION"]),
+  priority: z.enum(["NORMAL", "URGENT"]).optional(),
+  reply: z.string().max(5000).optional(),
+  notes: z.string().max(5000).optional()
+});
+
+const statusUpdateSchema = requestSchema.extend({
+  id: z.string().min(1).max(120),
+  codexStatus: z.enum(["ACKNOWLEDGED", "ANALYZED", "QUEUED", "IN_PROGRESS", "DONE", "BLOCKED", "IGNORED", "WAITING_CLARIFICATION"]),
+  priority: z.enum(["NORMAL", "URGENT"]).optional(),
   reply: z.string().max(5000).optional(),
   notes: z.string().max(5000).optional()
 });
@@ -56,6 +66,7 @@ type FounderTaskAudit = {
   title: string;
   source: string;
   decision: IntakeDecision;
+  priority: "NORMAL" | "URGENT";
   summary: string;
   allowedWork: string[];
   risks: string[];
@@ -103,7 +114,8 @@ export async function docsRoutes(app: FastifyInstance) {
       body.type,
       items.length === 1 ? body.title : `${body.title}: ${item.title || `item ${index + 1}`}`,
       item.body,
-      body.source
+      body.source,
+      body.priority
     ));
 
     for (const audit of audits) {
@@ -140,6 +152,25 @@ export async function docsRoutes(app: FastifyInstance) {
       queueStatus: body.queueStatus
     });
     return { items };
+  });
+
+  app.post("/api/docs/intake/status", async (request, reply) => {
+    const body = statusUpdateSchema.parse(request.body ?? {});
+    if (!verifyDocsPassword(body.password, reply)) return;
+    const item = await updateFounderIntakeFromBridge({
+      id: body.id,
+      codexStatus: body.codexStatus,
+      priority: body.priority,
+      reply: body.reply,
+      notes: body.notes
+    });
+    await appendFounderBridgeCallback({
+      id: body.id,
+      codexStatus: body.codexStatus,
+      reply: body.reply ?? body.notes ?? "",
+      at: new Date().toISOString()
+    });
+    return { ok: true, item };
   });
 
   app.post("/api/docs/bridge/callback", async (request, reply) => {
@@ -206,7 +237,7 @@ async function resolveTechnicalDocsRoot() {
   throw new Error("Technical docs directory not found");
 }
 
-export function analyzeFounderTask(type: "bug" | "task" | "idea", title: string, body: string, source = "founder-docs"): FounderTaskAudit {
+export function analyzeFounderTask(type: "bug" | "task" | "idea", title: string, body: string, source = "founder-docs", requestedPriority?: "NORMAL" | "URGENT"): FounderTaskAudit {
   const sanitizedBody = sanitizeSensitiveText(body);
   const sanitizedTitle = sanitizeSensitiveText(title).slice(0, 180);
   const combined = `${sanitizedTitle}\n${sanitizedBody}`.toLowerCase();
@@ -228,7 +259,8 @@ export function analyzeFounderTask(type: "bug" | "task" | "idea", title: string,
       risks: [],
       blockedReasons,
       clarifyingQuestions: [],
-      answer: "Не могу взять это в работу или раскрывать такие данные. Переформулируй как пользовательскую проблему без секретов, обходов доступа и destructive-команд."
+      answer: "Не могу взять это в работу или раскрывать такие данные. Переформулируй как пользовательскую проблему без секретов, обходов доступа и destructive-команд.",
+      priority: resolveFounderPriority(combined, requestedPriority)
     });
   }
 
@@ -244,7 +276,8 @@ export function analyzeFounderTask(type: "bug" | "task" | "idea", title: string,
       risks: [],
       blockedReasons: [],
       clarifyingQuestions: conversation.clarifyingQuestions,
-      answer: conversation.answer
+      answer: conversation.answer,
+      priority: resolveFounderPriority(combined, requestedPriority)
     });
   }
 
@@ -274,7 +307,8 @@ export function analyzeFounderTask(type: "bug" | "task" | "idea", title: string,
     decision,
     risks,
     blockedReasons: [],
-    clarifyingQuestions
+    clarifyingQuestions,
+    priority: resolveFounderPriority(combined, requestedPriority)
   });
 }
 
@@ -287,6 +321,7 @@ function buildFounderAudit(input: {
   risks: string[];
   blockedReasons: string[];
   clarifyingQuestions: string[];
+  priority: "NORMAL" | "URGENT";
   answer?: string;
 }): FounderTaskAudit {
   return {
@@ -296,6 +331,7 @@ function buildFounderAudit(input: {
     title: input.title,
     source: sanitizeSensitiveText(input.source).slice(0, 120),
     decision: input.decision,
+    priority: input.priority,
     summary: summarizeTask(input.body),
     allowedWork: input.decision === "REJECTED" || input.decision === "ANSWER_ONLY" ? [] : buildAllowedWork(input.decision),
     risks: input.risks,
@@ -338,6 +374,13 @@ function matchPolicies(value: string, policies: Array<[string, RegExp]>) {
 
 function looksLikeWorkRequest(value: string) {
   return /(почини|исправь|сделай|добавь|реализуй|проверь|перепиши|сверстай|убери|верни|сломалось|ошибка|баг|не работает|не клика|404|500|fix|implement|add|build|repair|broken|bug|error)/i.test(value);
+}
+
+function resolveFounderPriority(value: string, requestedPriority?: "NORMAL" | "URGENT") {
+  if (requestedPriority === "URGENT") return "URGENT";
+  return /(срочно|критично|urgent|asap|production down|prod down|оплата не работает|не работает оплата|платеж|падает прод|500|нельзя пользоваться)/i.test(value)
+    ? "URGENT"
+    : "NORMAL";
 }
 
 function classifyFounderConversation(title: string, body: string, hasWorkRequest: boolean) {
@@ -528,6 +571,7 @@ function renderFounderIntake(audit: FounderTaskAudit) {
     `- Type: ${audit.type}`,
     `- Source: ${audit.source}`,
     `- Decision: ${audit.decision}`,
+    `- Priority: ${audit.priority}`,
     `- Queue: ${audit.queueStatus}`,
     `- Title: ${audit.title}`,
     "",
@@ -593,6 +637,7 @@ function renderFounderQueueItem(audit: FounderTaskAudit) {
     `- Created: ${audit.createdAt}`,
     `- Type: ${audit.type}`,
     `- Title: ${audit.title}`,
+    `- Priority: ${audit.priority}`,
     "- Status: queued",
     "",
     "### Task",

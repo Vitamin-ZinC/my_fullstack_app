@@ -15,6 +15,7 @@ type ChatMessage = {
 export default function FounderChatPage() {
   const [password, setPassword] = useState("");
   const [chatType, setChatType] = useState<"bug" | "task" | "idea">("bug");
+  const [priority, setPriority] = useState<"NORMAL" | "URGENT">("NORMAL");
   const [chatInput, setChatInput] = useState("");
   const [chatBusy, setChatBusy] = useState(false);
   const [loadingBoard, setLoadingBoard] = useState(false);
@@ -66,7 +67,7 @@ export default function FounderChatPage() {
     setMessages((current) => [...current, { role: "founder", text: message }]);
     setChatInput("");
     try {
-      const batch = await api.sendFounderChat({ password, message, type: chatType });
+      const batch = await api.sendFounderChat({ password, message, type: chatType, priority });
       setMessages((current) => [...current, { role: "system", text: batch.message, batch }]);
       await loadBoard(password);
     } catch (reason) {
@@ -84,6 +85,17 @@ export default function FounderChatPage() {
     setPassword("");
     setItems([]);
     setMessages([]);
+  }
+
+  async function updateStatus(id: string, codexStatus: "IN_PROGRESS" | "DONE" | "IGNORED") {
+    if (!password.trim()) return;
+    setError("");
+    try {
+      await api.updateFounderIntakeStatus({ password, id, codexStatus });
+      await loadBoard(password);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Не удалось обновить статус");
+    }
   }
 
   return (
@@ -129,6 +141,10 @@ export default function FounderChatPage() {
                 <option value="bug">Баг</option>
                 <option value="task">Задача</option>
                 <option value="idea">Идея</option>
+              </select>
+              <select value={priority} onChange={(event) => setPriority(event.target.value as "NORMAL" | "URGENT")}>
+                <option value="NORMAL">Обычный</option>
+                <option value="URGENT">Срочно</option>
               </select>
             </div>
             <div className="docs-chat-feed" aria-live="polite">
@@ -181,9 +197,9 @@ export default function FounderChatPage() {
               </button>
             </div>
             <div className="founder-board-grid">
-              <TaskColumn title="В очереди" items={columns.queued} empty="Нет задач в очереди" />
-              <TaskColumn title="В процессе" items={columns.progress} empty="Нет задач в работе" />
-              <TaskColumn title="Готово" items={columns.done} empty="Нет завершённых записей" />
+              <TaskColumn title="В очереди" items={columns.queued} empty="Нет задач в очереди" updateStatus={updateStatus} />
+              <TaskColumn title="В процессе" items={columns.progress} empty="Нет задач в работе" updateStatus={updateStatus} />
+              <TaskColumn title="Готово" items={columns.done} empty="Нет завершённых записей" updateStatus={updateStatus} />
             </div>
           </section>
         </>
@@ -192,7 +208,12 @@ export default function FounderChatPage() {
   );
 }
 
-function TaskColumn(props: { title: string; items: FounderIntakeItem[]; empty: string }) {
+function TaskColumn(props: {
+  title: string;
+  items: FounderIntakeItem[];
+  empty: string;
+  updateStatus: (id: string, codexStatus: "IN_PROGRESS" | "DONE" | "IGNORED") => Promise<void>;
+}) {
   return (
     <div className="founder-board-column">
       <h3>{props.title}</h3>
@@ -201,6 +222,7 @@ function TaskColumn(props: { title: string; items: FounderIntakeItem[]; empty: s
       ) : props.items.map((item) => (
         <article className="founder-task-card" key={item.id}>
           <div className={`docs-decision ${item.decision.toLowerCase()}`}>{item.decision}</div>
+          {item.priority === "URGENT" && <div className="founder-priority">Срочно</div>}
           <strong>{item.title}</strong>
           <p>{item.summary || item.sanitizedBody}</p>
           <small>ID: {item.id}</small>
@@ -208,6 +230,17 @@ function TaskColumn(props: { title: string; items: FounderIntakeItem[]; empty: s
           <small>Bridge: {item.bridgeStatus}{item.bridgeAttempts ? ` · ${item.bridgeAttempts}` : ""}</small>
           {item.codexReply && <small>Ответ Codex: {item.codexReply}</small>}
           {item.bridgeLastError && <small className="docs-error">Bridge error: {item.bridgeLastError}</small>}
+          <div className="founder-task-actions">
+            {item.codexStatus !== "IN_PROGRESS" && item.codexStatus !== "DONE" && (
+              <button type="button" onClick={() => props.updateStatus(item.id, "IN_PROGRESS")}>Взять в работу</button>
+            )}
+            {item.codexStatus !== "DONE" && (
+              <button type="button" onClick={() => props.updateStatus(item.id, "DONE")}>Готово</button>
+            )}
+            {item.codexStatus !== "IGNORED" && item.codexStatus !== "DONE" && (
+              <button type="button" onClick={() => props.updateStatus(item.id, "IGNORED")}>Игнорировать</button>
+            )}
+          </div>
         </article>
       ))}
     </div>

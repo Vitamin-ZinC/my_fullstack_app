@@ -235,6 +235,7 @@ model FounderIntakeItem {
   title               String
   source              String
   decision            String
+  priority            String   @default("NORMAL")
   queueStatus         String   @default("NOT_QUEUED")
   codexStatus         String   @default("NEW")
   bridgeStatus        String   @default("NOT_CONFIGURED")
@@ -257,6 +258,7 @@ model FounderIntakeItem {
   updatedAt           DateTime @updatedAt
 
   @@index([decision, queueStatus, createdAt])
+  @@index([priority, createdAt])
   @@index([codexStatus, createdAt])
   @@index([bridgeStatus, createdAt])
 }

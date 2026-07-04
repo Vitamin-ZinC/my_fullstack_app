@@ -42,6 +42,13 @@ const navItems: NavItem[] = [
   { id: "settings", icon: "⚙" }
 ];
 
+const mobileNavItems: NavItem[] = [
+  { id: "dashboard", icon: "⬡" },
+  { id: "journey", icon: "🧭" },
+  { id: "navigator", penguin: true },
+  { id: "archive", icon: "📚" }
+];
+
 const cycleVisuals = [
   { icon: "🌱", color: "#00d4ff" },
   { icon: "🚀", color: "#a855f7" },
@@ -110,6 +117,7 @@ function HabitsContent() {
   const t = useSiteText(locale).habits.app;
 
   const [tab, setTab] = useState<Tab>("dashboard");
+  const [showMobileMore, setShowMobileMore] = useState(false);
   const [program, setProgram] = useState<HabitProgramSummary | null>(null);
   const [config, setConfig] = useState<HabitConfigResponse | null>(null);
   const [latestReport, setLatestReport] = useState<{ analysisId: string; profession?: string | null; summary?: string | null } | null>(null);
@@ -603,14 +611,34 @@ function HabitsContent() {
       </aside>
 
       <nav className="habits-bottom-nav" aria-label="Навигация привычек">
-        {navItems.map((item) => {
+        {mobileNavItems.map((item) => {
           return (
-            <button key={item.id} className={tab === item.id ? "active" : ""} type="button" title={t.habitsUx.tooltips[item.id]} onClick={() => setTab(item.id)}>
+            <button key={item.id} className={tab === item.id ? "active" : ""} type="button" title={t.habitsUx.tooltips[item.id]} onClick={() => {
+              setTab(item.id);
+              setShowMobileMore(false);
+            }}>
               <NavIcon item={item} size={17} />
               <span>{t.nav[item.id]}</span>
             </button>
           );
         })}
+        <button className={showMobileMore ? "active" : ""} type="button" title={t.nav.more} onClick={() => setShowMobileMore((value) => !value)}>
+          <ChevronDown size={20} />
+          <span>{t.nav.more}</span>
+        </button>
+        {showMobileMore && (
+          <div className="habits-mobile-more-menu">
+            {navItems.filter((item) => !mobileNavItems.some((mobileItem) => mobileItem.id === item.id)).map((item) => (
+              <button key={item.id} className={tab === item.id ? "active" : ""} type="button" title={t.habitsUx.tooltips[item.id]} onClick={() => {
+                setTab(item.id);
+                setShowMobileMore(false);
+              }}>
+                <NavIcon item={item} size={17} />
+                <span>{t.nav[item.id]}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </nav>
 
       <section className="habits-main">
@@ -622,12 +650,12 @@ function HabitsContent() {
           </div>
           <div className="habits-topbar-actions">
             <div className="habits-top-pill online"><PenguinHeadIcon size={20} />{t.dashboard.pingviOnline}</div>
-            <div className="habits-top-pill"><Trophy size={16} />{program.stats.xp} XP ? {program.stats.rank.title}</div>
+            <div className="habits-top-pill"><Trophy size={16} />{program.stats.xp} XP · {program.stats.rank.title}</div>
             <div className="habits-top-pill"><span className="habits-pill-icon">⏳</span>{trialDaysLeft}/{config?.trialDays ?? trialDaysLeft} {t.dashboard.trialDays}</div>
             <div className="habits-top-pill accent"><span className="habits-pill-icon">🔥</span>{program.stats.streakDays} {t.stats.streak}</div>
-            <button className="button habits-cta" type="button" disabled={busy} onClick={() => saveCheckin(activeHabit, !doneToday)}>
-              {doneToday ? <RotateCcw size={17} /> : <CheckCircle2 size={17} />}
-              {doneToday ? t.journey.undoToday : t.journey.markToday}
+            <button className="button habits-cta" type="button" onClick={() => setTab("journey")}>
+              <Compass size={17} />
+              {tab === "journey" ? t.dashboard.todayFocus : t.dashboard.openJourney}
             </button>
           </div>
         </header>
@@ -652,27 +680,9 @@ function HabitsContent() {
             program={program}
             config={config}
             activeHabit={activeHabit}
-            latestMetric={latestMetric}
-            doneToday={doneToday}
-            energy={energy}
-            clarity={clarity}
-            stability={stability}
-            note={note}
-            insight={insight}
-            microStepText={microStepText}
-            busy={busy}
             canPersonalize={Boolean(latestReport && program.source !== "analysis-report")}
-            setEnergy={setEnergy}
-            setClarity={setClarity}
-            setStability={setStability}
-            setNote={setNote}
-            setInsight={setInsight}
-            saveMetric={saveMetric}
-            saveCheckin={saveCheckin}
-            saveInsight={saveInsight}
-            softenTodayStep={softenTodayStep}
-            rotateTodayStep={() => updateTodayTaskVariant("REPLACE")}
             personalizeFromReport={startFromLatestReport}
+            openJourney={() => setTab("journey")}
             openNavigator={() => setTab("navigator")}
           />
         )}
@@ -698,6 +708,8 @@ function HabitsContent() {
             saveMetric={saveMetric}
             saveCheckin={saveCheckin}
             saveInsight={saveInsight}
+            softenTodayStep={softenTodayStep}
+            rotateTodayStep={() => updateTodayTaskVariant("REPLACE")}
             advanceWeek={advanceWeek}
             freezeWeek={freezeWeek}
           />
@@ -710,7 +722,7 @@ function HabitsContent() {
             setSelectedCycle={setSelectedCycle}
             expandedHabitId={expandedHabitId}
             setExpandedHabitId={setExpandedHabitId}
-            saveCheckin={saveCheckin}
+            openJourney={() => setTab("journey")}
           />
         )}
         {tab === "navigator" && (
@@ -766,30 +778,12 @@ function DashboardTab(props: {
   program: HabitProgramSummary;
   config: HabitConfigResponse | null;
   activeHabit: HabitEnrollmentSummary | null;
-  latestMetric?: { energy: number; clarity: number; stability: number };
-  doneToday: boolean;
-  energy: number;
-  clarity: number;
-  stability: number;
-  note: string;
-  insight: string;
-  microStepText: string;
-  busy: boolean;
   canPersonalize: boolean;
-  setEnergy: (value: number) => void;
-  setClarity: (value: number) => void;
-  setStability: (value: number) => void;
-  setNote: (value: string) => void;
-  setInsight: (value: string) => void;
-  saveMetric: () => void;
-  saveCheckin: (habit?: HabitEnrollmentSummary | null, completed?: boolean, noteOverride?: string) => void;
-  saveInsight: () => void;
-  softenTodayStep: () => void;
-  rotateTodayStep: () => void;
   personalizeFromReport: () => void;
+  openJourney: () => void;
   openNavigator: () => void;
 }) {
-  const wellness = props.program.stats.wellnessScore ?? Math.round(((props.energy + props.clarity + props.stability) / 3) * 10);
+  const wellness = props.program.stats.wellnessScore ?? 0;
   const totalWeeks = props.program.stats.totalWeeks || props.program.cycles.reduce((sum, cycle) => sum + cycle.weeks, 0);
   const routeProgress = totalWeeks
     ? Math.min(100, Math.round(((props.program.stats.currentSortOrder - 1 + props.program.stats.weekProgress / 100) / totalWeeks) * 100))
@@ -826,7 +820,8 @@ function DashboardTab(props: {
       <section className="habits-panel habits-wide habits-day-plan">
         <div>
           <div className="eyebrow">{props.t.dashboard.eyebrow}</div>
-          <h2>{props.t.habitsUx.dailyPlanTitle}<HelpTip label={props.t.habitsUx.tooltips.dashboard} /></h2>
+          <h2>{props.t.dashboard.overviewTitle}<HelpTip label={props.t.habitsUx.tooltips.dashboard} /></h2>
+          <p className="habits-muted">{props.t.dashboard.overviewCopy}</p>
         </div>
         <div className="habits-plan-steps">
           {props.t.habitsUx.dailyPlan.map((step, index) => (
@@ -855,10 +850,16 @@ function DashboardTab(props: {
             <h2>{props.t.dashboard.pathTitle}</h2>
             <p>{props.t.dashboard.pathCopy}</p>
           </div>
-          <button className="button secondary habits-cta" type="button" title={props.t.habitsUx.tooltips.navigator} onClick={props.openNavigator}>
-            <PenguinHeadIcon size={18} />
-            {props.t.dashboard.askPingvi}
-          </button>
+          <div className="habits-action-row">
+            <button className="button habits-cta" type="button" title={props.t.habitsUx.tooltips.journey} onClick={props.openJourney}>
+              <Compass size={17} />
+              {props.t.dashboard.openJourney}
+            </button>
+            <button className="button secondary habits-cta" type="button" title={props.t.habitsUx.tooltips.navigator} onClick={props.openNavigator}>
+              <PenguinHeadIcon size={18} />
+              {props.t.dashboard.askPingvi}
+            </button>
+          </div>
         </div>
 
         <div className="habits-status-strip">
@@ -925,11 +926,11 @@ function DashboardTab(props: {
       </section>
 
       <section className="habits-panel">
-        <h2>{props.t.dashboard.todayFocus}<HelpTip label={props.t.habitsUx.tooltips.done} /></h2>
+        <h2>{props.t.dashboard.todayFocus}<HelpTip label={props.t.habitsUx.tooltips.journey} /></h2>
         <div className="habits-first-step">
           <div>
             <div className="habit-week">{todayTask ? todayTask.title : props.t.dashboard.firstStep}</div>
-            <p>{todayTask ? todayTask.taskText : props.microStepText}</p>
+            <p>{todayTask ? todayTask.taskText : props.activeHabit?.practice ?? props.t.dashboard.firstStep}</p>
             {todayTask && (
               <div className="habits-current">
                 <strong>{todayTask.microAction}</strong>
@@ -938,22 +939,12 @@ function DashboardTab(props: {
             )}
           </div>
           <div className="habits-action-row">
-            <button className="button habits-cta" type="button" title={props.t.habitsUx.tooltips.done} disabled={props.busy} onClick={() => props.saveCheckin(props.activeHabit, !props.doneToday)}>
-              {props.doneToday ? props.t.journey.undoToday : props.t.dashboard.done}
-            </button>
-            <button className="button secondary habits-cta" type="button" title={props.t.habitsUx.tooltips.tooMuch} disabled={props.busy} onClick={props.softenTodayStep}>
-              {props.t.dashboard.tooMuch}
-            </button>
-            <button className="btn-back" type="button" title={props.t.habitsUx.tooltips.replace} onClick={props.rotateTodayStep}>
-              {props.t.dashboard.replace}
+            <button className="button habits-cta" type="button" title={props.t.habitsUx.tooltips.journey} onClick={props.openJourney}>
+              <Compass size={17} />
+              {props.t.dashboard.openJourney}
             </button>
           </div>
-          <div className="habits-button-explainers" aria-label={props.t.habitsUx.actionHelp.title}>
-            <span><strong>{props.t.dashboard.done}</strong>{props.t.habitsUx.tooltips.done}</span>
-            <span><strong>{props.t.dashboard.tooMuch}</strong>{props.t.habitsUx.tooltips.tooMuch}</span>
-            <span><strong>{props.t.dashboard.replace}</strong>{props.t.habitsUx.tooltips.replace}</span>
-          </div>
-          <p className="habits-action-help">{props.t.dashboard.softStepHelp}</p>
+          <p className="habits-action-help">{props.t.dashboard.journeyOnlyHelp}</p>
         </div>
         {props.activeHabit && <HabitDetailsCard habit={props.activeHabit} t={props.t} />}
         {props.activeHabit && (
@@ -966,14 +957,8 @@ function DashboardTab(props: {
             <div className="progress-bg"><div className="progress-fill" style={{ width: `${weekProgress}%` }} /></div>
           </div>
         )}
-        <textarea className="input habits-note" placeholder={props.t.dashboard.notePlaceholder} value={props.note} onChange={(event) => props.setNote(event.target.value)} />
-        <button className="button" type="button" title={props.t.habitsUx.tooltips.saveStep} disabled={props.busy} onClick={() => props.saveCheckin()}>
-          <CheckCircle2 size={17} />
-          {props.t.dashboard.saveStep}
-        </button>
-        <p className="habits-action-help">{props.t.dashboard.saveStepHelp}</p>
         {props.canPersonalize && (
-          <button className="button secondary" type="button" disabled={props.busy} onClick={props.personalizeFromReport}>
+          <button className="button secondary" type="button" onClick={props.personalizeFromReport}>
             <Sparkles size={17} />
             {props.t.dashboard.personalize}
           </button>
@@ -981,8 +966,8 @@ function DashboardTab(props: {
       </section>
 
       <section className="habits-panel">
-        <h2>{props.t.dashboard.metricTitle}<HelpTip label={props.t.habitsUx.tooltips.saveMetric} /></h2>
-        <p className="habits-muted">{props.t.dashboard.metricCopy}</p>
+        <h2>{props.t.dashboard.metricTitle}</h2>
+        <p className="habits-muted">{props.t.dashboard.metricOverviewCopy}</p>
         <div className="habits-wellness-row">
           <div className="habits-progress-ring" style={{ "--progress": `${wellness}%` } as CSSProperties}>
             <strong>{wellness}</strong>
@@ -994,44 +979,16 @@ function DashboardTab(props: {
             <div className="progress-bg"><div className="progress-fill" style={{ width: `${props.program.stats.rank.progress}%` }} /></div>
           </div>
         </div>
-        <MetricSlider
-          icon="⚡"
-          color="#00d4ff"
-          label={props.t.metrics.energy}
-          value={props.energy}
-          hint={metricValueHint(props.energy, props.t.dashboard.metricValueHints)}
-          scale={props.t.habitsUx.metricScales.energy}
-          numberHints={props.t.habitsUx.metricNumberHints.energy}
-          onChange={props.setEnergy}
-        />
-        <MetricSlider
-          icon="🧠"
-          color="#a855f7"
-          label={props.t.metrics.clarity}
-          value={props.clarity}
-          hint={metricValueHint(props.clarity, props.t.dashboard.metricValueHints)}
-          scale={props.t.habitsUx.metricScales.clarity}
-          numberHints={props.t.habitsUx.metricNumberHints.clarity}
-          onChange={props.setClarity}
-        />
-        <MetricSlider
-          icon="🌳"
-          color="#10b981"
-          label={props.t.metrics.stability}
-          value={props.stability}
-          hint={metricValueHint(props.stability, props.t.dashboard.metricValueHints)}
-          scale={props.t.habitsUx.metricScales.stability}
-          numberHints={props.t.habitsUx.metricNumberHints.stability}
-          onChange={props.setStability}
-        />
-        {props.latestMetric && (
+        {props.program.metrics[0] ? (
           <div className="habits-mini-reward">
-            {props.t.metrics.energy} {props.latestMetric.energy}/10 · {props.t.metrics.clarity} {props.latestMetric.clarity}/10
+            {props.t.metrics.energy} {props.program.metrics[0].energy}/10 · {props.t.metrics.clarity} {props.program.metrics[0].clarity}/10 · {props.t.metrics.stability} {props.program.metrics[0].stability}/10
           </div>
+        ) : (
+          <p className="habits-action-help">{props.t.dashboard.noMetricYet}</p>
         )}
-        <button className="button secondary" type="button" title={props.t.habitsUx.tooltips.saveMetric} disabled={props.busy} onClick={props.saveMetric}>
-          <Save size={17} />
-          {props.t.dashboard.saveMetric}
+        <button className="button secondary" type="button" title={props.t.habitsUx.tooltips.journey} onClick={props.openJourney}>
+          <Compass size={17} />
+          {props.t.dashboard.openJourney}
         </button>
       </section>
 
@@ -1084,20 +1041,6 @@ function DashboardTab(props: {
         </div>
       </section>
 
-      <section className="habits-panel habits-wide">
-        <h2>{props.t.dashboard.insightTitle}</h2>
-        <textarea className="input habits-note" placeholder={props.t.dashboard.insightPlaceholder} value={props.insight} onChange={(event) => props.setInsight(event.target.value)} />
-        <div className="habits-action-row">
-          <button className="button secondary" type="button" disabled={props.busy || !props.insight.trim()} onClick={props.saveInsight}>
-            <Archive size={17} />
-            {props.t.dashboard.saveInsight}
-          </button>
-          <button className="btn-back" type="button" onClick={props.openNavigator}>
-            <Bot size={16} />
-            {props.t.dashboard.askPingvi}
-          </button>
-        </div>
-      </section>
     </div>
   );
 }
@@ -1123,6 +1066,8 @@ function JourneyTab(props: {
   saveMetric: () => void;
   saveCheckin: (habit?: HabitEnrollmentSummary | null, completed?: boolean, noteOverride?: string) => void;
   saveInsight: () => void;
+  softenTodayStep: () => void;
+  rotateTodayStep: () => void;
   advanceWeek: (force?: boolean) => void;
   freezeWeek: () => void;
 }) {
@@ -1134,12 +1079,12 @@ function JourneyTab(props: {
       <section className="habits-panel habits-wide habits-journey-daily">
         <div className="row">
           <div>
-            <div className="habit-week">{props.t.dashboard.todayFocus}</div>
+            <div className="habit-week">{props.t.habitsUx.journeySteps.habit}</div>
             <h2>{todayTask?.title ?? activeHabit?.title ?? props.t.journey.title}</h2>
           </div>
           <div className="habits-mini-reward">
             <Trophy size={15} />
-            <span>{props.program.stats.xp} XP · {props.program.stats.rank.title}</span>
+            <span>{props.doneToday ? props.t.journey.todayDone : props.t.journey.todayAvailable}</span>
           </div>
         </div>
         <div className="habits-current">
@@ -1152,14 +1097,23 @@ function JourneyTab(props: {
             {props.doneToday ? <RotateCcw size={17} /> : <CheckCircle2 size={17} />}
             {props.doneToday ? props.t.journey.undoToday : props.t.journey.markToday}
           </button>
-          <button className="button secondary" type="button" disabled={props.busy || !activeHabit} onClick={() => props.saveCheckin(activeHabit, true)}>
-            <Save size={17} />
-            {props.t.dashboard.saveStep}
+          <button className="button secondary" type="button" title={props.t.habitsUx.tooltips.tooMuch} disabled={props.busy || !activeHabit} onClick={props.softenTodayStep}>
+            <Sparkles size={17} />
+            {props.t.dashboard.tooMuch}
           </button>
+          <button className="btn-back" type="button" title={props.t.habitsUx.tooltips.replace} disabled={props.busy || !activeHabit} onClick={props.rotateTodayStep}>
+            {props.t.dashboard.replace}
+          </button>
+        </div>
+        <div className="habits-button-explainers" aria-label={props.t.habitsUx.actionHelp.title}>
+          <span><strong>{props.t.journey.markToday}</strong>{props.t.habitsUx.tooltips.done}</span>
+          <span><strong>{props.t.dashboard.tooMuch}</strong>{props.t.habitsUx.tooltips.tooMuch}</span>
+          <span><strong>{props.t.dashboard.replace}</strong>{props.t.habitsUx.tooltips.replace}</span>
         </div>
       </section>
 
       <section className="habits-panel">
+        <div className="habit-week">{props.t.habitsUx.journeySteps.state}</div>
         <h2>{props.t.dashboard.metricTitle}</h2>
         <p className="habits-muted">{props.t.dashboard.metricCopy}</p>
         <MetricSlider
@@ -1196,18 +1150,22 @@ function JourneyTab(props: {
           <Save size={17} />
           {props.t.dashboard.saveMetric}
         </button>
+        <p className="habits-action-help">{props.t.dashboard.metricRewardHelp}</p>
       </section>
 
       <section className="habits-panel">
+        <div className="habit-week">{props.t.habitsUx.journeySteps.insight}</div>
         <h2>{props.t.dashboard.insightTitle}</h2>
         <textarea className="input habits-note" placeholder={props.t.dashboard.insightPlaceholder} value={props.insight} onChange={(event) => props.setInsight(event.target.value)} />
         <button className="button secondary" type="button" disabled={props.busy || !props.insight.trim()} onClick={props.saveInsight}>
           <Archive size={17} />
           {props.t.dashboard.saveInsight}
         </button>
+        <p className="habits-action-help">{props.t.dashboard.insightRewardHelp}</p>
       </section>
 
       <section className="habits-panel">
+        <div className="habit-week">{props.t.habitsUx.journeySteps.details}</div>
         <h2>{props.t.journey.title}<HelpTip label={props.t.habitsUx.tooltips.journey} /></h2>
         <p className="habits-muted">{props.program.careerAction || props.t.journey.copy}</p>
         {activeHabit && (
@@ -1257,10 +1215,12 @@ function JourneyTab(props: {
       <section className="habits-panel">
         <h2>{props.t.habitsUx.actionHelp.title}</h2>
         <div className="habits-action-stack">
-          <button className="button" type="button" title={props.t.habitsUx.tooltips.advance} disabled={props.busy || !canAdvance} onClick={() => props.advanceWeek(false)}>
-            <CheckCircle2 size={17} />
-            {props.t.journey.advance}
-          </button>
+          {canAdvance && (
+            <button className="button" type="button" title={props.t.habitsUx.tooltips.advance} disabled={props.busy} onClick={() => props.advanceWeek(false)}>
+              <CheckCircle2 size={17} />
+              {props.t.journey.advance}
+            </button>
+          )}
           <button className="button secondary" type="button" title={props.t.habitsUx.tooltips.softAdvance} disabled={props.busy} onClick={() => props.advanceWeek(true)}>
             <Sparkles size={17} />
             {props.t.journey.softAdvance}
@@ -1307,7 +1267,7 @@ function HabitsCatalogTab(props: {
   setSelectedCycle: (cycle: number | "all") => void;
   expandedHabitId: string | null;
   setExpandedHabitId: (id: string | null) => void;
-  saveCheckin: (habit?: HabitEnrollmentSummary | null, completed?: boolean) => void;
+  openJourney: () => void;
 }) {
   const habits = props.selectedCycle === "all"
     ? props.program.enrollments
@@ -1338,10 +1298,12 @@ function HabitsCatalogTab(props: {
                   <ChevronDown size={15} />
                   {expanded ? props.t.habitsScreen.collapse : props.t.habitsScreen.expand}
                 </button>
-                <button className="btn-back" type="button" onClick={() => props.saveCheckin(habit, true)}>
-                  <CheckCircle2 size={15} />
-                  {props.t.habitsScreen.quickMark}
-                </button>
+                {habit.sortOrder === props.program.currentSortOrder && (
+                  <button className="btn-back" type="button" onClick={props.openJourney}>
+                    <Compass size={15} />
+                    {props.t.habitsScreen.openCurrent}
+                  </button>
+                )}
               </div>
             </article>
           );

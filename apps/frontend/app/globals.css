@@ -2979,7 +2979,6 @@ svg {
   font-size: 11px;
 }
 
-.habits-coachmark,
 .habits-day-plan {
   border: 1px solid rgba(0, 212, 255, 0.2);
   border-radius: 18px;
@@ -2990,9 +2989,20 @@ svg {
 }
 
 .habits-coachmark {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 30;
   display: grid;
   gap: 14px;
-  margin-bottom: 14px;
+  width: min(520px, calc(100vw - 32px));
+  border: 1px solid rgba(0, 212, 255, 0.2);
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(0, 212, 255, 0.1), rgba(16, 185, 129, 0.06)),
+    rgba(2, 11, 24, 0.98);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.42);
+  padding: 18px;
 }
 
 .habits-coachmark h2,
@@ -4251,6 +4261,14 @@ p {
 
   .habits-slider input {
     grid-column: 1 / -1;
+  }
+
+  .habits-coachmark {
+    right: 12px;
+    bottom: 12px;
+    width: calc(100vw - 24px);
+    max-height: min(72vh, 520px);
+    overflow-y: auto;
   }
 
   .habits-metric-ticks {

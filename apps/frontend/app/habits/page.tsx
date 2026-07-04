@@ -817,22 +817,6 @@ function DashboardTab(props: {
   ];
   return (
     <div className="habits-grid">
-      <section className="habits-panel habits-wide habits-day-plan">
-        <div>
-          <div className="eyebrow">{props.t.dashboard.eyebrow}</div>
-          <h2>{props.t.dashboard.overviewTitle}<HelpTip label={props.t.habitsUx.tooltips.dashboard} /></h2>
-          <p className="habits-muted">{props.t.dashboard.overviewCopy}</p>
-        </div>
-        <div className="habits-plan-steps">
-          {props.t.habitsUx.dailyPlan.map((step, index) => (
-            <div className="habits-plan-step" key={step}>
-              <span>{index + 1}</span>
-              <strong>{step}</strong>
-            </div>
-          ))}
-        </div>
-      </section>
-
       <section className="habits-panel habits-wide habits-dashboard-hero">
         <div className="habits-old-stat-grid">
           {statTiles.map((tile) => (
@@ -847,7 +831,7 @@ function DashboardTab(props: {
         <div className="habits-dashboard-hero-head">
           <div>
             <div className="eyebrow">{props.t.dashboard.pathEyebrow}</div>
-            <h2>{props.t.dashboard.pathTitle}</h2>
+            <h2>{props.t.dashboard.pathTitle}<HelpTip label={props.t.habitsUx.tooltips.dashboard} /></h2>
             <p>{props.t.dashboard.pathCopy}</p>
           </div>
           <div className="habits-action-row">
@@ -944,7 +928,6 @@ function DashboardTab(props: {
               {props.t.dashboard.openJourney}
             </button>
           </div>
-          <p className="habits-action-help">{props.t.dashboard.journeyOnlyHelp}</p>
         </div>
         {props.activeHabit && <HabitDetailsCard habit={props.activeHabit} t={props.t} />}
         {props.activeHabit && (
@@ -984,7 +967,7 @@ function DashboardTab(props: {
             {props.t.metrics.energy} {props.program.metrics[0].energy}/10 · {props.t.metrics.clarity} {props.program.metrics[0].clarity}/10 · {props.t.metrics.stability} {props.program.metrics[0].stability}/10
           </div>
         ) : (
-          <p className="habits-action-help">{props.t.dashboard.noMetricYet}</p>
+          <div className="habits-mini-reward">{props.t.dashboard.noMetricYet}</div>
         )}
         <button className="button secondary" type="button" title={props.t.habitsUx.tooltips.journey} onClick={props.openJourney}>
           <Compass size={17} />
@@ -1105,16 +1088,11 @@ function JourneyTab(props: {
             {props.t.dashboard.replace}
           </button>
         </div>
-        <div className="habits-button-explainers" aria-label={props.t.habitsUx.actionHelp.title}>
-          <span><strong>{props.t.journey.markToday}</strong>{props.t.habitsUx.tooltips.done}</span>
-          <span><strong>{props.t.dashboard.tooMuch}</strong>{props.t.habitsUx.tooltips.tooMuch}</span>
-          <span><strong>{props.t.dashboard.replace}</strong>{props.t.habitsUx.tooltips.replace}</span>
-        </div>
       </section>
 
       <section className="habits-panel">
         <div className="habit-week">{props.t.habitsUx.journeySteps.state}</div>
-        <h2>{props.t.dashboard.metricTitle}</h2>
+        <h2>{props.t.dashboard.metricTitle}<HelpTip label={props.t.habitsUx.tooltips.saveMetric} /></h2>
         <p className="habits-muted">{props.t.dashboard.metricCopy}</p>
         <MetricSlider
           icon="⚡"
@@ -1146,22 +1124,20 @@ function JourneyTab(props: {
           numberHints={props.t.habitsUx.metricNumberHints.stability}
           onChange={props.setStability}
         />
-        <button className="button secondary" type="button" disabled={props.busy} onClick={props.saveMetric}>
+        <button className="button secondary" type="button" title={props.t.habitsUx.tooltips.saveMetric} disabled={props.busy} onClick={props.saveMetric}>
           <Save size={17} />
           {props.t.dashboard.saveMetric}
         </button>
-        <p className="habits-action-help">{props.t.dashboard.metricRewardHelp}</p>
       </section>
 
       <section className="habits-panel">
         <div className="habit-week">{props.t.habitsUx.journeySteps.insight}</div>
-        <h2>{props.t.dashboard.insightTitle}</h2>
+        <h2>{props.t.dashboard.insightTitle}<HelpTip label={props.t.habitsUx.tooltips.saveInsight} /></h2>
         <textarea className="input habits-note" placeholder={props.t.dashboard.insightPlaceholder} value={props.insight} onChange={(event) => props.setInsight(event.target.value)} />
-        <button className="button secondary" type="button" disabled={props.busy || !props.insight.trim()} onClick={props.saveInsight}>
+        <button className="button secondary" type="button" title={props.t.habitsUx.tooltips.saveInsight} disabled={props.busy || !props.insight.trim()} onClick={props.saveInsight}>
           <Archive size={17} />
           {props.t.dashboard.saveInsight}
         </button>
-        <p className="habits-action-help">{props.t.dashboard.insightRewardHelp}</p>
       </section>
 
       <section className="habits-panel">
@@ -1213,7 +1189,7 @@ function JourneyTab(props: {
       </section>
 
       <section className="habits-panel">
-        <h2>{props.t.habitsUx.actionHelp.title}</h2>
+        <h2>{props.t.habitsUx.weekControlsTitle}<HelpTip label={props.t.habitsUx.tooltips.weekControls} /></h2>
         <div className="habits-action-stack">
           {canAdvance && (
             <button className="button" type="button" title={props.t.habitsUx.tooltips.advance} disabled={props.busy} onClick={() => props.advanceWeek(false)}>
@@ -1235,12 +1211,6 @@ function JourneyTab(props: {
               {props.t.journey.calendar}
             </a>
           )}
-        </div>
-        <div className="habits-action-help-grid">
-          <p><strong>{props.t.journey.advance}</strong>{props.t.habitsUx.actionHelp.advance}</p>
-          <p><strong>{props.t.journey.softAdvance}</strong>{props.t.habitsUx.actionHelp.softAdvance}</p>
-          <p><strong>{props.t.journey.freeze}</strong>{props.t.habitsUx.actionHelp.freeze}</p>
-          <p><strong>{props.t.journey.calendar}</strong>{props.t.habitsUx.actionHelp.calendar}</p>
         </div>
       </section>
 
@@ -1725,30 +1695,17 @@ function normalizeTelegramFrequency(value?: string | null): TelegramFrequency {
 function MetricSlider(props: { icon: string; color: string; label: string; value: number; hint: string; scale: readonly string[]; numberHints: readonly string[]; onChange: (value: number) => void }) {
   const progress = Math.max(0, Math.min(100, props.value * 10));
   const selectedNumberHint = props.numberHints[props.value] ?? props.hint;
+  const helpText = `${selectedNumberHint} ${props.scale.join(" ")}`;
   return (
     <div className="habits-slider" style={{ "--metric-color": props.color, "--metric-progress": `${progress}%` } as CSSProperties}>
-      <label htmlFor={`metric-${props.label}`}><span className="habits-inline-icon">{props.icon}</span>{props.label}</label>
+      <label htmlFor={`metric-${props.label}`}>
+        <span className="habits-inline-icon">{props.icon}</span>
+        {props.label}
+        <HelpTip label={helpText} />
+      </label>
       <em>{metricStatus(props.value)}</em>
       <strong>{props.value}/10</strong>
       <input id={`metric-${props.label}`} type="range" min={0} max={10} value={props.value} onChange={(event) => props.onChange(Number(event.target.value))} />
-      <small>{props.hint}</small>
-      <div className="habits-metric-ticks" aria-label={`Подсказки шкалы ${props.label}`}>
-        {props.numberHints.map((hint, index) => (
-          <span className={index === props.value ? "active" : ""} title={hint} aria-label={`${index}: ${hint}`} key={`${props.label}-${index}`}>
-            {index}
-          </span>
-        ))}
-      </div>
-      <div className="habits-metric-selected-hint">
-        <strong>{props.value}</strong>
-        <span>{selectedNumberHint}</span>
-      </div>
-      <details className="habits-metric-help">
-        <summary>Что значит шкала {props.label.toLowerCase()}</summary>
-        <ul>
-          {props.scale.map((item) => <li key={item}>{item}</li>)}
-        </ul>
-      </details>
     </div>
   );
 }

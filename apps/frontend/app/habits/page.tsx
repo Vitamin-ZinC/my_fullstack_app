@@ -1356,8 +1356,6 @@ function HabitsCatalogTab(props: {
     : props.program.enrollments.filter((habit) => habit.cycle === props.selectedCycle);
   return (
     <section className="habits-panel">
-      <h2>{props.t.habitsScreen.title}</h2>
-      <p className="habits-muted">{props.t.habitsScreen.copy}</p>
       <div className="habits-cycle-tabs">
         <button className={`btn-back ${props.selectedCycle === "all" ? "active-control" : ""}`} type="button" onClick={() => props.setSelectedCycle("all")}>{props.t.habitsScreen.allCycles}</button>
         {props.program.cycles.map((cycle) => (
@@ -1404,9 +1402,7 @@ function NavigatorTab(props: {
 }) {
   return (
     <section className="habits-panel habits-chat">
-      <h2>{props.t.navigator.title}<HelpTip label={props.t.habitsUx.tooltips.navigator} /></h2>
-      <p className="habits-muted">{props.t.habitsUx.navigator.copy}</p>
-      <div className="habit-week">{props.t.habitsUx.navigator.promptTitle}</div>
+      <h2>{props.t.habitsUx.navigator.promptTitle}<HelpTip label={props.t.habitsUx.tooltips.navigator} /></h2>
       <div className="habits-tabs">
         {props.t.habitsUx.navigator.prompts.map((prompt) => (
           <button className="btn-back" type="button" key={prompt} onClick={() => props.askNavigator(prompt)}>{prompt}</button>
@@ -1452,8 +1448,6 @@ function ArchiveTab(props: {
   return (
     <div className="habits-grid">
       <section className="habits-panel habits-wide">
-        <h2>{props.t.archive.title}</h2>
-        <p className="habits-muted">{props.t.archive.copy}</p>
         <div className="habits-tabs">
           {(Object.keys(props.t.archive.filters) as ArchiveFilter[]).map((filter) => (
             <button className={`btn-back ${props.filter === filter ? "active-control" : ""}`} type="button" key={filter} onClick={() => props.setFilter(filter)}>
@@ -1576,8 +1570,7 @@ function GuideTab({ t, program }: { t: ReturnType<typeof useSiteText>["habits"][
   return (
     <div className="habits-grid">
       <section className="habits-panel">
-        <h2>{t.guide.title}</h2>
-        <p className="habits-muted">{t.guide.copy}</p>
+        <h2>{t.guide.stepsTitle}</h2>
         <div className="habits-guide-list">
           {t.guide.blocks.map((block, index) => (
             <div className="habit-detail" key={block}>
@@ -1687,8 +1680,7 @@ function SettingsTab(props: {
   return (
     <div className="habits-grid">
       <section className="habits-panel">
-        <h2>{props.t.settings.title}</h2>
-        <p className="habits-muted">{props.t.settings.copy}</p>
+        <h2>{props.t.settings.profile}</h2>
         <label className="habits-field">
           <span><User size={15} />{props.t.settings.name}</span>
           <input className="input" value={props.name} onChange={(event) => props.setName(event.target.value)} />
@@ -1991,7 +1983,7 @@ function formatTime(value: Date) {
 function readableError(reason: unknown, fallback: string) {
   if (!(reason instanceof Error)) return fallback;
   if (reason.message === "Failed to fetch" || reason.message.includes("fetch")) {
-    return "Сервер кабинета временно недоступен. Проверьте, что backend запущен.";
+    return "Сервер кабинета временно недоступен. Попробуйте позже.";
   }
   return reason.message || fallback;
 }

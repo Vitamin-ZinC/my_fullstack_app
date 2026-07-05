@@ -408,6 +408,20 @@ export type HabitWeekSummary = {
   createdAt: string;
 };
 
+export type HabitRankHistorySummary = {
+  id: string;
+  year: number;
+  month: number;
+  rankTitle: string;
+  rankLevel: number;
+  monthXp: number;
+  monthMaxXp: number;
+  monthPercent: number;
+  guruStreakCount: number;
+  legendStatus: boolean;
+  createdAt: string;
+};
+
 export type HabitProgramSummary = {
   id: string;
   status: HabitProgramStatus;
@@ -432,6 +446,7 @@ export type HabitProgramSummary = {
   rewards: HabitRewardSummary[];
   calendarEvents: HabitCalendarEventSummary[];
   weekSummaries: HabitWeekSummary[];
+  rankHistory: HabitRankHistorySummary[];
   todayTask?: HabitDailyTaskSummary | null;
   settings: {
     reminderEnabled: boolean;
@@ -441,6 +456,9 @@ export type HabitProgramSummary = {
     trialStartedAt?: string | null;
     trialEndsAt?: string | null;
     trialDaysLeft?: number | null;
+    stripeSubscriptionId?: string | null;
+    subscriptionCurrentPeriodEnd?: string | null;
+    subscriptionCancelAtPeriodEnd?: boolean;
   };
   stats: {
     xp: number;
@@ -465,6 +483,11 @@ export type HabitProgramSummary = {
       monthXp?: number;
       monthMaxXp?: number;
       monthPercent?: number;
+      color?: string;
+      shape?: string;
+      badge?: string;
+      guruStreakCount?: number;
+      legendStatus?: boolean;
     };
   };
 };

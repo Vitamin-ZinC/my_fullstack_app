@@ -308,6 +308,12 @@ model HabitProgram {
   trialStartedAt DateTime?
   trialEndsAt DateTime?
   subscriptionStatus String     @default("TRIAL")
+  stripeSubscriptionId String?  @unique
+  subscriptionCurrentPeriodEnd DateTime?
+  subscriptionCancelAtPeriodEnd Boolean @default(false)
+  currentRankProvisional String?
+  guruStreakCount Int           @default(0)
+  legendStatus Boolean          @default(false)
   startedAt   DateTime           @default(now())
   createdAt   DateTime           @default(now())
   updatedAt   DateTime           @updatedAt
@@ -319,6 +325,7 @@ model HabitProgram {
   dailyTasks  HabitDailyTask[]
   calendarEvents HabitCalendarEvent[]
   weekSummaries HabitWeekSummary[]
+  rankHistory HabitRankHistory[]
   navigatorThreads HabitNavigatorThread[]
   notificationPreference HabitNotificationPreference?
 
@@ -326,6 +333,26 @@ model HabitProgram {
   @@index([sessionId, status, createdAt])
   @@index([analysisId])
   @@index([status, currentCycle, currentWeek])
+}
+
+model HabitRankHistory {
+  id             String       @id @default(cuid())
+  programId      String
+  program        HabitProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+  year           Int
+  month          Int
+  rankTitle      String
+  rankLevel      Int
+  monthXp        Int
+  monthMaxXp     Int
+  monthPercent   Int
+  guruStreakCount Int        @default(0)
+  legendStatus   Boolean    @default(false)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  @@unique([programId, year, month])
+  @@index([programId, createdAt])
 }
 
 model HabitEnrollment {

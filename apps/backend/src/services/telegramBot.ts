@@ -587,18 +587,18 @@ async function defaultKeyboard(account?: { telegramUserId?: string; userId?: str
   const keyboard = {
     inline_keyboard: [
       [
-        { text: "Today", callback_data: "today" },
-        { text: "Done", callback_data: "checkin" }
+        { text: "📍 Сегодня", callback_data: "today" },
+        { text: "✅ Отметить", callback_data: "checkin" }
       ],
       [
-        { text: "Metrics", callback_data: "metrics" }
+        { text: "📊 Метрики", callback_data: "metrics" }
       ]
     ] as Array<Array<{ text: string; callback_data?: string; url?: string }>>
   };
   const cabinetUrl = await buildTelegramWebLoginUrl(account);
   if (cabinetUrl) {
     keyboard.inline_keyboard.push([
-      { text: "Open cabinet", url: cabinetUrl }
+      { text: "Открыть кабинет", url: cabinetUrl }
     ]);
   }
   return keyboard;
@@ -606,11 +606,11 @@ async function defaultKeyboard(account?: { telegramUserId?: string; userId?: str
 function helpText() {
   return [
     "Команды ORKEN.LIFE:",
-    "/today - сегодняшний шаг",
-    "/checkin - отметить день",
-    "/metrics - последние показатели",
-    "/insight текст - сохранить инсайт",
-    "/pingvi вопрос - спросить Пингви",
-    "/stop - отключить Telegram"
+    "/today - показать сегодняшний шаг",
+    "/checkin - отметить выполнение",
+    "/metrics - показать последние показатели",
+    "/insight текст - сохранить инсайт в архив",
+    "/pingvi вопрос - спросить Пингви с учетом привычек",
+    "/stop - отключить Telegram-напоминания"
   ].join("\n");
 }

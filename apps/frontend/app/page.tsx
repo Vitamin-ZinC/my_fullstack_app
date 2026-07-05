@@ -6,14 +6,12 @@ import { IkigaiPremiumMap } from "@/components/IkigaiPremiumMap";
 import { api } from "@/lib/api";
 import { useSiteText } from "@/lib/useSiteText";
 
-type CabinetTab = "dashboard" | "journey" | "subscription";
-
 export default function LandingPage() {
   const text = useSiteText();
   const landing = text.landing;
   const [reportPriceLabel, setReportPriceLabel] = useState("$3");
   const [habitPriceLabel, setHabitPriceLabel] = useState("$8");
-  const [habitTrialDays, setHabitTrialDays] = useState(14);
+  const [habitTrialDays, setHabitTrialDays] = useState(30);
 
   useEffect(() => {
     let cancelled = false;
@@ -36,7 +34,7 @@ export default function LandingPage() {
       .catch(() => {
         if (!cancelled) {
           setHabitPriceLabel("$8");
-          setHabitTrialDays(14);
+          setHabitTrialDays(30);
         }
       });
 
@@ -65,7 +63,11 @@ export default function LandingPage() {
               </h1>
               <p className="muted landing-sub">{landing.subtitle}</p>
               <p className="very-muted landing-lead">{renderLandingLead(landing.lead)}</p>
-              <a className="btn-primary" data-testid="landing-start-primary" href="/flow/voice">{landing.cta}</a>
+              <div className="landing-hero-bridge">{landing.heroBridge}</div>
+              <div className="landing-hero-actions">
+                <a className="btn-primary" data-testid="landing-start-primary" href="/flow/voice">{landing.cta}</a>
+                <a className="btn-back landing-secondary-cta" href="/habits">{landing.habitsCta}</a>
+              </div>
               <p className="very-muted landing-note">{landing.note}</p>
             </section>
 
@@ -124,11 +126,6 @@ export default function LandingPage() {
               habitTrialDays={habitTrialDays}
             />
 
-            <CabinetSection
-              habitPriceLabel={habitPriceLabel}
-              habitTrialDays={habitTrialDays}
-            />
-
             <section className="landing-section compact">
               <div className="card cyan-border card-lg ikigai-landing-card">
                 <h2 className="ub cyan landing-card-title">{landing.modelTitle}</h2>
@@ -156,9 +153,17 @@ export default function LandingPage() {
             <section className="landing-section final">
               <h2 className="ub landing-final-title">{landing.finalTitle}</h2>
               <p className="landing-final-copy">{landing.finalCopy}</p>
-              <a className="btn-primary" data-testid="landing-start-final" href="/flow/voice">{landing.cta}</a>
+              <div className="landing-hero-actions">
+                <a className="btn-primary" data-testid="landing-start-final" href="/flow/voice">{landing.cta}</a>
+                <a className="btn-back landing-secondary-cta" href="/habits">{landing.habitsCta}</a>
+              </div>
               <p className="very-muted landing-note center">{landing.finalNote}</p>
             </section>
+            <footer className="landing-footer">
+              <span>{text.nav.brand}</span>
+              <a href="https://instagram.com/orken.life" target="_blank" rel="noreferrer">Instagram</a>
+              <a href="https://www.threads.net/@orken.life" target="_blank" rel="noreferrer">Threads</a>
+            </footer>
           </div>
         </main>
       </div>
@@ -206,74 +211,6 @@ function ProductSection({ habitPriceLabel, habitTrialDays, reportPriceLabel }: {
           </div>
           <a className="btn-primary" href="/habits">{landing.habitsProduct.cta}</a>
         </article>
-      </div>
-    </section>
-  );
-}
-
-function CabinetSection({ habitPriceLabel, habitTrialDays }: { habitPriceLabel: string; habitTrialDays: number }) {
-  const { landing } = useSiteText();
-  const [activeTab, setActiveTab] = useState<CabinetTab>("dashboard");
-  const copy = landing.cabinetPreview;
-  const tabContent = {
-    dashboard: {
-      title: copy.dashboardTitle,
-      body: copy.dashboardCopy,
-      details: ["30/30 дней", "XP и звание", "карта года"]
-    },
-    journey: {
-      title: copy.journeyTitle,
-      body: copy.journeyCopy,
-      details: ["привычка дня", "состояние", "инсайт"]
-    },
-    subscription: {
-      title: copy.subscriptionTitle,
-      body: copy.subscriptionCopy,
-      details: [formatTemplate(copy.trialBadge, { days: habitTrialDays }), "active / paused / cancelled", "Stripe"]
-    }
-  } satisfies Record<CabinetTab, { title: string; body: string; details: string[] }>;
-  const active = tabContent[activeTab];
-
-  return (
-    <section className="landing-section compact" id="cabinet">
-      <div className="card card-lg landing-cabinet-card">
-        <div className="landing-section-head">
-          <h2 className="ub landing-card-title">{landing.cabinetTitle}</h2>
-          <p className="landing-small-copy">{landing.cabinetSubtitle}</p>
-        </div>
-        <div className="landing-cabinet-layout">
-          <div className="landing-cabinet-tabs" role="tablist" aria-label={landing.cabinetTitle}>
-            {(Object.keys(landing.cabinetTabs) as CabinetTab[]).map((tab) => (
-              <button
-                key={tab}
-                className={activeTab === tab ? "active" : ""}
-                type="button"
-                role="tab"
-                aria-selected={activeTab === tab}
-                onClick={() => setActiveTab(tab)}
-              >
-                {landing.cabinetTabs[tab]}
-              </button>
-            ))}
-          </div>
-          <div className="landing-cabinet-preview" role="tabpanel">
-            <div className="landing-cabinet-status">{formatTemplate(copy.trialBadge, { days: habitTrialDays })}</div>
-            <h3 className="ub">{active.title}</h3>
-            <p>{active.body}</p>
-            <div className="landing-cabinet-detail-grid">
-              {active.details.map((detail) => (
-                <span key={detail}>{detail}</span>
-              ))}
-            </div>
-            {activeTab === "subscription" && (
-              <div className="landing-subscription-actions">
-                <button className="btn-primary" type="button">{formatTemplate(copy.subscribe, { price: habitPriceLabel })}</button>
-                <button className="btn-back" type="button">{copy.pause}</button>
-                <button className="btn-back danger" type="button">{copy.cancel}</button>
-              </div>
-            )}
-          </div>
-        </div>
       </div>
     </section>
   );

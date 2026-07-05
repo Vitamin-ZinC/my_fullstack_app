@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import type { Prisma } from "@prisma/client";
+import Stripe from "stripe";
 import { z } from "zod";
 import { env } from "../env.js";
 import { requireAnalysisAccess, requireSession, type SessionContext } from "../lib/auth.js";
@@ -10,6 +11,8 @@ import { getHabitAiSettings, HABIT_WEEK_SUMMARY_MODE_LLM } from "../services/hab
 import { askHabitNavigator } from "../services/habitNavigator.js";
 import { getOpenAiClient, hasOpenAiClient } from "../services/openaiClient.js";
 import { getHabitSubscriptionConfig } from "../services/pricing.js";
+
+const stripe = env.STRIPE_SECRET_KEY ? new Stripe(env.STRIPE_SECRET_KEY) : null;
 
 const navigatorMessageSchema = z.object({
   role: z.enum(["user", "assistant"]),
@@ -107,6 +110,10 @@ const calendarEventSchema = z.object({
   durationMinutes: z.number().int().min(5).max(180).default(15)
 });
 
+const subscriptionProgramSchema = z.object({
+  programId: z.string()
+});
+
 type NavigatorContext = z.infer<typeof navigatorContextSchema>;
 type WeekCompletionMode = "FULL" | "SOFT" | "FROZEN";
 type WeekReward = {
@@ -130,9 +137,10 @@ export async function habitsRoutes(app: FastifyInstance) {
     ]);
     const syncedProgram = program ? await ensureProgramEnrollments(program.id, program.weakZone) : null;
     const preparedProgram = syncedProgram ? await ensureProgramRuntimeArtifacts(syncedProgram.id) : null;
+    const rankedProgram = preparedProgram ? await syncHabitRankState(preparedProgram) : null;
 
     return {
-      program: preparedProgram ? serializeProgram(preparedProgram) : null,
+      program: rankedProgram ? serializeProgram(rankedProgram) : null,
       latestReport,
       config
     };
@@ -683,6 +691,160 @@ export async function habitsRoutes(app: FastifyInstance) {
     return buildProgramResponse(updated);
   });
 
+  app.post("/api/habits/subscription/checkout", async (request, reply) => {
+    const session = await requireSession(request, reply);
+    if (!session) return;
+    const body = subscriptionProgramSchema.parse(request.body ?? {});
+    const programAccess = await requireHabitProgram(session, reply, body.programId);
+    if (!programAccess) return;
+
+    const [program, config] = await Promise.all([
+      prisma.habitProgram.findUniqueOrThrow({
+        where: { id: body.programId },
+        select: { id: true, userId: true, sessionId: true, title: true, subscriptionStatus: true }
+      }),
+      getHabitSubscriptionConfig()
+    ]);
+
+    if (!stripe) {
+      if (env.NODE_ENV === "production" || !env.DEV_TOOLS_ENABLED) {
+        return reply.code(501).send({ error: "Stripe is not configured" });
+      }
+      await prisma.habitProgram.update({
+        where: { id: body.programId },
+        data: {
+          subscriptionStatus: "ACTIVE",
+          subscriptionCancelAtPeriodEnd: false
+        }
+      });
+      await prisma.analyticsEvent.create({
+        data: {
+          name: "habit_subscription_dev_activated",
+          locale: session.locale,
+          sessionId: session.id,
+          userId: session.userId,
+          properties: { programId: body.programId }
+        }
+      });
+      return buildProgramResponse(await loadProgram(body.programId));
+    }
+
+    const checkout = await stripe.checkout.sessions.create({
+      mode: "subscription",
+      client_reference_id: program.id,
+      success_url: `${env.APP_ORIGIN}/habits?subscription=active&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${env.APP_ORIGIN}/habits?subscription=cancelled`,
+      line_items: [{
+        quantity: 1,
+        price_data: {
+          currency: config.currency,
+          unit_amount: config.amount,
+          recurring: { interval: "month" },
+          product_data: {
+            name: "ORKEN.LIFE Навигатор привычек"
+          }
+        }
+      }],
+      metadata: {
+        kind: "habit_subscription",
+        programId: program.id,
+        sessionId: program.sessionId ?? session.id,
+        userId: program.userId ?? session.userId ?? ""
+      },
+      subscription_data: {
+        metadata: {
+          kind: "habit_subscription",
+          programId: program.id,
+          sessionId: program.sessionId ?? session.id,
+          userId: program.userId ?? session.userId ?? ""
+        }
+      }
+    });
+
+    if (!checkout.url) return reply.code(502).send({ error: "Stripe Checkout did not return a redirect URL" });
+    await prisma.analyticsEvent.create({
+      data: {
+        name: "habit_subscription_checkout_started",
+        locale: session.locale,
+        sessionId: session.id,
+        userId: session.userId,
+        properties: { programId: body.programId, checkoutSessionId: checkout.id }
+      }
+    });
+    return { url: checkout.url, sessionId: checkout.id };
+  });
+
+  app.post("/api/habits/subscription/pause", async (request, reply) => {
+    const session = await requireSession(request, reply);
+    if (!session) return;
+    const body = subscriptionProgramSchema.parse(request.body ?? {});
+    const programAccess = await requireHabitProgram(session, reply, body.programId);
+    if (!programAccess) return;
+
+    const program = await prisma.habitProgram.findUniqueOrThrow({
+      where: { id: body.programId },
+      select: { id: true, stripeSubscriptionId: true }
+    });
+    if (stripe && program.stripeSubscriptionId) {
+      await stripe.subscriptions.update(program.stripeSubscriptionId, {
+        pause_collection: { behavior: "void" },
+        metadata: { programId: body.programId, kind: "habit_subscription" }
+      });
+    }
+
+    await prisma.habitProgram.update({
+      where: { id: body.programId },
+      data: { subscriptionStatus: "PAUSED" }
+    });
+    await prisma.analyticsEvent.create({
+      data: {
+        name: "habit_subscription_paused",
+        locale: session.locale,
+        sessionId: session.id,
+        userId: session.userId,
+        properties: { programId: body.programId }
+      }
+    });
+    return buildProgramResponse(await loadProgram(body.programId));
+  });
+
+  app.post("/api/habits/subscription/cancel", async (request, reply) => {
+    const session = await requireSession(request, reply);
+    if (!session) return;
+    const body = subscriptionProgramSchema.parse(request.body ?? {});
+    const programAccess = await requireHabitProgram(session, reply, body.programId);
+    if (!programAccess) return;
+
+    const program = await prisma.habitProgram.findUniqueOrThrow({
+      where: { id: body.programId },
+      select: { id: true, stripeSubscriptionId: true }
+    });
+    if (stripe && program.stripeSubscriptionId) {
+      await stripe.subscriptions.update(program.stripeSubscriptionId, {
+        cancel_at_period_end: true,
+        metadata: { programId: body.programId, kind: "habit_subscription" }
+      });
+    }
+
+    await prisma.habitProgram.update({
+      where: { id: body.programId },
+      data: {
+        subscriptionStatus: "CANCEL_AT_PERIOD_END",
+        subscriptionCancelAtPeriodEnd: true
+      }
+    });
+    await prisma.analyticsEvent.create({
+      data: {
+        name: "habit_subscription_cancel_scheduled",
+        locale: session.locale,
+        sessionId: session.id,
+        userId: session.userId,
+        properties: { programId: body.programId }
+      }
+    });
+    return buildProgramResponse(await loadProgram(body.programId));
+  });
+
   app.post("/api/habits/advance", async (request, reply) => {
     const session = await requireSession(request, reply);
     if (!session) return;
@@ -882,6 +1044,10 @@ function programInclude() {
     weekSummaries: {
       orderBy: { createdAt: "desc" as const },
       include: { enrollment: { select: { title: true } } }
+    },
+    rankHistory: {
+      orderBy: [{ year: "desc" as const }, { month: "desc" as const }],
+      take: 18
     }
   };
 }
@@ -985,8 +1151,9 @@ async function ensureProgramEnrollments(programId: string, weakZone: string | nu
 
 async function buildProgramResponse(program: any) {
   const preparedProgram = await ensureProgramRuntimeArtifacts(program.id);
+  const syncedProgram = await syncHabitRankState(preparedProgram);
   return {
-    program: serializeProgram(preparedProgram),
+    program: serializeProgram(syncedProgram),
     config: await getHabitSubscriptionConfig()
   };
 }
@@ -1335,12 +1502,7 @@ function serializeProgram(program: any) {
     ? Math.max(0, Math.ceil((program.trialEndsAt.getTime() - now.getTime()) / 86400000))
     : null;
   const completedWeekCheckins = activeEnrollment?.checkinsDone ?? 0;
-  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-  const monthRewards = program.rewards.filter((reward: any) => reward.createdAt >= monthStart);
-  const monthXp = monthRewards.reduce((sum: number, reward: any) => sum + reward.xp, 0);
-  const daysElapsedThisMonth = Math.max(1, daysBetween(monthStart, now));
-  const weeksClosedThisMonth = (program.weekSummaries ?? []).filter((summary: any) => summary.createdAt >= monthStart).length;
-  const monthMaxXp = (daysElapsedThisMonth * 40) + (Math.max(1, weeksClosedThisMonth) * 50);
+  const rankContext = calculateHabitRankContext(program, currentSortOrder, now);
 
   return {
     id: program.id,
@@ -1412,6 +1574,19 @@ function serializeProgram(program: any) {
       xpAwarded: summary.xpAwarded,
       createdAt: summary.createdAt.toISOString()
     })),
+    rankHistory: (program.rankHistory ?? []).map((rank: any) => ({
+      id: rank.id,
+      year: rank.year,
+      month: rank.month,
+      rankTitle: rank.rankTitle,
+      rankLevel: rank.rankLevel,
+      monthXp: rank.monthXp,
+      monthMaxXp: rank.monthMaxXp,
+      monthPercent: rank.monthPercent,
+      guruStreakCount: rank.guruStreakCount ?? 0,
+      legendStatus: Boolean(rank.legendStatus),
+      createdAt: rank.createdAt.toISOString()
+    })),
     todayTask: activeEnrollment?.todayTask ?? null,
     settings: {
       reminderEnabled: program.reminderEnabled ?? true,
@@ -1420,7 +1595,10 @@ function serializeProgram(program: any) {
       subscriptionStatus: program.subscriptionStatus ?? "TRIAL",
       trialStartedAt: program.trialStartedAt?.toISOString() ?? null,
       trialEndsAt: program.trialEndsAt?.toISOString() ?? null,
-      trialDaysLeft
+      trialDaysLeft,
+      stripeSubscriptionId: program.stripeSubscriptionId ?? null,
+      subscriptionCurrentPeriodEnd: program.subscriptionCurrentPeriodEnd?.toISOString() ?? null,
+      subscriptionCancelAtPeriodEnd: Boolean(program.subscriptionCancelAtPeriodEnd)
     },
     stats: {
       xp,
@@ -1435,21 +1613,96 @@ function serializeProgram(program: any) {
       completedWeekCheckins,
       weekProgress: Math.min(100, Math.round((completedWeekCheckins / 7) * 100)),
       wellnessScore,
-      rank: getHabitRank(monthXp, currentSortOrder, monthMaxXp)
+      rank: rankContext.rank
     }
   };
 }
 
 const HABIT_RANKS = [
-  { minPercent: 0, title: "Новичок пути" },
-  { minPercent: 20, title: "Искатель баланса" },
-  { minPercent: 40, title: "Практик осознанности" },
-  { minPercent: 60, title: "Хранитель энергии" },
-  { minPercent: 80, title: "Мастер равновесия" },
-  { minPercent: 95, title: "Гуру Икигай" }
+  { minPercent: 0, title: "Новичок пути", color: "#64748b", shape: "circle-outline", badge: "○" },
+  { minPercent: 20, title: "Искатель баланса", color: "#00d4ff", shape: "circle-dot", badge: "●" },
+  { minPercent: 40, title: "Практик осознанности", color: "#2dd4bf", shape: "crossing-arcs", badge: "✦" },
+  { minPercent: 60, title: "Хранитель энергии", color: "#a855f7", shape: "rays", badge: "✧" },
+  { minPercent: 80, title: "Мастер равновесия", color: "#f5b342", shape: "four-rays", badge: "✹" },
+  { minPercent: 95, title: "Гуру Икигай", color: "#ffb800", shape: "ikigai-four-circles", badge: "✺" }
 ] as const;
 
-function getHabitRank(monthXp: number, currentSortOrder: number, monthMaxXp: number) {
+function calculateHabitRankContext(program: any, currentSortOrder: number, now = new Date()) {
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const monthRewards = (program.rewards ?? []).filter((reward: any) => reward.createdAt >= monthStart);
+  const monthXp = monthRewards.reduce((sum: number, reward: any) => sum + reward.xp, 0);
+  const daysElapsedThisMonth = Math.max(1, daysBetween(monthStart, now));
+  const weeksClosedThisMonth = (program.weekSummaries ?? []).filter((summary: any) => summary.createdAt >= monthStart).length;
+  const monthMaxXp = (daysElapsedThisMonth * 40) + (Math.max(1, weeksClosedThisMonth) * 50);
+  const rank = getHabitRank(monthXp, currentSortOrder, monthMaxXp, program.guruStreakCount ?? 0, Boolean(program.legendStatus));
+  return {
+    year: now.getUTCFullYear(),
+    month: now.getUTCMonth() + 1,
+    monthXp,
+    monthMaxXp,
+    rank
+  };
+}
+
+async function syncHabitRankState(program: any) {
+  const currentCycle = clampInteger(program.currentCycle, 1, HABIT_CYCLES.length);
+  const currentWeek = clampInteger(program.currentWeek, 1, HABIT_WEEKS_PER_CYCLE);
+  const currentSortOrder = Math.min(((currentCycle - 1) * HABIT_WEEKS_PER_CYCLE) + currentWeek, program.enrollments.length || 1);
+  const context = calculateHabitRankContext(program, currentSortOrder);
+  const previousTitle = program.currentRankProvisional ?? null;
+  const rankChanged = Boolean(previousTitle && previousTitle !== context.rank.title);
+  const guruStreakCount = context.rank.level >= 6 ? Math.max(1, program.guruStreakCount ?? 0) : 0;
+  const legendStatus = Boolean(program.legendStatus) || guruStreakCount >= 3;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.habitProgram.update({
+      where: { id: program.id },
+      data: {
+        currentRankProvisional: context.rank.title,
+        guruStreakCount,
+        legendStatus
+      }
+    });
+    await tx.habitRankHistory.upsert({
+      where: { programId_year_month: { programId: program.id, year: context.year, month: context.month } },
+      update: {
+        rankTitle: context.rank.title,
+        rankLevel: context.rank.level,
+        monthXp: context.monthXp,
+        monthMaxXp: context.monthMaxXp,
+        monthPercent: context.rank.monthPercent ?? 0,
+        guruStreakCount,
+        legendStatus
+      },
+      create: {
+        programId: program.id,
+        year: context.year,
+        month: context.month,
+        rankTitle: context.rank.title,
+        rankLevel: context.rank.level,
+        monthXp: context.monthXp,
+        monthMaxXp: context.monthMaxXp,
+        monthPercent: context.rank.monthPercent ?? 0,
+        guruStreakCount,
+        legendStatus
+      }
+    });
+    if (rankChanged) {
+      await tx.habitRewardEvent.create({
+        data: {
+          programId: program.id,
+          type: "rank_changed",
+          label: `Новое звание: ${context.rank.title}`,
+          xp: 0
+        }
+      });
+    }
+  });
+
+  return loadProgram(program.id);
+}
+
+function getHabitRank(monthXp: number, currentSortOrder: number, monthMaxXp: number, guruStreakCount = 0, legendStatus = false) {
   const monthPercent = monthMaxXp > 0 ? Math.min(100, Math.round((monthXp / monthMaxXp) * 100)) : 0;
   let index = 0;
   for (let rankIndex = HABIT_RANKS.length - 1; rankIndex >= 0; rankIndex -= 1) {
@@ -1472,7 +1725,12 @@ function getHabitRank(monthXp: number, currentSortOrder: number, monthMaxXp: num
     currentSortOrder,
     monthXp,
     monthMaxXp,
-    monthPercent
+    monthPercent,
+    color: current.color,
+    shape: current.shape,
+    badge: current.badge,
+    guruStreakCount,
+    legendStatus
   };
 }
 

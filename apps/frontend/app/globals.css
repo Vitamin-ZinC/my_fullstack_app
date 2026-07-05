@@ -1428,16 +1428,14 @@ svg {
   gap: 14px;
 }
 
-.landing-product-card h3,
-.landing-cabinet-preview h3 {
+.landing-product-card h3 {
   margin: 0;
   font-size: 16px;
   line-height: 1.35;
   letter-spacing: 0;
 }
 
-.landing-product-card p,
-.landing-cabinet-preview p {
+.landing-product-card p {
   margin: 0;
   font-size: 12px;
   line-height: 1.65;
@@ -1510,85 +1508,49 @@ svg {
   font-size: 11px;
 }
 
-.landing-cabinet-card {
-  overflow: hidden;
-}
-
-.landing-cabinet-layout {
-  display: grid;
-  grid-template-columns: 190px minmax(0, 1fr);
-  gap: 16px;
-  align-items: stretch;
-}
-
-.landing-cabinet-tabs {
-  display: grid;
-  align-content: start;
-  gap: 8px;
-}
-
-.landing-cabinet-tabs button {
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.035);
-  color: rgba(255, 255, 255, 0.66);
-  border-radius: 12px;
-  padding: 11px 12px;
-  text-align: left;
-  cursor: pointer;
-  font: inherit;
-}
-
-.landing-cabinet-tabs button.active,
-.landing-cabinet-tabs button:focus-visible {
-  color: #fff;
-  border-color: rgba(0, 212, 255, 0.34);
-  background: rgba(0, 212, 255, 0.11);
-  outline: none;
-}
-
-.landing-cabinet-preview {
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background:
-    radial-gradient(circle at 88% 12%, rgba(176, 132, 255, 0.14), transparent 28%),
-    rgba(255, 255, 255, 0.035);
-  border-radius: 16px;
-  padding: 18px;
-  display: grid;
-  gap: 14px;
-}
-
-.landing-cabinet-status {
-  justify-self: start;
+.landing-hero-bridge {
   border: 1px solid rgba(0, 212, 255, 0.24);
-  background: rgba(0, 212, 255, 0.08);
-  color: var(--cyan);
-  border-radius: 999px;
-  padding: 7px 10px;
-  font-size: 11px;
-  line-height: 1;
-}
-
-.landing-cabinet-detail-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.landing-cabinet-detail-grid span {
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
-  padding: 10px;
-  color: rgba(255, 255, 255, 0.72);
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(0, 212, 255, 0.12), rgba(155, 93, 229, 0.08));
+  color: rgba(255, 255, 255, 0.78);
   font-size: 12px;
-  min-height: 42px;
+  line-height: 1.55;
+  padding: 12px 14px;
+}
+
+.landing-hero-actions {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+}
+
+.landing-secondary-cta {
+  display: inline-flex;
+  justify-content: center;
+  min-height: 46px;
+  align-items: center;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.landing-footer {
   display: flex;
   align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 0 0 28px;
+  color: rgba(255, 255, 255, 0.48);
+  font-size: 12px;
 }
 
-.landing-subscription-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
+.landing-footer span {
+  color: var(--cyan);
+  font-family: "Unbounded", sans-serif;
+  font-weight: 800;
+}
+
+.landing-footer a:hover {
+  color: #fff;
 }
 
 .btn-back.danger {
@@ -1597,36 +1559,8 @@ svg {
 }
 
 @media (max-width: 520px) {
-  .landing-product-grid,
-  .landing-cabinet-layout,
-  .landing-cabinet-detail-grid {
+  .landing-product-grid {
     grid-template-columns: 1fr;
-  }
-
-  .landing-cabinet-tabs {
-    display: flex;
-    overflow-x: auto;
-    padding-bottom: 2px;
-    scrollbar-width: none;
-  }
-
-  .landing-cabinet-tabs::-webkit-scrollbar {
-    display: none;
-  }
-
-  .landing-cabinet-tabs button {
-    white-space: nowrap;
-    text-align: center;
-  }
-
-  .landing-subscription-actions {
-    display: grid;
-  }
-
-  .landing-subscription-actions .btn-primary,
-  .landing-subscription-actions .btn-back {
-    width: 100%;
-    justify-content: center;
   }
 }
 
@@ -3001,6 +2935,11 @@ svg {
   border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
+.habits-sidebar-avatar-wrap {
+  position: relative;
+  flex: none;
+}
+
 .habits-sidebar-avatar {
   width: 34px;
   height: 34px;
@@ -3012,6 +2951,24 @@ svg {
   font-family: "Unbounded", sans-serif;
   font-size: 13px;
   overflow: hidden;
+}
+
+.habits-rank-badge {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border: 1px solid color-mix(in srgb, var(--rank-color, var(--cyan)) 70%, #fff 10%);
+  border-radius: 50%;
+  background: #071426;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--rank-color, var(--cyan)) 55%, transparent);
+  color: var(--rank-color, var(--cyan));
+  font-family: "Unbounded", sans-serif;
+  font-size: 9px;
+  font-weight: 900;
 }
 
 .habits-sidebar-avatar img,
@@ -3048,6 +3005,24 @@ svg {
   color: #fff;
   font-family: "Unbounded", sans-serif;
   font-size: 16px;
+}
+
+.habits-file-upload {
+  position: relative;
+  width: fit-content;
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.habits-file-upload input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .habits-week-month-group {
@@ -3331,6 +3306,51 @@ svg {
     linear-gradient(135deg, rgba(0, 212, 255, 0.1), rgba(16, 185, 129, 0.06)),
     rgba(255, 255, 255, 0.04);
   padding: 18px;
+}
+
+.habits-day-plan-card {
+  display: grid;
+  gap: 10px;
+  border: 1px solid rgba(0, 212, 255, 0.18);
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(0, 212, 255, 0.1), rgba(16, 185, 129, 0.05)),
+    rgba(2, 11, 24, 0.42);
+  padding: 16px;
+}
+
+.habits-day-plan-row {
+  display: grid;
+  grid-template-columns: 128px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  padding-top: 10px;
+}
+
+.habits-day-plan-row:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.habits-day-plan-row span {
+  color: rgba(148, 163, 184, 0.88);
+  font-size: 12px;
+}
+
+.habits-day-plan-row strong {
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.habits-day-plan-row.primary strong {
+  color: #fff;
+}
+
+.habits-day-plan-row.compact strong {
+  color: var(--cyan);
+  font-family: "Unbounded", sans-serif;
 }
 
 .habits-coachmark {
@@ -3824,15 +3844,106 @@ svg {
 .habits-old-stat-card strong {
   color: var(--tile-color, #fff);
   font-family: "Unbounded", sans-serif;
-  font-size: 20px;
+  font-size: clamp(16px, 4vw, 20px);
   line-height: 1.2;
   max-width: 100%;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 .habits-old-stat-card span {
   color: rgba(148, 163, 184, 0.86);
   font-size: 12px;
+}
+
+.habits-rank-overview {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.habits-rank-overview-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 0% 0%, color-mix(in srgb, var(--rank-color, var(--cyan)) 12%, transparent), transparent 36%),
+    rgba(2, 11, 24, 0.48);
+  padding: 14px;
+}
+
+.habits-rank-overview-card.reward {
+  background:
+    radial-gradient(circle at 100% 0%, rgba(255, 184, 0, 0.12), transparent 36%),
+    rgba(2, 11, 24, 0.48);
+}
+
+.habits-rank-overview-card span,
+.habits-rank-overview-card p {
+  color: rgba(226, 232, 240, 0.58);
+  font-size: 12px;
+}
+
+.habits-rank-overview-card h3 {
+  margin: 2px 0 3px;
+  color: #fff;
+  font-family: "Unbounded", sans-serif;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.habits-rank-overview-card p {
+  margin: 0;
+  line-height: 1.4;
+}
+
+.habits-rank-overview-card > strong {
+  color: var(--gold);
+  font-family: "Unbounded", sans-serif;
+  font-size: 16px;
+  white-space: nowrap;
+}
+
+.habits-rank-emblem {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border: 1px solid color-mix(in srgb, var(--rank-color, var(--cyan)) 58%, transparent);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, color-mix(in srgb, var(--rank-color, var(--cyan)) 22%, transparent) 0 30%, transparent 31%),
+    rgba(255, 255, 255, 0.04);
+  box-shadow: 0 0 20px color-mix(in srgb, var(--rank-color, var(--cyan)) 22%, transparent);
+  color: var(--rank-color, var(--cyan));
+  font-family: "Unbounded", sans-serif;
+  font-size: 15px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.habits-rank-emblem.large {
+  width: 46px;
+  height: 46px;
+  font-size: 20px;
+}
+
+.habits-rank-reward-icon,
+.habits-reward-emoji {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  line-height: 1;
+}
+
+.habits-rank-reward-icon {
+  width: 46px;
+  height: 46px;
+  font-size: 26px;
 }
 
 .habits-dashboard-hero-head {
@@ -3920,25 +4031,41 @@ svg {
 }
 
 .habits-cycle-meter {
+  position: relative;
+  width: 112px;
   min-height: 112px;
   display: grid;
-  place-items: center;
-  border-radius: 16px;
-  background:
-    radial-gradient(circle at center, #020b18 0 54%, transparent 55%),
-    conic-gradient(var(--cycle-color, var(--cyan)) var(--cycle-progress, 0%), rgba(255, 255, 255, 0.09) 0);
+  align-content: center;
+  justify-items: center;
+  gap: 2px;
+  border-radius: 50%;
+  background: conic-gradient(var(--cycle-color, var(--cyan)) var(--cycle-progress, 0%), rgba(255, 255, 255, 0.09) 0);
   border: 1px solid rgba(0, 212, 255, 0.18);
   border: 1px solid color-mix(in srgb, var(--cycle-color, var(--cyan)) 30%, transparent);
   text-align: center;
+  box-shadow: 0 0 24px color-mix(in srgb, var(--cycle-color, var(--cyan)) 12%, transparent);
+}
+
+.habits-cycle-meter::before {
+  content: "";
+  position: absolute;
+  inset: 10px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: #07111f;
 }
 
 .habits-cycle-meter strong {
+  position: relative;
+  z-index: 1;
   color: #fff;
   font-family: "Unbounded", sans-serif;
-  font-size: 22px;
+  font-size: 21px;
 }
 
 .habits-cycle-meter span {
+  position: relative;
+  z-index: 1;
   color: rgba(226, 232, 240, 0.52);
   font-size: 11px;
 }
@@ -4404,6 +4531,55 @@ svg {
   margin-bottom: 4px;
 }
 
+.habits-action-help-grid.compact {
+  margin-top: 16px;
+}
+
+.habits-guide-shell {
+  display: grid;
+  gap: 16px;
+}
+
+.habits-guide-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.habits-rank-inline {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.habits-rank-inline h3,
+.habits-rank-inline p {
+  margin: 0;
+}
+
+.habits-week-reward {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.habits-week-reward .habits-reward-emoji {
+  font-size: 20px;
+  margin-top: 1px;
+}
+
+.habits-week-reward strong,
+.habits-week-reward span {
+  display: block;
+}
+
+.habits-week-reward span {
+  color: rgba(226, 232, 240, 0.7);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .habits-closed-weeks {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -4509,7 +4685,7 @@ svg {
 .habits-progress-ring-track,
 .habits-progress-ring-value {
   fill: none;
-  stroke-width: 12;
+  stroke-width: 7;
 }
 
 .habits-progress-ring-track {
@@ -4861,6 +5037,7 @@ p {
   .habits-status-strip,
   .habits-chat-form,
   .habits-form-row,
+  .habits-rank-overview,
   .habits-wellness-row,
   .habits-cycle-map,
   .habits-habit-grid,
@@ -4877,6 +5054,15 @@ p {
 
   .habits-current-cycle-card {
     grid-template-columns: 1fr;
+  }
+
+  .habits-rank-overview-card,
+  .habits-day-plan-row {
+    grid-template-columns: 1fr;
+  }
+
+  .habits-rank-overview-card > strong {
+    justify-self: start;
   }
 
   .habits-cycle-meter {
@@ -4905,10 +5091,33 @@ p {
 
   .habits-coachmark {
     right: 12px;
-    bottom: 12px;
-    width: calc(100vw - 24px);
-    max-height: min(72vh, 520px);
+    bottom: 76px;
+    width: min(340px, calc(100vw - 24px));
+    max-height: min(44vh, 360px);
+    padding: 12px;
     overflow-y: auto;
+  }
+
+  .habits-coachmark h2 {
+    font-size: 15px;
+  }
+
+  .habits-coachmark p {
+    display: none;
+  }
+
+  .habits-coachmark-steps {
+    display: none;
+  }
+
+  .habits-coachmark .habits-action-row {
+    gap: 6px;
+  }
+
+  .habits-coachmark .button {
+    min-height: 38px;
+    padding: 8px 10px;
+    font-size: 11px;
   }
 
   .habits-onboarding-shell {

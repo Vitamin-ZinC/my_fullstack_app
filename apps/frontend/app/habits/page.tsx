@@ -9,11 +9,8 @@ import {
   CalendarPlus,
   CheckCircle2,
   ChevronDown,
-  Circle,
   Compass,
-  RotateCcw,
   Save,
-  Sparkles,
   Trophy,
   User
 } from "lucide-react";
@@ -22,7 +19,6 @@ import { api, getStoredLocale, restoreSessionFromUrl, type TextLocale } from "@/
 import { useSiteText } from "@/lib/useSiteText";
 
 type Tab = "dashboard" | "journey" | "habits" | "navigator" | "archive" | "guide" | "settings";
-type DetailTab = "essence" | "practice" | "why";
 type ArchiveFilter = "all" | "insights" | "rewards" | "weeks";
 type HabitStartFocus = "energy" | "focus" | "career" | "rhythm";
 type OnboardingStep = "choice" | "questions" | "activating";
@@ -147,8 +143,6 @@ function HabitsContent() {
   const [stability, setStability] = useState(6);
   const [note, setNote] = useState("");
   const [insight, setInsight] = useState("");
-  const [microStepIndex, setMicroStepIndex] = useState(0);
-  const [detailTab, setDetailTab] = useState<DetailTab>("practice");
   const [selectedCycle, setSelectedCycle] = useState<number | "all">("all");
   const [expandedHabitId, setExpandedHabitId] = useState<string | null>(null);
   const [archiveFilter, setArchiveFilter] = useState<ArchiveFilter>("all");
@@ -250,12 +244,6 @@ function HabitsContent() {
   const latestMetric = program?.metrics[0];
   const doneToday = Boolean(activeHabit?.checkins.some((checkin) => checkin.date === todayIso() && checkin.completed));
   const zoneOptions = useMemo(() => zoneIds.map((id) => ({ id, label: t.zones[id] })), [t]);
-  const microSteps = useMemo(() => [
-    activeHabit?.practice ?? "Выбери один маленький шаг на 10 минут и остановись на нем.",
-    activeHabit ? `Облегченный вариант: 5 минут на тему «${activeHabit.title}», без идеального результата.` : "Облегченный вариант: 5 минут внимания к состоянию.",
-    "Запиши одну фразу: что сейчас даст больше ресурса, ясности или движения вперед?"
-  ], [activeHabit]);
-  const microStepText = microSteps[microStepIndex % microSteps.length];
   const navigatorContext = useMemo(() => ({
     mode: tab === "dashboard" ? "state" : tab === "journey" ? "path" : "chat",
     cycle: program ? `${t.stats.cycle} ${program.currentCycle}` : undefined,
@@ -479,60 +467,6 @@ function HabitsContent() {
     }
   }
 
-  async function advanceWeek(force = false) {
-    if (!program) return;
-    setBusy(true);
-    try {
-      const result = await api.advanceHabitWeek({ programId: program.id, force });
-      applyProgramResponse(result);
-      markSaved(t.messages.weekAdvanced);
-    } catch (reason) {
-      setError(readableError(reason, t.errors.advance));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function freezeWeek() {
-    if (!program) return;
-    setBusy(true);
-    try {
-      const result = await api.freezeHabitWeek(program.id);
-      applyProgramResponse(result);
-      markSaved(t.messages.weekFrozen);
-    } catch (reason) {
-      setError(readableError(reason, t.errors.freeze));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function updateTodayTaskVariant(mode: "SOFTEN" | "REPLACE") {
-    const task = activeHabit?.todayTask ?? program?.todayTask ?? null;
-    if (!program || !task) {
-      setMicroStepIndex((value) => value + 1);
-      return;
-    }
-    setBusy(true);
-    try {
-      const result = await api.updateHabitDailyTaskVariant({ programId: program.id, taskId: task.id, mode });
-      applyProgramResponse(result);
-      const message = mode === "SOFTEN" ? t.dashboard.softStepSaved : t.messages.taskVariantSaved;
-      setDailyFeedback(message);
-      markSaved(message);
-    } catch (reason) {
-      setError(readableError(reason, t.errors.settings));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function softenTodayStep() {
-    const softNote = `Облегченный шаг: ${microSteps[1]}`;
-    setNote(softNote);
-    void updateTodayTaskVariant("SOFTEN");
-  }
-
   function handleAvatarFile(file: File | null) {
     if (!file || !file.type.startsWith("image/")) return;
     const reader = new FileReader();
@@ -560,6 +494,59 @@ function HabitsContent() {
       const message = `${t.messages.calendarAdded} ${formatCalendarDateTime(startsAt)}.`;
       setDailyFeedback(message);
       markSaved(message);
+    } catch (reason) {
+      setError(readableError(reason, t.errors.settings));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function startSubscriptionCheckout() {
+    if (!program) return;
+    setBusy(true);
+    setError("");
+    try {
+      const result = await api.startHabitSubscriptionCheckout(program.id);
+      if ("program" in result) {
+        applyProgramResponse(result);
+        markSaved(t.messages.subscriptionUpdated);
+        return;
+      }
+      if (result.url && typeof window !== "undefined") {
+        window.location.href = result.url;
+        return;
+      }
+      markSaved(t.messages.subscriptionUpdated);
+    } catch (reason) {
+      setError(readableError(reason, t.errors.settings));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function pauseSubscription() {
+    if (!program) return;
+    setBusy(true);
+    setError("");
+    try {
+      const result = await api.pauseHabitSubscription(program.id);
+      applyProgramResponse(result);
+      markSaved(t.messages.subscriptionPaused);
+    } catch (reason) {
+      setError(readableError(reason, t.errors.settings));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function cancelSubscription() {
+    if (!program) return;
+    setBusy(true);
+    setError("");
+    try {
+      const result = await api.cancelHabitSubscription(program.id);
+      applyProgramResponse(result);
+      markSaved(t.messages.subscriptionCancelled);
     } catch (reason) {
       setError(readableError(reason, t.errors.settings));
     } finally {
@@ -645,7 +632,10 @@ function HabitsContent() {
           })}
         </nav>
         <div className="habits-sidebar-profile">
-          <AvatarView value={settingsAvatar} fallback="P" className="habits-sidebar-avatar" />
+          <div className="habits-sidebar-avatar-wrap">
+            <AvatarView value={settingsAvatar} fallback="P" className="habits-sidebar-avatar" />
+            <RankBadge rank={program.stats.rank} />
+          </div>
           <div>
             <strong>{sidebarName}</strong>
             <span>{t.dashboard.sidebarZone}: {sidebarZone}</span>
@@ -721,8 +711,6 @@ function HabitsContent() {
             t={t}
             program={program}
             activeHabit={activeHabit}
-            detailTab={detailTab}
-            setDetailTab={setDetailTab}
             doneToday={doneToday}
             energy={energy}
             clarity={clarity}
@@ -740,15 +728,11 @@ function HabitsContent() {
             saveMetric={saveMetric}
             saveCheckin={saveCheckin}
             saveInsight={saveInsight}
-            softenTodayStep={softenTodayStep}
-            rotateTodayStep={() => updateTodayTaskVariant("REPLACE")}
             dailyFeedback={dailyFeedback}
             telegramStatus={telegramStatus}
             telegramBusy={telegramBusy}
             connectTelegram={connectTelegram}
             addCalendarEvent={addCalendarEvent}
-            advanceWeek={advanceWeek}
-            freezeWeek={freezeWeek}
           />
         )}
         {tab === "habits" && (
@@ -797,13 +781,15 @@ function HabitsContent() {
             busy={busy}
             setName={setSettingsName}
             setZone={setSettingsZone}
-            setAvatar={setSettingsAvatar}
             setAvatarFile={handleAvatarFile}
             setReminderEnabled={setReminderEnabled}
             setReminderTime={setReminderTime}
             saveSettings={saveSettings}
             connectTelegram={connectTelegram}
             saveTelegramPreferences={saveTelegramPreferences}
+            startSubscriptionCheckout={startSubscriptionCheckout}
+            pauseSubscription={pauseSubscription}
+            cancelSubscription={cancelSubscription}
           />
         )}
       </section>
@@ -1004,6 +990,27 @@ function DashboardTab(props: {
           ))}
         </div>
 
+        <div className="habits-rank-overview">
+          <article className="habits-rank-overview-card">
+            <RankEmblem rank={props.program.stats.rank} size="large" />
+            <div>
+              <span>{props.t.dashboard.currentRank}</span>
+              <h3>{props.program.stats.rank.title}</h3>
+              <p>{xpToNextRank > 0 ? `${xpToNextRank} XP до «${nextRank}»` : props.t.dashboard.rankComplete}</p>
+            </div>
+            <strong>{monthPercent}%</strong>
+          </article>
+          <article className="habits-rank-overview-card reward">
+            <div className="habits-rank-reward-icon">{weekProgress >= 100 ? "🏆" : weekProgress >= 70 ? "🎁" : "💠"}</div>
+            <div>
+              <span>{props.t.dashboard.weeklyReward}</span>
+              <h3>{weekProgress >= 100 ? "Золотой сундук" : weekProgress >= 70 ? "Серебряный сундук" : "Недельный ритм"}</h3>
+              <p>{props.program.stats.completedWeekCheckins}/7 отметок · {weekProgress}%</p>
+            </div>
+            <strong>{weekProgress >= 100 ? "+50" : weekProgress >= 70 ? "+20" : "+0"} XP</strong>
+          </article>
+        </div>
+
         <div className="habits-dashboard-hero-head">
           <div>
             <div className="eyebrow">{props.t.dashboard.pathEyebrow}</div>
@@ -1142,7 +1149,7 @@ function DashboardTab(props: {
         <div className="habits-reward-list">
           {props.program.rewards.slice(0, 5).map((reward) => (
             <div className="habits-mini-reward" key={reward.id}>
-              <Sparkles size={15} />
+              <span className="habits-reward-emoji">{rewardIcon(reward.type)}</span>
               <span>{reward.label}</span>
               <strong>+{reward.xp} XP</strong>
             </div>
@@ -1159,8 +1166,6 @@ function JourneyTab(props: {
   t: ReturnType<typeof useSiteText>["habits"]["app"];
   program: HabitProgramSummary;
   activeHabit: HabitEnrollmentSummary | null;
-  detailTab: DetailTab;
-  setDetailTab: (tab: DetailTab) => void;
   doneToday: boolean;
   energy: number;
   clarity: number;
@@ -1178,19 +1183,15 @@ function JourneyTab(props: {
   saveMetric: () => void;
   saveCheckin: (habit?: HabitEnrollmentSummary | null, completed?: boolean, noteOverride?: string) => void;
   saveInsight: () => void;
-  softenTodayStep: () => void;
-  rotateTodayStep: () => void;
   dailyFeedback: string;
   telegramStatus: TelegramStatusResponse | null;
   telegramBusy: boolean;
   connectTelegram: () => void;
   addCalendarEvent: () => void;
-  advanceWeek: (force?: boolean) => void;
-  freezeWeek: () => void;
 }) {
   const activeHabit = props.activeHabit;
-  const canAdvance = (activeHabit?.checkinsDone ?? 0) >= 7;
   const todayTask = activeHabit?.todayTask ?? props.program.todayTask ?? null;
+  const dailyPlan = buildDailyPlan(todayTask, activeHabit, props.t);
   const telegramLinked = Boolean(props.telegramStatus?.linked);
   const telegramConfigured = props.telegramStatus?.configured !== false;
   const calendarEvents = props.program.calendarEvents ?? [];
@@ -1210,44 +1211,38 @@ function JourneyTab(props: {
             <span>{props.doneToday ? props.t.journey.todayDone : props.t.journey.todayAvailable}</span>
           </div>
         </div>
-        <div className="habits-current">
-          <strong>{todayTask?.microAction ?? activeHabit?.practice ?? props.t.dashboard.firstStep}</strong>
-          <span>{todayTask?.whyToday ?? activeHabit?.why ?? props.t.journey.copy}</span>
-        </div>
-        {activeHabit && (
-          <div className="habits-current habits-journey-card">
-            <div className="habit-week">{props.t.stats.cycle} {activeHabit.cycle} · {props.t.stats.week} {activeHabit.week}</div>
-            <h3>{activeHabit.title}</h3>
-            <div className="habits-tabs">
-              {(["essence", "practice", "why"] as DetailTab[]).map((tab) => (
-                <button className={`btn-back ${props.detailTab === tab ? "active-control" : ""}`} type="button" key={tab} onClick={() => props.setDetailTab(tab)}>
-                  {props.t.journey[tab]}
-                </button>
-              ))}
-            </div>
-            <div className="habit-detail">{activeHabit[props.detailTab]}</div>
-            <div className="habits-week-card">
-              <div className="row">
-                <strong>{props.t.journey.weekCalendar}</strong>
-                <span>{activeHabit.checkinsDone}/7</span>
-              </div>
-              <WeekDots habit={activeHabit} />
-              <div className="progress-bg"><div className="progress-fill" style={{ width: `${props.program.stats.weekProgress}%` }} /></div>
-              {canAdvance && (
-                <div className="habits-mini-reward">
-                  <Trophy size={15} />
-                  <span>{props.t.journey.completeReady}. {props.t.journey.completeCopy}</span>
-                </div>
-              )}
-            </div>
+        <div className="habits-day-plan-card">
+          <div className="habits-day-plan-row primary">
+            <span>{props.t.journey.whatToDo}</span>
+            <strong>{dailyPlan.action}</strong>
           </div>
-        )}
-        <textarea className="input habits-note" placeholder={props.t.dashboard.notePlaceholder} value={props.note} onChange={(event) => props.setNote(event.target.value)} />
+          <div className="habits-day-plan-row">
+            <span>{props.t.journey.lowEnergy}</span>
+            <strong>{dailyPlan.soft}</strong>
+          </div>
+          <div className="habits-day-plan-row">
+            <span>{props.t.journey.why}</span>
+            <strong>{dailyPlan.why}</strong>
+          </div>
+          <div className="habits-day-plan-row compact">
+            <span>{props.t.journey.time}</span>
+            <strong>{dailyPlan.time}</strong>
+          </div>
+        </div>
+        <label className="habits-field compact">
+          <span>{props.t.journey.noteOptional}</span>
+          <textarea className="input habits-note" placeholder={props.t.dashboard.notePlaceholder} value={props.note} onChange={(event) => props.setNote(event.target.value)} />
+        </label>
         <div className="habits-action-row">
-          <button className="button habits-cta" type="button" disabled={props.busy || !activeHabit} onClick={() => props.saveCheckin(activeHabit, !props.doneToday)}>
-            {props.doneToday ? <RotateCcw size={17} /> : <CheckCircle2 size={17} />}
-            {props.doneToday ? props.t.journey.undoToday : props.t.journey.markToday}
+          <button className="button habits-cta" type="button" disabled={props.busy || !activeHabit || props.doneToday} onClick={() => props.saveCheckin(activeHabit, true)}>
+            <CheckCircle2 size={17} />
+            {props.doneToday ? props.t.journey.doneWithXp : props.t.journey.markToday}
           </button>
+          <div className="habits-mini-reward">
+            <Trophy size={15} />
+            <span>{props.t.journey.todayXp}</span>
+            <strong>+10 XP</strong>
+          </div>
         </div>
         {props.dailyFeedback && <div className="habits-inline-feedback">{props.dailyFeedback}</div>}
       </section>
@@ -1478,7 +1473,7 @@ function ArchiveTab(props: {
           <div className="habits-reward-list">
             {props.program.rewards.map((reward) => (
               <div className="habits-mini-reward" key={reward.id}>
-                <Trophy size={15} />
+                <span className="habits-reward-emoji">{rewardIcon(reward.type)}</span>
                 <span>{reward.label}</span>
                 <strong>+{reward.xp}</strong>
               </div>
@@ -1490,34 +1485,41 @@ function ArchiveTab(props: {
         <section className="habits-panel habits-wide">
           <h2>{props.t.habitsUx.archive.closedWeeksTitle}<HelpTip label={props.t.habitsUx.tooltips.archive} /></h2>
           <div className="habits-closed-weeks">
-            {groupedWeekSummaries.length > 0 ? groupedWeekSummaries.map((group) => (
-              <div className="habits-week-month-group" key={group.key}>
-                <div className="habits-month-heading">
-                  <div>
-                    <span>{group.label}</span>
-                    <strong>{props.program.stats.rank.title}</strong>
+            {groupedWeekSummaries.length > 0 ? groupedWeekSummaries.map((group) => {
+              const monthRank = rankForMonth(props.program, group.key);
+              return (
+                <div className="habits-week-month-group" key={group.key}>
+                  <div className="habits-month-heading">
+                    <RankEmblem rank={monthRank ?? props.program.stats.rank} />
+                    <div>
+                      <span>{group.label}</span>
+                      <strong>{monthRank?.rankTitle ?? props.program.stats.rank.title}</strong>
+                    </div>
+                    <em>{group.summaries.length} нед.</em>
                   </div>
-                  <em>{group.summaries.length} нед.</em>
+                  {group.summaries.map((summary) => (
+                    <article className="habits-card habits-closed-week" key={summary.id}>
+                      <div className="habit-week">{props.t.stats.cycle} {summary.cycle} · {props.t.stats.week} {summary.week} · {summary.completionMode}</div>
+                      <h3>{summary.habitTitle}</h3>
+                      <p>{summary.summary}</p>
+                      <div className="habits-current habits-week-reward">
+                        <span className="habits-reward-emoji">{rewardIcon(summary.rewardLabel)}</span>
+                        <div>
+                          <strong>{summary.rewardLabel} · +{summary.xpAwarded} XP</strong>
+                          <span>{summary.pingviFeedback}</span>
+                        </div>
+                      </div>
+                      <div className="row">
+                        <span>{summary.checkinsDone}/7</span>
+                        <button className="btn-back" type="button" onClick={() => copyInsight(`${summary.summary}\n\n${summary.pingviFeedback}`, props.markSaved, props.t.habitsUx.archive.weekCopied)}>
+                          {props.t.habitsUx.archive.shareWeek}
+                        </button>
+                      </div>
+                    </article>
+                  ))}
                 </div>
-                {group.summaries.map((summary) => (
-                  <article className="habits-card habits-closed-week" key={summary.id}>
-                    <div className="habit-week">{props.t.stats.cycle} {summary.cycle} · {props.t.stats.week} {summary.week} · {summary.completionMode}</div>
-                    <h3>{summary.habitTitle}</h3>
-                    <p>{summary.summary}</p>
-                    <div className="habits-current">
-                      <strong>{summary.rewardLabel} · +{summary.xpAwarded} XP</strong>
-                      <span>{summary.pingviFeedback}</span>
-                    </div>
-                    <div className="row">
-                      <span>{summary.checkinsDone}/7</span>
-                      <button className="btn-back" type="button" onClick={() => copyInsight(`${summary.summary}\n\n${summary.pingviFeedback}`, props.markSaved, props.t.habitsUx.archive.weekCopied)}>
-                        {props.t.habitsUx.archive.shareWeek}
-                      </button>
-                    </div>
-                  </article>
-                ))}
-              </div>
-            )) : closedWeeks.length === 0 ? (
+              );
+            }) : closedWeeks.length === 0 ? (
               <div className="habits-current">{props.t.habitsUx.archive.closedWeeksEmpty}</div>
             ) : closedWeeks.map((habit) => (
               <article className="habits-card habits-closed-week" key={habit.id}>
@@ -1553,6 +1555,7 @@ function ArchiveTab(props: {
 }
 
 function GuideTab({ t, program }: { t: ReturnType<typeof useSiteText>["habits"]["app"]; program: HabitProgramSummary }) {
+  const [activeSection, setActiveSection] = useState<"start" | "xp" | "rank" | "metrics">("start");
   const rewardRows = [
     ["100%", "Золотой сундук", "+50 XP"],
     ["70-99%", "Серебряный сундук", "+20 XP"],
@@ -1567,80 +1570,88 @@ function GuideTab({ t, program }: { t: ReturnType<typeof useSiteText>["habits"][
     ["80-95%", "Мастер равновесия"],
     ["95-100%", "Гуру Икигай"]
   ];
+  const sections = [
+    { id: "start" as const, title: t.guide.quickStartTitle },
+    { id: "xp" as const, title: t.guide.xpTitle },
+    { id: "rank" as const, title: t.guide.rankTitle },
+    { id: "metrics" as const, title: t.dashboard.metricScaleTitle }
+  ];
   return (
     <div className="habits-grid">
-      <section className="habits-panel">
-        <h2>{t.guide.stepsTitle}</h2>
-        <div className="habits-guide-list">
-          {t.guide.blocks.map((block, index) => (
-            <div className="habit-detail" key={block}>
-              <strong>{index + 1}</strong>
-              {block}
-            </div>
+      <section className="habits-panel habits-wide habits-guide-shell">
+        <div className="habits-guide-tabs">
+          {sections.map((section) => (
+            <button className={`btn-back ${activeSection === section.id ? "active-control" : ""}`} type="button" key={section.id} onClick={() => setActiveSection(section.id)}>
+              {section.title}
+            </button>
           ))}
         </div>
-      </section>
-      <section className="habits-panel">
-        <h2>{t.guide.cycles}</h2>
-        <div className="habits-reward-list">
-          <div className="habits-current">
-            <div className="habit-week">Дневные действия</div>
-            <p>Привычка дня дает +10 XP. Состояние дает +15 XP за три шкалы. Инсайт дает +15 XP.</p>
-          </div>
-          <div className="habits-current">
-            <div className="habit-week">Неделя</div>
-            {rewardRows.map(([percent, label, xp]) => (
-              <div className="row" key={percent}>
-                <span>{percent} · {label}</span>
-                <strong>{xp}</strong>
+        {activeSection === "start" && (
+          <div className="habits-guide-steps">
+            {t.guide.quickStart.map((step, index) => (
+              <div className="habits-guide-step" key={step}>
+                <span>{index + 1}</span>
+                <strong>{step}</strong>
               </div>
             ))}
           </div>
-          <div className="habits-current">
-            <div className="habit-week">Текущее звание месяца</div>
-            <h3>{program.stats.rank.title}</h3>
-            <p>{program.stats.rank.monthPercent ?? 0}% от личного максимума месяца · {program.stats.rank.monthXp ?? 0}/{program.stats.rank.monthMaxXp ?? 0} XP</p>
-            <div className="progress-bg"><div className="progress-fill" style={{ width: `${program.stats.rank.progress}%` }} /></div>
-            {rankRows.map(([range, label]) => (
-              <div className="row" key={label}>
+        )}
+        {activeSection === "xp" && (
+          <div className="habits-reward-list">
+            <div className="habits-current">
+              <div className="habit-week">{t.guide.dailyActions}</div>
+              <p>{t.guide.dailyXpCopy}</p>
+            </div>
+            <div className="habits-current">
+              <div className="habit-week">{t.guide.weeklyRewards}</div>
+              {rewardRows.map(([percent, label, xp]) => (
+                <div className="row" key={percent}>
+                  <span>{rewardIcon(label)} {percent} · {label}</span>
+                  <strong>{xp}</strong>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {activeSection === "rank" && (
+          <div className="habits-reward-list">
+            <div className="habits-current">
+              <div className="habit-week">{t.guide.currentMonthRank}</div>
+              <div className="habits-rank-inline">
+                <RankEmblem rank={program.stats.rank} size="large" />
+                <div>
+                  <h3>{program.stats.rank.title}</h3>
+                  <p>{program.stats.rank.monthPercent ?? 0}% · {program.stats.rank.monthXp ?? 0}/{program.stats.rank.monthMaxXp ?? 0} XP</p>
+                </div>
+              </div>
+              <div className="progress-bg"><div className="progress-fill" style={{ width: `${program.stats.rank.progress}%` }} /></div>
+            </div>
+            {rankRows.map(([range, label], index) => (
+              <div className="habits-mini-reward" key={label}>
+                <RankEmblem rank={{ title: label, level: index + 1 }} />
                 <span>{label}</span>
                 <strong>{range}</strong>
               </div>
             ))}
           </div>
-        </div>
-      </section>
-      <section className="habits-panel habits-wide">
-        <h2>{t.guide.quickStartTitle}</h2>
-        <div className="habits-guide-steps">
-          {t.guide.quickStart.map((step, index) => (
-            <div className="habits-guide-step" key={step}>
-              <span>{index + 1}</span>
-              <strong>{step}</strong>
-            </div>
-          ))}
-        </div>
-      </section>
-      <section className="habits-panel habits-wide">
-        <h2>{t.dashboard.metricScaleTitle}</h2>
-        <div className="habits-guide-metric-grid">
-          {([
-            ["energy", t.metrics.energy, t.habitsUx.metricScales.energy],
-            ["clarity", t.metrics.clarity, t.habitsUx.metricScales.clarity],
-            ["stability", t.metrics.stability, t.habitsUx.metricScales.stability]
-          ] as const).map(([id, label, scale]) => (
-            <details className="habits-metric-help" open={id === "energy"} key={id}>
-              <summary>{label}</summary>
-              <ul>
-                {scale.map((item) => <li key={item}>{item}</li>)}
-              </ul>
-            </details>
-          ))}
-        </div>
-      </section>
-      <section className="habits-panel habits-wide">
-        <h2>{t.habitsUx.actionHelp.title}</h2>
-        <div className="habits-action-help-grid">
+        )}
+        {activeSection === "metrics" && (
+          <div className="habits-guide-metric-grid">
+            {([
+              ["energy", t.metrics.energy, t.habitsUx.metricScales.energy],
+              ["clarity", t.metrics.clarity, t.habitsUx.metricScales.clarity],
+              ["stability", t.metrics.stability, t.habitsUx.metricScales.stability]
+            ] as const).map(([id, label, scale]) => (
+              <details className="habits-metric-help" open={id === "energy"} key={id}>
+                <summary>{label}</summary>
+                <ul>
+                  {scale.map((item) => <li key={item}>{item}</li>)}
+                </ul>
+              </details>
+            ))}
+          </div>
+        )}
+        <div className="habits-action-help-grid compact">
           <p><strong>{t.journey.markToday}</strong>{t.habitsUx.actionHelp.advance}</p>
           <p><strong>{t.dashboard.saveMetric}</strong>{t.habitsUx.actionHelp.softAdvance}</p>
           <p><strong>{t.dashboard.saveInsight}</strong>{t.habitsUx.actionHelp.freeze}</p>
@@ -1666,17 +1677,22 @@ function SettingsTab(props: {
   busy: boolean;
   setName: (value: string) => void;
   setZone: (value: string) => void;
-  setAvatar: (value: string) => void;
   setAvatarFile: (file: File | null) => void;
   setReminderEnabled: (value: boolean) => void;
   setReminderTime: (value: string) => void;
   saveSettings: () => void;
   connectTelegram: () => void;
   saveTelegramPreferences: (payload?: { telegramEnabled?: boolean; motivationFrequency?: TelegramFrequency }) => void;
+  startSubscriptionCheckout: () => void;
+  pauseSubscription: () => void;
+  cancelSubscription: () => void;
 }) {
   const telegramEnabled = props.telegramStatus?.preferences?.telegramEnabled ?? false;
   const telegramFrequency = normalizeTelegramFrequency(props.telegramStatus?.preferences?.motivationFrequency);
   const telegramLinked = Boolean(props.telegramStatus?.linked);
+  const subscriptionStatus = props.program.settings.subscriptionStatus;
+  const canPause = subscriptionStatus === "ACTIVE";
+  const canCancel = subscriptionStatus === "ACTIVE" || subscriptionStatus === "TRIAL" || subscriptionStatus === "PAUSED";
   return (
     <div className="habits-grid">
       <section className="habits-panel">
@@ -1685,16 +1701,19 @@ function SettingsTab(props: {
           <span><User size={15} />{props.t.settings.name}</span>
           <input className="input" value={props.name} onChange={(event) => props.setName(event.target.value)} />
         </label>
-        <label className="habits-field">
+        <div className="habits-field">
           <span>{props.t.settings.avatar}</span>
           <div className="habits-avatar-editor">
             <AvatarView value={props.avatar} fallback={props.name.slice(0, 1) || "P"} className="habits-settings-avatar" />
             <div>
-              <input className="input" value={props.avatar.startsWith("data:image/") ? "" : props.avatar} onChange={(event) => props.setAvatar(event.target.value)} maxLength={500} placeholder="A, 🙂 или https://..." />
-              <input className="input" type="file" accept="image/*" onChange={(event) => props.setAvatarFile(event.target.files?.[0] ?? null)} />
+              <label className="btn-back habits-file-upload">
+                <input type="file" accept="image/*" onChange={(event) => props.setAvatarFile(event.target.files?.[0] ?? null)} />
+                <span>{props.t.settings.avatarUpload}</span>
+              </label>
+              <p className="habits-muted">{props.t.settings.avatarCopy}</p>
             </div>
           </div>
-        </label>
+        </div>
         <label className="habits-field">
           <span>{props.t.settings.weakZone}</span>
           <select className="input" value={props.zone} onChange={(event) => props.setZone(event.target.value)}>
@@ -1766,11 +1785,33 @@ function SettingsTab(props: {
       </section>
       <section className="habits-panel habits-wide">
         <h2>{props.t.settings.subscription}</h2>
+        <p className="habits-muted">{props.t.settings.subscriptionCopy}</p>
         <div className="habits-stats">
           <Stat label={props.t.settings.trialLeft} value={props.program.settings.trialDaysLeft ?? 0} />
           <Stat label={props.t.settings.price} value={props.config?.priceLabel ?? "—"} />
-          <Stat label="Status" value={props.program.settings.subscriptionStatus} />
+          <Stat label={props.t.settings.subscriptionStatus} value={subscriptionStatus} />
         </div>
+        {props.program.settings.subscriptionCurrentPeriodEnd && (
+          <div className="habits-mini-reward">
+            <span>📅</span>
+            <span>{props.t.settings.subscriptionPeriodEnd}</span>
+            <strong>{formatDate(props.program.settings.subscriptionCurrentPeriodEnd.slice(0, 10))}</strong>
+          </div>
+        )}
+        <div className="habits-action-row">
+          <button className="button habits-cta" type="button" disabled={props.busy} onClick={props.startSubscriptionCheckout}>
+            <Trophy size={17} />
+            {props.t.settings.subscriptionStart}
+          </button>
+          <button className="button secondary habits-cta" type="button" disabled={props.busy || !canPause} onClick={props.pauseSubscription}>
+            {props.t.settings.subscriptionPause}
+          </button>
+          <button className="btn-back danger habits-cta" type="button" disabled={props.busy || !canCancel} onClick={props.cancelSubscription}>
+            {props.t.settings.subscriptionCancel}
+          </button>
+        </div>
+      </section>
+      <section className="habits-panel habits-wide">
         <button className="button" type="button" disabled={props.busy} onClick={props.saveSettings}>
           <Save size={17} />
           {props.t.settings.save}
@@ -1832,18 +1873,84 @@ function AvatarView({ value, fallback, className }: { value: string; fallback: s
   );
 }
 
-function WeekDots({ habit }: { habit: HabitEnrollmentSummary }) {
-  const completedDates = new Set(habit.checkins.filter((checkin) => checkin.completed).map((checkin) => checkin.date));
-  const days = Array.from({ length: 7 }, (_, index) => index + 1);
+type RankLike = Partial<HabitProgramSummary["stats"]["rank"]> & {
+  rankTitle?: string;
+  rankLevel?: number;
+};
+
+function rankVisual(rank: RankLike) {
+  const level = Math.max(1, Math.min(6, rank.level ?? rank.rankLevel ?? 1));
+  const visuals = [
+    { color: "#64748b", badge: "○", shape: "circle-outline" },
+    { color: "#00d4ff", badge: "●", shape: "circle-dot" },
+    { color: "#2dd4bf", badge: "✦", shape: "crossing-arcs" },
+    { color: "#a855f7", badge: "✧", shape: "rays" },
+    { color: "#f5b342", badge: "✹", shape: "four-rays" },
+    { color: "#ffb800", badge: "✺", shape: "ikigai-four-circles" }
+  ] as const;
+  return {
+    level,
+    title: rank.title ?? rank.rankTitle ?? "Новичок пути",
+    color: rank.color ?? visuals[level - 1].color,
+    badge: rank.badge ?? visuals[level - 1].badge,
+    shape: rank.shape ?? visuals[level - 1].shape
+  };
+}
+
+function RankEmblem({ rank, size = "normal" }: { rank: RankLike; size?: "normal" | "large" }) {
+  const visual = rankVisual(rank);
   return (
-    <div className="habits-week-dots">
-      {days.map((day) => (
-        <span className={day <= Math.min(completedDates.size, 7) ? "done" : ""} key={day}>
-          {day <= completedDates.size ? <CheckCircle2 size={14} /> : <Circle size={14} />}
-        </span>
-      ))}
-    </div>
+    <span
+      className={`habits-rank-emblem ${size} shape-${visual.shape}`}
+      style={{ "--rank-color": visual.color } as CSSProperties}
+      title={visual.title}
+      aria-label={visual.title}
+    >
+      {visual.badge}
+    </span>
   );
+}
+
+function RankBadge({ rank }: { rank: HabitProgramSummary["stats"]["rank"] }) {
+  return (
+    <span className="habits-rank-badge" style={{ "--rank-color": rankVisual(rank).color } as CSSProperties} title={rank.title}>
+      {rank.level}
+    </span>
+  );
+}
+
+function rewardIcon(value: string) {
+  const normalized = value.toLowerCase();
+  if (normalized.includes("gold") || normalized.includes("золот")) return "🏆";
+  if (normalized.includes("silver") || normalized.includes("сереб")) return "🎁";
+  if (normalized.includes("bronze") || normalized.includes("бронз")) return "🏅";
+  if (normalized.includes("frozen") || normalized.includes("пауза")) return "⏸";
+  if (normalized.includes("rank") || normalized.includes("звание")) return "✺";
+  if (normalized.includes("insight") || normalized.includes("инсайт")) return "💡";
+  if (normalized.includes("metric") || normalized.includes("состояние")) return "📊";
+  if (normalized.includes("checkin") || normalized.includes("привыч")) return "✅";
+  return "✨";
+}
+
+function buildDailyPlan(task: HabitProgramSummary["todayTask"] | null | undefined, habit: HabitEnrollmentSummary | null, t: ReturnType<typeof useSiteText>["habits"]["app"]) {
+  const rawAction = task?.microAction ?? habit?.practice ?? t.dashboard.firstStep;
+  const actionText = rawAction.replace(/^Что сделать:\s*/i, "");
+  const [beforeTime, afterTimeRaw = ""] = actionText.split(/\sВремя:\s/i);
+  const [timeRaw = "", afterSoftRaw = ""] = afterTimeRaw.split(/\sЕсли совсем нет сил:\s/i);
+  const why = (task?.whyToday ?? habit?.why ?? t.journey.copy).replace(/^Зачем:\s*/i, "");
+  return {
+    action: beforeTime.trim().replace(/\.$/, ""),
+    time: (timeRaw || "5-10 мин").trim().replace(/\.$/, ""),
+    soft: (afterSoftRaw || t.journey.lowEnergyFallback).trim().replace(/\.$/, ""),
+    why: why.trim().replace(/\.$/, "")
+  };
+}
+
+function rankForMonth(program: HabitProgramSummary, key: string) {
+  const [yearRaw, monthRaw] = key.split("-");
+  const year = Number(yearRaw);
+  const month = Number(monthRaw);
+  return program.rankHistory.find((rank) => rank.year === year && rank.month === month) ?? null;
 }
 
 function metricStatus(value: number) {

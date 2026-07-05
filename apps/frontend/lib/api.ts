@@ -310,6 +310,18 @@ export const api = {
     method: "PATCH",
     body: JSON.stringify(payload)
   }),
+  startHabitSubscriptionCheckout: (programId: string) => request<{ url?: string; sessionId?: string } | HabitProgramResponse>("/api/habits/subscription/checkout", {
+    method: "POST",
+    body: JSON.stringify({ programId })
+  }),
+  pauseHabitSubscription: (programId: string) => request<HabitProgramResponse>("/api/habits/subscription/pause", {
+    method: "POST",
+    body: JSON.stringify({ programId })
+  }),
+  cancelHabitSubscription: (programId: string) => request<HabitProgramResponse>("/api/habits/subscription/cancel", {
+    method: "POST",
+    body: JSON.stringify({ programId })
+  }),
   advanceHabitWeek: (payload: { programId: string; force?: boolean }) => request<HabitProgramResponse>("/api/habits/advance", {
     method: "POST",
     body: JSON.stringify(payload)

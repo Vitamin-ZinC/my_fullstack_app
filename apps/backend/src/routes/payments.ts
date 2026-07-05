@@ -448,6 +448,35 @@ export async function paymentRoutes(app: FastifyInstance) {
     }
     if (event.type === "checkout.session.completed") {
       const session = event.data.object as Stripe.Checkout.Session;
+      if (session.metadata?.kind === "habit_subscription" && session.metadata.programId) {
+        const subscriptionId = typeof session.subscription === "string" ? session.subscription : session.subscription?.id;
+        const subscription = subscriptionId && stripe ? await stripe.subscriptions.retrieve(subscriptionId) : null;
+        const currentPeriodEnd = subscription && (subscription as any).current_period_end
+          ? new Date(Number((subscription as any).current_period_end) * 1000)
+          : null;
+        await prisma.habitProgram.update({
+          where: { id: session.metadata.programId },
+          data: {
+            subscriptionStatus: "ACTIVE",
+            stripeSubscriptionId: subscriptionId ?? null,
+            subscriptionCurrentPeriodEnd: currentPeriodEnd,
+            subscriptionCancelAtPeriodEnd: Boolean(subscription?.cancel_at_period_end)
+          }
+        });
+        await prisma.analyticsEvent.create({
+          data: {
+            name: "habit_subscription_checkout_completed",
+            sessionId: session.metadata.sessionId || undefined,
+            userId: session.metadata.userId || undefined,
+            properties: {
+              programId: session.metadata.programId,
+              checkoutSessionId: session.id,
+              stripeSubscriptionId: subscriptionId
+            }
+          }
+        });
+        return { received: true };
+      }
       const paymentIntentId = typeof session.payment_intent === "string" ? session.payment_intent : undefined;
       const payment = await prisma.$transaction(async (tx) => {
         const current = await tx.payment.findFirst({
@@ -509,6 +538,35 @@ export async function paymentRoutes(app: FastifyInstance) {
           data: { stripePaymentIntentId: intent.id, status: "FAILED" }
         });
       }
+    }
+    if (event.type === "customer.subscription.updated" || event.type === "customer.subscription.deleted") {
+      const subscription = event.data.object as Stripe.Subscription;
+      const programId = subscription.metadata?.programId;
+      const stripeSubscriptionId = subscription.id;
+      const currentPeriodEnd = (subscription as any).current_period_end
+        ? new Date(Number((subscription as any).current_period_end) * 1000)
+        : null;
+      const status = event.type === "customer.subscription.deleted"
+        ? "CANCELLED"
+        : subscription.pause_collection
+          ? "PAUSED"
+          : subscription.cancel_at_period_end
+            ? "CANCEL_AT_PERIOD_END"
+            : subscription.status === "active" || subscription.status === "trialing"
+              ? "ACTIVE"
+              : subscription.status.toUpperCase();
+      const where = programId
+        ? { id: programId }
+        : { stripeSubscriptionId };
+      await prisma.habitProgram.update({
+        where,
+        data: {
+          stripeSubscriptionId,
+          subscriptionStatus: status,
+          subscriptionCurrentPeriodEnd: currentPeriodEnd,
+          subscriptionCancelAtPeriodEnd: Boolean(subscription.cancel_at_period_end)
+        }
+      }).catch(() => undefined);
     }
     return { received: true };
   });

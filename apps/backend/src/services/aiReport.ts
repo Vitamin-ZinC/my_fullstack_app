@@ -139,7 +139,7 @@ export const reportFullSchema = z.object({
     faceEvidence: z.string(),
     strengths: z.string(),
     risks: z.string()
-  })),
+  })).min(3).max(5),
   ikigai_zones: z.object({
     passion: ikigaiZoneSchema,
     mission: ikigaiZoneSchema,
@@ -257,6 +257,8 @@ const reportFullJsonSchema = {
     ]),
     top_roles: {
       type: "array",
+      minItems: 5,
+      maxItems: 5,
       items: {
         type: "object",
         additionalProperties: false,
@@ -422,7 +424,7 @@ export async function generateOpenAiReport(context: ReportContext): Promise<Gene
       schemaName: "ikigai_full_report",
       jsonSchema: reportFullJsonSchema,
       useAsync: useCompatibleAsync,
-      parseReport: (content) => reportFullSchema.parse(parseCompletionJson(content))
+      parseReport: (content) => normalizeFullReport(reportFullSchema.parse(parseCompletionJson(content)))
     })
   ]);
   const promptVersion = Math.max(freeCompletion.promptVersion, fullCompletion.promptVersion);
@@ -442,6 +444,46 @@ export async function generateOpenAiReport(context: ReportContext): Promise<Gene
       audioMetrics: Boolean(voiceMetrics),
       photoInput: freeCompletion.photoInputUsed || fullCompletion.photoInputUsed
     }
+  };
+}
+
+function normalizeFullReport(report: ReportFull): ReportFull {
+  const sortedRoles = [...report.top_roles]
+    .sort((left, right) => right.match - left.match)
+    .slice(0, 5);
+  const fallbackNames = [
+    "Стратег развития",
+    "Методолог практики",
+    "Консультант по ясности",
+    "Навигатор изменений",
+    "Автор экспертного продукта"
+  ];
+  const sourceRole = sortedRoles[0] ?? {
+    name: report.profession,
+    match: 72,
+    why: report.summary,
+    voiceEvidence: report.voice_analysis.communication,
+    faceEvidence: report.face_analysis.communication,
+    strengths: report.summary,
+    risks: "Главный риск — слишком долго оставаться в анализе вместо проверки роли на практике."
+  };
+
+  while (sortedRoles.length < 5) {
+    const index = sortedRoles.length;
+    sortedRoles.push({
+      name: fallbackNames[index] ?? `${sourceRole.name}: прикладной формат`,
+      match: Math.max(55, Math.min(95, sourceRole.match - (index + 1) * 4)),
+      why: `Дополнительное направление из общего профиля: ${report.summary}`,
+      voiceEvidence: `Голосовой сигнал и содержание речи поддерживают это направление как рабочую гипотезу: ${sourceRole.voiceEvidence}`,
+      faceEvidence: `Визуальный сигнал используется только как слабое подтверждение презентационного стиля: ${sourceRole.faceEvidence}`,
+      strengths: sourceRole.strengths,
+      risks: sourceRole.risks
+    });
+  }
+
+  return {
+    ...report,
+    top_roles: sortedRoles
   };
 }
 

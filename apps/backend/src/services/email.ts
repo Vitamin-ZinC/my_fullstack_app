@@ -63,9 +63,9 @@ export async function sendReportEmail(input: SendReportEmailInput): Promise<Send
       })
     });
 
-    const raw = await response.text();
-    const payload = raw ? JSON.parse(raw) as ResendEmailResponse : {};
+    const payload = parseResendPayload(await response.text());
     if (!response.ok) {
+      logEmailFailure("report", input.email, response.status, payload.message || payload.name);
       return {
         emailSent: false,
         error: truncateEmailError(payload.message || payload.name || `Resend ${response.status}`)
@@ -116,9 +116,9 @@ export async function sendMagicLinkEmail(input: SendMagicLinkEmailInput): Promis
       })
     });
 
-    const raw = await response.text();
-    const payload = raw ? JSON.parse(raw) as ResendEmailResponse : {};
+    const payload = parseResendPayload(await response.text());
     if (!response.ok) {
+      logEmailFailure("magic_link", input.email, response.status, payload.message || payload.name);
       return {
         emailSent: false,
         error: truncateEmailError(payload.message || payload.name || `Resend ${response.status}`)
@@ -216,4 +216,22 @@ function escapeHtml(value: string) {
 
 function truncateEmailError(value: string) {
   return value.slice(0, 500);
+}
+
+function parseResendPayload(raw: string): ResendEmailResponse {
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw) as ResendEmailResponse;
+  } catch {
+    return { message: raw.slice(0, 500) };
+  }
+}
+
+function logEmailFailure(kind: string, email: string, status: number, error?: string) {
+  console.warn("email_send_failed", {
+    kind,
+    status,
+    emailDomain: email.split("@")[1] ?? "unknown",
+    error: error ? truncateEmailError(error) : undefined
+  });
 }

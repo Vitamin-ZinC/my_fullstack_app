@@ -11,7 +11,6 @@ import {
   ChevronDown,
   Circle,
   Compass,
-  PauseCircle,
   RotateCcw,
   Save,
   Sparkles,
@@ -26,6 +25,8 @@ type Tab = "dashboard" | "journey" | "habits" | "navigator" | "archive" | "guide
 type DetailTab = "essence" | "practice" | "why";
 type ArchiveFilter = "all" | "insights" | "rewards" | "weeks";
 type HabitStartFocus = "energy" | "focus" | "career" | "rhythm";
+type OnboardingStep = "choice" | "questions" | "activating";
+type OnboardingZone = "passion" | "mission" | "profession" | "vocation";
 type TelegramFrequency = "off" | "daily" | "weekdays" | "weekly";
 type ChatMessage = { role: "user" | "assistant"; text: string };
 type NavItem = { id: Tab; icon: string } | { id: Tab; penguin: true };
@@ -57,6 +58,7 @@ const cycleVisuals = [
 ] as const;
 
 const zoneIds = ["passion", "mission", "profession", "vocation", "resource", "clarity", "stability", "ikigai"] as const;
+const onboardingZones: OnboardingZone[] = ["passion", "mission", "profession", "vocation"];
 const todayIso = () => new Date().toISOString().slice(0, 10);
 
 export default function HabitsPage() {
@@ -127,8 +129,15 @@ function HabitsContent() {
   const [savedMessage, setSavedMessage] = useState("");
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [dailyFeedback, setDailyFeedback] = useState("");
+  const [metricSavedFlash, setMetricSavedFlash] = useState(false);
+  const [insightSavedFlash, setInsightSavedFlash] = useState(false);
   const [telegramStatus, setTelegramStatus] = useState<TelegramStatusResponse | null>(null);
   const [telegramBusy, setTelegramBusy] = useState(false);
+
+  const [onboardingStep, setOnboardingStep] = useState<OnboardingStep>("choice");
+  const [onboardingQuestionIndex, setOnboardingQuestionIndex] = useState(0);
+  const [onboardingAnswers, setOnboardingAnswers] = useState<Partial<Record<OnboardingZone, number>>>({});
+  const [activatingFromReport, setActivatingFromReport] = useState(false);
 
   const [startFocus, setStartFocus] = useState<HabitStartFocus>("rhythm");
   const [startName, setStartName] = useState("");
@@ -240,12 +249,6 @@ function HabitsContent() {
   const activeHabit = program?.activeEnrollment ?? program?.enrollments[0] ?? null;
   const latestMetric = program?.metrics[0];
   const doneToday = Boolean(activeHabit?.checkins.some((checkin) => checkin.date === todayIso() && checkin.completed));
-  const focusOptions = useMemo(() => ([
-    { id: "rhythm" as const, label: t.focusOptions.rhythm[0], copy: t.focusOptions.rhythm[1] },
-    { id: "energy" as const, label: t.focusOptions.energy[0], copy: t.focusOptions.energy[1] },
-    { id: "focus" as const, label: t.focusOptions.focus[0], copy: t.focusOptions.focus[1] },
-    { id: "career" as const, label: t.focusOptions.career[0], copy: t.focusOptions.career[1] }
-  ]), [t]);
   const zoneOptions = useMemo(() => zoneIds.map((id) => ({ id, label: t.zones[id] })), [t]);
   const microSteps = useMemo(() => [
     activeHabit?.practice ?? "Выбери один маленький шаг на 10 минут и остановись на нем.",
@@ -288,6 +291,8 @@ function HabitsContent() {
 
   async function startFromLatestReport() {
     if (!latestReport) return;
+    setActivatingFromReport(true);
+    setOnboardingStep("activating");
     setBusy(true);
     setError("");
     try {
@@ -297,19 +302,23 @@ function HabitsContent() {
       markSaved(program ? t.messages.programUpdated : t.messages.programSaved);
     } catch (reason) {
       setError(readableError(reason, t.errors.activate));
+      setOnboardingStep("choice");
     } finally {
       setBusy(false);
+      setActivatingFromReport(false);
     }
   }
 
-  async function startManualProgram(focus: HabitStartFocus = startFocus) {
+  async function startManualProgram(focus: HabitStartFocus = startFocus, weakZone: string = startZone) {
+    setActivatingFromReport(false);
+    setOnboardingStep("activating");
     setBusy(true);
     setError("");
     try {
       const result = await api.startHabitProgramWithProfile({
         focus,
         name: startName.trim() || undefined,
-        weakZone: startZone,
+        weakZone,
         reminderTime
       });
       applyProgramResponse(result);
@@ -317,9 +326,25 @@ function HabitsContent() {
       markSaved(t.messages.programSaved);
     } catch (reason) {
       setError(readableError(reason, t.errors.start));
+      setOnboardingStep("questions");
     } finally {
       setBusy(false);
     }
+  }
+
+  function answerOnboardingQuestion(score: number) {
+    const zone = onboardingZones[onboardingQuestionIndex];
+    const nextAnswers = { ...onboardingAnswers, [zone]: score };
+    setOnboardingAnswers(nextAnswers);
+    if (onboardingQuestionIndex < onboardingZones.length - 1) {
+      setOnboardingQuestionIndex((value) => value + 1);
+      return;
+    }
+
+    const result = calculateOnboardingStart(nextAnswers);
+    setStartZone(result.weakZone);
+    setStartFocus(result.focus);
+    void startManualProgram(result.focus, result.weakZone);
   }
 
   async function saveMetric() {
@@ -328,6 +353,8 @@ function HabitsContent() {
     try {
       const result = await api.saveHabitMetric({ programId: program.id, energy, clarity, stability });
       applyProgramResponse(result);
+      setMetricSavedFlash(true);
+      window.setTimeout(() => setMetricSavedFlash(false), 1800);
       markSaved(t.messages.metricSaved);
     } catch (reason) {
       setError(readableError(reason, t.errors.metric));
@@ -373,6 +400,8 @@ function HabitsContent() {
       applyProgramResponse(result);
       setInsight("");
       setDailyFeedback(t.messages.insightSaved);
+      setInsightSavedFlash(true);
+      window.setTimeout(() => setInsightSavedFlash(false), 1800);
       markSaved(t.messages.insightSaved);
     } catch (reason) {
       setError(readableError(reason, t.errors.insight));
@@ -504,6 +533,16 @@ function HabitsContent() {
     void updateTodayTaskVariant("SOFTEN");
   }
 
+  function handleAvatarFile(file: File | null) {
+    if (!file || !file.type.startsWith("image/")) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const value = typeof reader.result === "string" ? reader.result : "";
+      if (value) setSettingsAvatar(value);
+    };
+    reader.readAsDataURL(file);
+  }
+
   async function addCalendarEvent() {
     if (!program || !activeHabit) return;
     const task = activeHabit.todayTask ?? program.todayTask ?? null;
@@ -557,62 +596,33 @@ function HabitsContent() {
   if (!program) {
     return (
       <main className="habits-app habits-single" data-testid="habits-app-empty">
-        <section className="habits-panel habits-empty">
-          <div className="habits-brand inline">
-            <img src="/assets/levelup-logo.jpg" alt="" />
-            <div>
-              <div className="habits-brand-title">ORKEN.LIFE</div>
-              <div className="habits-brand-sub">{t.emptyTitle}</div>
-            </div>
-          </div>
-          <h1>{t.emptyTitle}</h1>
-          <p>{t.emptyCopy}</p>
-          {config && <div className="habits-mini-reward"><Sparkles size={15} /><span>{config.trialDays} дней trial · затем {config.priceLabel} в месяц</span></div>}
-          {error && <p className="auth-error">{error}</p>}
-          {latestReport ? (
-            <div className="habits-current">
-              <div className="habit-week">{t.latestReport}</div>
-              <h2>{latestReport.profession || "ORKEN.LIFE"}</h2>
-              <p>{latestReport.summary || t.emptyCopy}</p>
-              <button className="button" type="button" disabled={busy} onClick={startFromLatestReport}>
-                <Sparkles size={17} />
-                {t.createFromReport}
-              </button>
-              <button className="button secondary" type="button" disabled={busy} onClick={() => startManualProgram("rhythm")}>
-                {t.startWithoutReport}
-              </button>
-            </div>
-          ) : (
-            <div className="habits-current">
-              <div className="habits-form-row">
-                <input className="input" value={startName} onChange={(event) => setStartName(event.target.value)} placeholder={t.settings.name} />
-                <select className="input" value={startZone} onChange={(event) => setStartZone(event.target.value)}>
-                  {zoneOptions.map((option) => <option value={option.id} key={option.id}>{option.label}</option>)}
-                </select>
-              </div>
-              <div className="habits-onboarding-options" role="list" aria-label="Фокус старта">
-                {focusOptions.map((option) => (
-                  <button className={startFocus === option.id ? "active" : ""} key={option.id} type="button" onClick={() => setStartFocus(option.id)}>
-                    <strong>{option.label}</strong>
-                    <span>{option.copy}</span>
-                  </button>
-                ))}
-              </div>
-              <button className="button" type="button" disabled={busy} onClick={() => startManualProgram()}>
-                <Sparkles size={17} />
-                {t.startHabits}
-              </button>
-              <Link className="button secondary" href="/login">{t.account}</Link>
-            </div>
-          )}
-        </section>
+        <OnboardingPanel
+          t={t}
+          config={config}
+          latestReport={latestReport}
+          busy={busy}
+          error={error}
+          step={onboardingStep}
+          questionIndex={onboardingQuestionIndex}
+          answers={onboardingAnswers}
+          name={startName}
+          setName={setStartName}
+          activatingFromReport={activatingFromReport}
+          startFromReport={startFromLatestReport}
+          startQuestions={() => {
+            setOnboardingQuestionIndex(0);
+            setOnboardingAnswers({});
+            setOnboardingStep("questions");
+          }}
+          answerQuestion={answerOnboardingQuestion}
+        />
       </main>
     );
   }
 
   const sidebarName = settingsName || readProfileString(program.profile, "name") || program.title;
   const sidebarZone = zoneOptions.find((option) => option.id === (program.weakZone || settingsZone))?.label || program.weakZone || settingsZone;
-  const trialDaysLeft = program.settings.trialDaysLeft ?? config?.trialDays ?? 0;
+  const sectionMeta = getHabitsSectionMeta(t, tab);
 
   return (
     <main className="habits-app" data-testid="habits-app">
@@ -635,7 +645,7 @@ function HabitsContent() {
           })}
         </nav>
         <div className="habits-sidebar-profile">
-          <div className="habits-sidebar-avatar">{settingsAvatar || "P"}</div>
+          <AvatarView value={settingsAvatar} fallback="P" className="habits-sidebar-avatar" />
           <div>
             <strong>{sidebarName}</strong>
             <span>{t.dashboard.sidebarZone}: {sidebarZone}</span>
@@ -678,19 +688,9 @@ function HabitsContent() {
       <section className="habits-main">
         <header className="habits-topbar">
           <div>
-            <div className="eyebrow">{t.dashboard.eyebrow}</div>
-            <h1>{program.title}</h1>
-            <p>{program.topRole || program.archetype || t.dashboard.topbarCopy}</p>
-          </div>
-          <div className="habits-topbar-actions">
-            <div className="habits-top-pill online"><PenguinHeadIcon size={20} />{t.dashboard.pingviOnline}</div>
-            <div className="habits-top-pill"><Trophy size={16} />{program.stats.xp} XP · {program.stats.rank.title}</div>
-            <div className="habits-top-pill"><span className="habits-pill-icon">⏳</span>{trialDaysLeft}/{config?.trialDays ?? trialDaysLeft} {t.dashboard.trialDays}</div>
-            <div className="habits-top-pill accent"><span className="habits-pill-icon">🔥</span>{program.stats.streakDays} {t.stats.streak}</div>
-            <button className="button habits-cta" type="button" onClick={() => setTab("journey")}>
-              <Compass size={17} />
-              {tab === "journey" ? t.dashboard.todayFocus : t.dashboard.openJourney}
-            </button>
+            <div className="eyebrow">{sectionMeta.eyebrow}</div>
+            <h1>{sectionMeta.title}</h1>
+            <p>{sectionMeta.copy}</p>
           </div>
         </header>
 
@@ -712,10 +712,6 @@ function HabitsContent() {
           <DashboardTab
             t={t}
             program={program}
-            config={config}
-            activeHabit={activeHabit}
-            canPersonalize={Boolean(latestReport && program.source !== "analysis-report")}
-            personalizeFromReport={startFromLatestReport}
             openJourney={() => setTab("journey")}
             openNavigator={() => setTab("navigator")}
           />
@@ -734,6 +730,8 @@ function HabitsContent() {
             note={note}
             insight={insight}
             busy={busy}
+            metricSavedFlash={metricSavedFlash}
+            insightSavedFlash={insightSavedFlash}
             setEnergy={setEnergy}
             setClarity={setClarity}
             setStability={setStability}
@@ -800,6 +798,7 @@ function HabitsContent() {
             setName={setSettingsName}
             setZone={setSettingsZone}
             setAvatar={setSettingsAvatar}
+            setAvatarFile={handleAvatarFile}
             setReminderEnabled={setReminderEnabled}
             setReminderTime={setReminderTime}
             saveSettings={saveSettings}
@@ -812,13 +811,148 @@ function HabitsContent() {
   );
 }
 
+function OnboardingPanel(props: {
+  t: ReturnType<typeof useSiteText>["habits"]["app"];
+  config: HabitConfigResponse | null;
+  latestReport: { analysisId: string; profession?: string | null; summary?: string | null } | null;
+  busy: boolean;
+  error: string;
+  step: OnboardingStep;
+  questionIndex: number;
+  answers: Partial<Record<OnboardingZone, number>>;
+  name: string;
+  setName: (value: string) => void;
+  activatingFromReport: boolean;
+  startFromReport: () => void;
+  startQuestions: () => void;
+  answerQuestion: (score: number) => void;
+}) {
+  const displayName = props.name.trim() || "Ильяс";
+  const trialDays = props.config?.trialDays ?? 30;
+  const price = props.config?.priceLabel ?? "$8";
+  const focus = props.latestReport?.profession || "Продуктовый стратег";
+  const currentQuestion = props.t.onboarding.questions[props.questionIndex];
+  const currentZone = onboardingZones[props.questionIndex];
+  const currentAnswer = props.answers[currentZone];
+
+  return (
+    <section className={`habits-panel habits-empty habits-onboarding-shell ${props.step === "questions" ? "question-mode" : ""}`}>
+      {props.step === "activating" ? (
+        <div className="habits-onboarding-activating">
+          <div className="habits-onboarding-hero-icon">💰</div>
+          <h1>{props.activatingFromReport ? props.t.onboarding.activatingFromReport : props.t.onboarding.activatingTitle}</h1>
+          <p>{formatTemplate(props.t.onboarding.activatingCopy, { focus, days: trialDays, price })}</p>
+          <span>{props.t.onboarding.activatingManualCopy}</span>
+          <div className="habits-onboarding-progress-line" />
+          {props.error && <p className="auth-error">{props.error}</p>}
+        </div>
+      ) : props.step === "questions" && currentQuestion ? (
+        <div className="habits-onboarding-question">
+          <OnboardingSegments total={props.t.onboarding.questions.length} active={props.questionIndex} />
+          <div className="habits-onboarding-hero-icon">{currentQuestion[0]}</div>
+          <div className="habits-onboarding-zone">{currentQuestion[1]}</div>
+          <h1>{currentQuestion[2]}</h1>
+          <div className="habits-onboarding-answer-list">
+            {props.t.onboarding.options.map((option, index) => {
+              const score = index + 1;
+              return (
+                <button
+                  className={currentAnswer === score ? "active" : ""}
+                  type="button"
+                  key={option}
+                  disabled={props.busy}
+                  onClick={() => props.answerQuestion(score)}
+                >
+                  <span>{score}</span>
+                  <strong>{option}</strong>
+                </button>
+              );
+            })}
+          </div>
+          <p className="habits-onboarding-counter">{formatTemplate(props.t.onboarding.questionOf, { name: displayName, current: props.questionIndex + 1, total: props.t.onboarding.questions.length })}</p>
+          {props.error && <p className="auth-error">{props.error}</p>}
+        </div>
+      ) : (
+        <div className="habits-onboarding-choice">
+          <div className="eyebrow">{props.t.onboarding.eyebrow}</div>
+          <h1>{formatTemplate(props.latestReport ? props.t.onboarding.reportTitle : props.t.onboarding.noReportTitle, { name: displayName })}</h1>
+          <p>{props.latestReport ? props.t.onboarding.reportCopy : props.t.onboarding.noReportCopy}</p>
+          <label className="habits-field compact">
+            <span>{props.t.settings.name}</span>
+            <input className="input" value={props.name} onChange={(event) => props.setName(event.target.value)} placeholder={displayName} />
+          </label>
+          <div className="habits-onboarding-choice-grid">
+            <button className="habits-onboarding-choice-card" type="button" disabled={props.busy || !props.latestReport} onClick={props.startFromReport}>
+              <strong>{props.t.onboarding.useReport}</strong>
+              <span>{formatTemplate(props.t.onboarding.useReportCopy, { days: trialDays, price, focus })}</span>
+            </button>
+            <button className="habits-onboarding-choice-card" type="button" disabled={props.busy} onClick={props.startQuestions}>
+              <strong>{props.t.onboarding.shortSurvey}</strong>
+              <span>{props.t.onboarding.shortSurveyCopy}</span>
+            </button>
+          </div>
+          {!props.latestReport && <Link className="btn-back habits-onboarding-login" href="/login">{props.t.account}</Link>}
+          {props.error && <p className="auth-error">{props.error}</p>}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function OnboardingSegments({ active, total }: { active: number; total: number }) {
+  return (
+    <div className="habits-onboarding-segments" aria-label="Прогресс настройки плана">
+      {Array.from({ length: total }, (_, index) => (
+        <span className={index <= active ? "active" : ""} key={index} />
+      ))}
+    </div>
+  );
+}
+
+function getHabitsSectionMeta(t: ReturnType<typeof useSiteText>["habits"]["app"], tab: Tab) {
+  const meta: Record<Tab, { eyebrow: string; title: string; copy: string }> = {
+    dashboard: {
+      eyebrow: t.nav.dashboard,
+      title: t.dashboard.overviewTitle,
+      copy: t.dashboard.overviewCopy
+    },
+    journey: {
+      eyebrow: t.nav.journey,
+      title: t.journey.title,
+      copy: t.journey.copy
+    },
+    habits: {
+      eyebrow: t.nav.habits,
+      title: t.habitsScreen.title,
+      copy: t.habitsScreen.copy
+    },
+    navigator: {
+      eyebrow: t.nav.navigator,
+      title: t.navigator.title,
+      copy: t.navigator.copy
+    },
+    archive: {
+      eyebrow: t.nav.archive,
+      title: t.archive.title,
+      copy: t.archive.copy
+    },
+    guide: {
+      eyebrow: t.nav.guide,
+      title: t.guide.title,
+      copy: t.guide.copy
+    },
+    settings: {
+      eyebrow: t.nav.settings,
+      title: t.settings.title,
+      copy: t.settings.copy
+    }
+  };
+  return meta[tab];
+}
+
 function DashboardTab(props: {
   t: ReturnType<typeof useSiteText>["habits"]["app"];
   program: HabitProgramSummary;
-  config: HabitConfigResponse | null;
-  activeHabit: HabitEnrollmentSummary | null;
-  canPersonalize: boolean;
-  personalizeFromReport: () => void;
   openJourney: () => void;
   openNavigator: () => void;
 }) {
@@ -833,7 +967,10 @@ function DashboardTab(props: {
   const activeCycleProgress = Math.min(100, Math.round(((props.program.currentWeek - 1 + props.program.stats.weekProgress / 100) / activeCycleWeeks) * 100));
   const weekProgress = Math.min(100, Math.max(0, props.program.stats.weekProgress));
   const nextRank = props.program.stats.rank.nextTitle ?? props.t.dashboard.rankComplete;
-  const todayTask = props.activeHabit?.todayTask ?? props.program.todayTask ?? null;
+  const monthXp = props.program.stats.rank.monthXp ?? 0;
+  const monthMaxXp = props.program.stats.rank.monthMaxXp ?? 0;
+  const monthPercent = props.program.stats.rank.monthPercent ?? props.program.stats.rank.progress;
+  const xpToNextRank = props.program.stats.rank.nextAtXp ? Math.max(0, props.program.stats.rank.nextAtXp - monthXp) : 0;
   const weakZoneId = zoneIds.includes(props.program.weakZone as (typeof zoneIds)[number])
     ? props.program.weakZone as (typeof zoneIds)[number]
     : "ikigai";
@@ -889,7 +1026,7 @@ function DashboardTab(props: {
           <div className="habits-status-card">
             <span><span className="habits-inline-icon">{rankIcon}</span>{props.t.dashboard.currentRank}</span>
             <strong>{props.program.stats.rank.title}</strong>
-            <small>{props.program.stats.xp} XP · {props.t.dashboard.nextRank}: {nextRank}</small>
+            <small>{monthXp}/{monthMaxXp} XP месяца · {xpToNextRank > 0 ? `${xpToNextRank} XP до ${nextRank}` : props.t.dashboard.rankComplete}</small>
           </div>
           <div className="habits-status-card">
             <span><span className="habits-inline-icon">🧭</span>{props.t.dashboard.totalRoute}</span>
@@ -949,45 +1086,6 @@ function DashboardTab(props: {
       </section>
 
       <section className="habits-panel">
-        <h2>{props.t.dashboard.todayFocus}<HelpTip label={props.t.habitsUx.tooltips.journey} /></h2>
-        <div className="habits-first-step">
-          <div>
-            <div className="habit-week">{todayTask ? todayTask.title : props.t.dashboard.firstStep}</div>
-            <p>{todayTask ? todayTask.taskText : props.activeHabit?.practice ?? props.t.dashboard.firstStep}</p>
-            {todayTask && (
-              <div className="habits-current">
-                <strong>{todayTask.microAction}</strong>
-                <span>{todayTask.whyToday}</span>
-              </div>
-            )}
-          </div>
-          <div className="habits-action-row">
-            <button className="button habits-cta" type="button" title={props.t.habitsUx.tooltips.journey} onClick={props.openJourney}>
-              <Compass size={17} />
-              {props.t.dashboard.openJourney}
-            </button>
-          </div>
-        </div>
-        {props.activeHabit && <HabitDetailsCard habit={props.activeHabit} t={props.t} />}
-        {props.activeHabit && (
-          <div className="habits-week-card habits-compact-week">
-            <div className="row">
-              <strong>{props.t.journey.weekCalendar}</strong>
-              <span>{props.activeHabit.checkinsDone}/7</span>
-            </div>
-            <WeekDots habit={props.activeHabit} />
-            <div className="progress-bg"><div className="progress-fill" style={{ width: `${weekProgress}%` }} /></div>
-          </div>
-        )}
-        {props.canPersonalize && (
-          <button className="button secondary" type="button" onClick={props.personalizeFromReport}>
-            <Sparkles size={17} />
-            {props.t.dashboard.personalize}
-          </button>
-        )}
-      </section>
-
-      <section className="habits-panel">
         <h2>{props.t.dashboard.metricTitle}</h2>
         <p className="habits-muted">{props.t.dashboard.metricOverviewCopy}</p>
         <div className="habits-wellness-row">
@@ -997,7 +1095,7 @@ function DashboardTab(props: {
           </div>
           <div className="habits-rank-card">
             <span>{props.program.stats.rank.title}</span>
-            <strong>{props.program.stats.xp} XP</strong>
+            <strong>{monthPercent}%</strong>
             <div className="progress-bg"><div className="progress-fill" style={{ width: `${props.program.stats.rank.progress}%` }} /></div>
           </div>
         </div>
@@ -1028,38 +1126,16 @@ function DashboardTab(props: {
       </section>
 
       <section className="habits-panel habits-wide">
-        <h2>{props.t.dashboard.progressTitle}</h2>
-        <div className="habits-stats">
-          <Stat label={props.t.stats.xp} value={props.program.stats.xp} />
-          <Stat label={props.t.stats.cycle} value={props.program.stats.currentCycle} />
-          <Stat label={props.t.stats.week} value={props.program.stats.currentWeek} />
-          <Stat label={props.t.stats.days} value={props.program.stats.daysInProgram} />
-          <Stat label={props.t.stats.checkins} value={props.program.stats.checkinsDone} />
-          <Stat label={props.t.stats.streak} value={props.program.stats.streakDays} />
-        </div>
-        {props.config && (
-          <div className="habits-mini-reward">
-            <Sparkles size={15} />
-            <span>{props.program.settings.trialDaysLeft ?? props.config.trialDays} дней trial · {props.config.priceLabel}/мес</span>
-          </div>
-        )}
+        <h2>{props.t.archive.filters.rewards}</h2>
         <div className="habits-reward-list">
-          {props.program.rewards.slice(0, 3).map((reward) => (
+          {props.program.rewards.slice(0, 5).map((reward) => (
             <div className="habits-mini-reward" key={reward.id}>
               <Sparkles size={15} />
               <span>{reward.label}</span>
               <strong>+{reward.xp} XP</strong>
             </div>
           ))}
-        </div>
-        <div className="habits-xp-explainer">
-          <div>
-            <h3>{props.t.dashboard.xpTitle}</h3>
-            <p>{props.t.dashboard.xpCopy}</p>
-          </div>
-          <ul>
-            {props.t.dashboard.xpRules.map((rule) => <li key={rule}>{rule}</li>)}
-          </ul>
+          {props.program.rewards.length === 0 && <div className="habits-current">{props.t.archive.empty}</div>}
         </div>
       </section>
 
@@ -1080,6 +1156,8 @@ function JourneyTab(props: {
   note: string;
   insight: string;
   busy: boolean;
+  metricSavedFlash: boolean;
+  insightSavedFlash: boolean;
   setEnergy: (value: number) => void;
   setClarity: (value: number) => void;
   setStability: (value: number) => void;
@@ -1158,13 +1236,6 @@ function JourneyTab(props: {
             {props.doneToday ? <RotateCcw size={17} /> : <CheckCircle2 size={17} />}
             {props.doneToday ? props.t.journey.undoToday : props.t.journey.markToday}
           </button>
-          <button className="button secondary" type="button" title={props.t.habitsUx.tooltips.tooMuch} disabled={props.busy || !activeHabit} onClick={props.softenTodayStep}>
-            <Sparkles size={17} />
-            {props.t.dashboard.tooMuch}
-          </button>
-          <button className="btn-back" type="button" title={props.t.habitsUx.tooltips.replace} disabled={props.busy || !activeHabit} onClick={props.rotateTodayStep}>
-            {props.t.dashboard.replace}
-          </button>
         </div>
         {props.dailyFeedback && <div className="habits-inline-feedback">{props.dailyFeedback}</div>}
       </section>
@@ -1205,7 +1276,7 @@ function JourneyTab(props: {
         />
         <button className="button secondary" type="button" title={props.t.habitsUx.tooltips.saveMetric} disabled={props.busy} onClick={props.saveMetric}>
           <Save size={17} />
-          {props.t.dashboard.saveMetric}
+          {props.metricSavedFlash ? props.t.saved : props.t.dashboard.saveMetric}
         </button>
       </section>
 
@@ -1215,88 +1286,8 @@ function JourneyTab(props: {
         <textarea className="input habits-note" placeholder={props.t.dashboard.insightPlaceholder} value={props.insight} onChange={(event) => props.setInsight(event.target.value)} />
         <button className="button secondary" type="button" title={props.t.habitsUx.tooltips.saveInsight} disabled={props.busy || !props.insight.trim()} onClick={props.saveInsight}>
           <Archive size={17} />
-          {props.t.dashboard.saveInsight}
+          {props.insightSavedFlash ? props.t.saved : props.t.dashboard.saveInsight}
         </button>
-      </section>
-
-      <section className="habits-panel habits-journey-details-duplicate">
-        <div className="habit-week">{props.t.habitsUx.journeySteps.details}</div>
-        <h2>{props.t.journey.title}<HelpTip label={props.t.habitsUx.tooltips.journey} /></h2>
-        <p className="habits-muted">{props.program.careerAction || props.t.journey.copy}</p>
-        {activeHabit && (
-          <div className="habits-current">
-            <div className="habit-week">{props.t.stats.cycle} {activeHabit.cycle} · {props.t.stats.week} {activeHabit.week}</div>
-            <h3>{activeHabit.title}</h3>
-            <p>{activeHabit.focus}</p>
-            <div className="habits-tabs">
-              {(["essence", "practice", "why"] as DetailTab[]).map((tab) => (
-                <button className={`btn-back ${props.detailTab === tab ? "active-control" : ""}`} type="button" key={tab} onClick={() => props.setDetailTab(tab)}>
-                  {props.t.journey[tab]}
-                </button>
-              ))}
-            </div>
-            <div className="habit-detail">{activeHabit[props.detailTab]}</div>
-          </div>
-        )}
-        {activeHabit && (
-          <div className="habits-week-card">
-            <div className="row">
-              <strong>{props.t.journey.weekCalendar}</strong>
-              <span>{activeHabit.checkinsDone}/7</span>
-            </div>
-            <WeekDots habit={activeHabit} />
-            <div className="progress-bg"><div className="progress-fill" style={{ width: `${props.program.stats.weekProgress}%` }} /></div>
-            {canAdvance && (
-              <div className="habits-mini-reward">
-                <Trophy size={15} />
-                <span>{props.t.journey.completeReady}. {props.t.journey.completeCopy}</span>
-              </div>
-            )}
-          </div>
-        )}
-        {activeHabit && (
-          <div className="habits-week-summary">
-            <div>
-              <div className="habit-week">{props.t.habitsUx.weekSummary.title}</div>
-              <strong>{canAdvance ? props.t.habitsUx.weekSummary.ready : props.t.habitsUx.weekSummary.inProgress}</strong>
-            </div>
-            <button className="btn-back" type="button" onClick={() => copyWeekSummary(props.program, activeHabit)}>
-              {props.t.habitsUx.weekSummary.copy}
-            </button>
-          </div>
-        )}
-      </section>
-
-      <section className="habits-panel">
-        <h2>{props.t.habitsUx.weekControlsTitle}<HelpTip label={props.t.habitsUx.tooltips.weekControls} /></h2>
-        <div className="habits-action-stack">
-          {canAdvance && (
-            <button className="button" type="button" title={props.t.habitsUx.tooltips.advance} disabled={props.busy} onClick={() => props.advanceWeek(false)}>
-              <CheckCircle2 size={17} />
-              {props.t.journey.advance}
-            </button>
-          )}
-          <button className="button secondary" type="button" title={props.t.habitsUx.tooltips.softAdvance} disabled={props.busy} onClick={() => props.advanceWeek(true)}>
-            <Sparkles size={17} />
-            {props.t.journey.softAdvance}
-          </button>
-          <button className="button secondary" type="button" title={props.t.habitsUx.tooltips.freeze} disabled={props.busy || props.program.settings.weeklyFreezes <= 0} onClick={props.freezeWeek}>
-            <PauseCircle size={17} />
-            {props.program.settings.weeklyFreezes > 0 ? `${props.t.journey.freeze} (${props.program.settings.weeklyFreezes})` : props.t.journey.noFreezes}
-          </button>
-          {activeHabit && (
-            <button className="button secondary" type="button" title={props.t.habitsUx.tooltips.calendar} disabled={props.busy} onClick={props.addCalendarEvent}>
-              <CalendarPlus size={17} />
-              {props.t.journey.calendar}
-            </button>
-          )}
-          {scheduledEvent && (
-            <div className="habits-mini-reward habits-scheduled-event">
-              <CalendarPlus size={15} />
-              <span>{props.t.messages.calendarScheduled} {formatCalendarDateTime(new Date(scheduledEvent.startsAt))}</span>
-            </div>
-          )}
-        </div>
       </section>
 
       <section className="habits-panel">
@@ -1315,6 +1306,24 @@ function JourneyTab(props: {
           <Bot size={17} />
           {telegramLinked ? props.t.settings.telegramReconnect : props.t.settings.telegramConnect}
         </button>
+      </section>
+
+      <section className="habits-panel">
+        <h2>{props.t.journey.calendar}<HelpTip label={props.t.habitsUx.tooltips.calendar} /></h2>
+        <div className="habits-action-stack">
+          {activeHabit && (
+            <button className="button secondary" type="button" title={props.t.habitsUx.tooltips.calendar} disabled={props.busy} onClick={props.addCalendarEvent}>
+              <CalendarPlus size={17} />
+              {props.t.journey.calendar}
+            </button>
+          )}
+          {scheduledEvent && (
+            <div className="habits-mini-reward habits-scheduled-event">
+              <CalendarPlus size={15} />
+              <span>{props.t.messages.calendarScheduled} {formatCalendarDateTime(new Date(scheduledEvent.startsAt))}</span>
+            </div>
+          )}
+        </div>
       </section>
 
     </div>
@@ -1427,6 +1436,7 @@ function ArchiveTab(props: {
   const showWeeks = props.filter === "all" || props.filter === "weeks";
   const closedWeeks = props.program.enrollments.filter((habit) => habit.status === "COMPLETED");
   const weekSummaries = props.program.weekSummaries ?? [];
+  const groupedWeekSummaries = groupWeekSummariesByMonth(weekSummaries);
   return (
     <div className="habits-grid">
       <section className="habits-panel habits-wide">
@@ -1449,7 +1459,7 @@ function ArchiveTab(props: {
             ) : props.program.insights.map((item) => (
               <article className="habits-card" key={item.id}>
                 <div className="habit-week">{formatDate(item.createdAt)}{item.habitTitle ? ` · ${item.habitTitle}` : ""}</div>
-                <p>{item.text}</p>
+                <p>{clipText(item.text, 300)}</p>
                 <button className="btn-back" type="button" onClick={() => copyInsight(item.text, props.markSaved, props.t.archive.copied)}>{props.t.archive.copyInsight}</button>
               </article>
             ))}
@@ -1474,22 +1484,33 @@ function ArchiveTab(props: {
         <section className="habits-panel habits-wide">
           <h2>{props.t.habitsUx.archive.closedWeeksTitle}<HelpTip label={props.t.habitsUx.tooltips.archive} /></h2>
           <div className="habits-closed-weeks">
-            {weekSummaries.length > 0 ? weekSummaries.map((summary) => (
-              <article className="habits-card habits-closed-week" key={summary.id}>
-                <div className="habit-week">{props.t.stats.cycle} {summary.cycle} · {props.t.stats.week} {summary.week} · {summary.completionMode}</div>
-                <h3>{summary.habitTitle}</h3>
-                <p>{summary.summary}</p>
-                <div className="habits-current">
-                  <strong>{summary.rewardLabel} · +{summary.xpAwarded} XP</strong>
-                  <span>{summary.pingviFeedback}</span>
+            {groupedWeekSummaries.length > 0 ? groupedWeekSummaries.map((group) => (
+              <div className="habits-week-month-group" key={group.key}>
+                <div className="habits-month-heading">
+                  <div>
+                    <span>{group.label}</span>
+                    <strong>{props.program.stats.rank.title}</strong>
+                  </div>
+                  <em>{group.summaries.length} нед.</em>
                 </div>
-                <div className="row">
-                  <span>{summary.checkinsDone}/7</span>
-                  <button className="btn-back" type="button" onClick={() => copyInsight(`${summary.summary}\n\n${summary.pingviFeedback}`, props.markSaved, props.t.habitsUx.archive.weekCopied)}>
-                    {props.t.habitsUx.archive.shareWeek}
-                  </button>
-                </div>
-              </article>
+                {group.summaries.map((summary) => (
+                  <article className="habits-card habits-closed-week" key={summary.id}>
+                    <div className="habit-week">{props.t.stats.cycle} {summary.cycle} · {props.t.stats.week} {summary.week} · {summary.completionMode}</div>
+                    <h3>{summary.habitTitle}</h3>
+                    <p>{summary.summary}</p>
+                    <div className="habits-current">
+                      <strong>{summary.rewardLabel} · +{summary.xpAwarded} XP</strong>
+                      <span>{summary.pingviFeedback}</span>
+                    </div>
+                    <div className="row">
+                      <span>{summary.checkinsDone}/7</span>
+                      <button className="btn-back" type="button" onClick={() => copyInsight(`${summary.summary}\n\n${summary.pingviFeedback}`, props.markSaved, props.t.habitsUx.archive.weekCopied)}>
+                        {props.t.habitsUx.archive.shareWeek}
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
             )) : closedWeeks.length === 0 ? (
               <div className="habits-current">{props.t.habitsUx.archive.closedWeeksEmpty}</div>
             ) : closedWeeks.map((habit) => (
@@ -1512,7 +1533,7 @@ function ArchiveTab(props: {
         <section className="habits-panel habits-wide">
           <h2>{props.t.archive.hall}</h2>
           <div className="habits-rank-ladder">
-            {["Начало пути", "Практик Икигай", "Исследователь вектора", "Архитектор привычек", "Проводник Икигай", "Мастер Икигай"].map((rank, index) => (
+            {["Новичок пути", "Искатель баланса", "Практик осознанности", "Хранитель энергии", "Мастер равновесия", "Гуру Икигай"].map((rank, index) => (
               <div className={`habits-rank-step ${props.program.stats.rank.level === index + 1 ? "active" : ""}`} key={rank}>
                 <span>{index + 1}</span>
                 <strong>{rank}</strong>
@@ -1526,6 +1547,20 @@ function ArchiveTab(props: {
 }
 
 function GuideTab({ t, program }: { t: ReturnType<typeof useSiteText>["habits"]["app"]; program: HabitProgramSummary }) {
+  const rewardRows = [
+    ["100%", "Золотой сундук", "+50 XP"],
+    ["70-99%", "Серебряный сундук", "+20 XP"],
+    ["40-69%", "Бронзовый значок", "+0 XP"],
+    ["<40%", "Без бонусной награды", "+0 XP"]
+  ];
+  const rankRows = [
+    ["0-20%", "Новичок пути"],
+    ["20-40%", "Искатель баланса"],
+    ["40-60%", "Практик осознанности"],
+    ["60-80%", "Хранитель энергии"],
+    ["80-95%", "Мастер равновесия"],
+    ["95-100%", "Гуру Икигай"]
+  ];
   return (
     <div className="habits-grid">
       <section className="habits-panel">
@@ -1543,14 +1578,31 @@ function GuideTab({ t, program }: { t: ReturnType<typeof useSiteText>["habits"][
       <section className="habits-panel">
         <h2>{t.guide.cycles}</h2>
         <div className="habits-reward-list">
-          {program.cycles.map((cycle) => (
-            <div className="habits-current" key={cycle.id}>
-              <div className="habit-week">{cycle.label}</div>
-              <h3>{cycle.title}</h3>
-              <p>{cycle.goal}</p>
-              <small>{cycle.areas.join(" · ")}</small>
-            </div>
-          ))}
+          <div className="habits-current">
+            <div className="habit-week">Дневные действия</div>
+            <p>Привычка дня дает +10 XP. Состояние дает +15 XP за три шкалы. Инсайт дает +15 XP.</p>
+          </div>
+          <div className="habits-current">
+            <div className="habit-week">Неделя</div>
+            {rewardRows.map(([percent, label, xp]) => (
+              <div className="row" key={percent}>
+                <span>{percent} · {label}</span>
+                <strong>{xp}</strong>
+              </div>
+            ))}
+          </div>
+          <div className="habits-current">
+            <div className="habit-week">Текущее звание месяца</div>
+            <h3>{program.stats.rank.title}</h3>
+            <p>{program.stats.rank.monthPercent ?? 0}% от личного максимума месяца · {program.stats.rank.monthXp ?? 0}/{program.stats.rank.monthMaxXp ?? 0} XP</p>
+            <div className="progress-bg"><div className="progress-fill" style={{ width: `${program.stats.rank.progress}%` }} /></div>
+            {rankRows.map(([range, label]) => (
+              <div className="row" key={label}>
+                <span>{label}</span>
+                <strong>{range}</strong>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
       <section className="habits-panel habits-wide">
@@ -1584,9 +1636,9 @@ function GuideTab({ t, program }: { t: ReturnType<typeof useSiteText>["habits"][
       <section className="habits-panel habits-wide">
         <h2>{t.habitsUx.actionHelp.title}</h2>
         <div className="habits-action-help-grid">
-          <p><strong>{t.journey.advance}</strong>{t.habitsUx.actionHelp.advance}</p>
-          <p><strong>{t.journey.softAdvance}</strong>{t.habitsUx.actionHelp.softAdvance}</p>
-          <p><strong>{t.journey.freeze}</strong>{t.habitsUx.actionHelp.freeze}</p>
+          <p><strong>{t.journey.markToday}</strong>{t.habitsUx.actionHelp.advance}</p>
+          <p><strong>{t.dashboard.saveMetric}</strong>{t.habitsUx.actionHelp.softAdvance}</p>
+          <p><strong>{t.dashboard.saveInsight}</strong>{t.habitsUx.actionHelp.freeze}</p>
           <p><strong>{t.journey.calendar}</strong>{t.habitsUx.actionHelp.calendar}</p>
         </div>
       </section>
@@ -1610,6 +1662,7 @@ function SettingsTab(props: {
   setName: (value: string) => void;
   setZone: (value: string) => void;
   setAvatar: (value: string) => void;
+  setAvatarFile: (file: File | null) => void;
   setReminderEnabled: (value: boolean) => void;
   setReminderTime: (value: string) => void;
   saveSettings: () => void;
@@ -1630,7 +1683,13 @@ function SettingsTab(props: {
         </label>
         <label className="habits-field">
           <span>{props.t.settings.avatar}</span>
-          <input className="input" value={props.avatar} onChange={(event) => props.setAvatar(event.target.value)} maxLength={8} />
+          <div className="habits-avatar-editor">
+            <AvatarView value={props.avatar} fallback={props.name.slice(0, 1) || "P"} className="habits-settings-avatar" />
+            <div>
+              <input className="input" value={props.avatar.startsWith("data:image/") ? "" : props.avatar} onChange={(event) => props.setAvatar(event.target.value)} maxLength={500} placeholder="A, 🙂 или https://..." />
+              <input className="input" type="file" accept="image/*" onChange={(event) => props.setAvatarFile(event.target.files?.[0] ?? null)} />
+            </div>
+          </div>
         </label>
         <label className="habits-field">
           <span>{props.t.settings.weakZone}</span>
@@ -1759,6 +1818,16 @@ function HelpTip({ label }: { label: string }) {
   );
 }
 
+function AvatarView({ value, fallback, className }: { value: string; fallback: string; className: string }) {
+  const avatar = value.trim();
+  const isImage = /^data:image\//.test(avatar) || /^https?:\/\//.test(avatar);
+  return (
+    <div className={className}>
+      {isImage ? <img src={avatar} alt="" /> : <span>{avatar || fallback}</span>}
+    </div>
+  );
+}
+
 function WeekDots({ habit }: { habit: HabitEnrollmentSummary }) {
   const completedDates = new Set(habit.checkins.filter((checkin) => checkin.completed).map((checkin) => checkin.date));
   const days = Array.from({ length: 7 }, (_, index) => index + 1);
@@ -1781,6 +1850,42 @@ function metricStatus(value: number) {
 
 function normalizeTelegramFrequency(value?: string | null): TelegramFrequency {
   return value === "off" || value === "daily" || value === "weekdays" || value === "weekly" ? value : "daily";
+}
+
+function calculateOnboardingStart(answers: Partial<Record<OnboardingZone, number>>): { weakZone: OnboardingZone; focus: HabitStartFocus } {
+  const scored = onboardingZones.map((zone) => ({ zone, score: answers[zone] ?? 3 }));
+  const weakest = scored.sort((left, right) => left.score - right.score)[0]?.zone ?? "passion";
+  const focusByZone: Record<OnboardingZone, HabitStartFocus> = {
+    passion: "energy",
+    mission: "rhythm",
+    profession: "focus",
+    vocation: "career"
+  };
+  return {
+    weakZone: weakest,
+    focus: focusByZone[weakest]
+  };
+}
+
+function formatTemplate(template: string, values: Record<string, string | number>) {
+  return Object.entries(values).reduce((result, [key, value]) => result.replaceAll(`{${key}}`, String(value)), template);
+}
+
+function clipText(value: string, maxLength: number) {
+  return value.length > maxLength ? `${value.slice(0, maxLength - 1)}…` : value;
+}
+
+function groupWeekSummariesByMonth(summaries: HabitProgramSummary["weekSummaries"]) {
+  const groups = new Map<string, { key: string; label: string; summaries: HabitProgramSummary["weekSummaries"] }>();
+  for (const summary of summaries) {
+    const date = new Date(summary.createdAt);
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+    const label = new Intl.DateTimeFormat("ru-RU", { month: "long", year: "numeric" }).format(date);
+    const group = groups.get(key) ?? { key, label, summaries: [] };
+    group.summaries.push(summary);
+    groups.set(key, group);
+  }
+  return Array.from(groups.values());
 }
 
 function MetricSlider(props: { icon: string; color: string; label: string; value: number; hint: string; scale: readonly string[]; numberHints: readonly string[]; onChange: (value: number) => void }) {

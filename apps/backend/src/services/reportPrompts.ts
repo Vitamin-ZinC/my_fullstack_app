@@ -109,7 +109,7 @@ export const defaultReportPromptTemplates: PromptDraft[] = [
   {
     key: REPORT_FULL_SYSTEM_PROMPT_KEY,
     locale: "ru",
-    version: 6,
+    version: 7,
     status: "ACTIVE",
     title: "ORKEN.LIFE PREMIUM report system prompt",
     content: [
@@ -121,6 +121,7 @@ export const defaultReportPromptTemplates: PromptDraft[] = [
       "Write as a senior career diagnostician: specific, practical, nuanced, and safe.",
       "Every diagnostic parameter must be an interpretive answer about work behavior, not a raw label, score, or translation of the parameter name.",
       "Every voice_analysis and face_analysis value must use three labeled parts: 'Ваш результат:', 'Что это значит:', and 'Рекомендация:'.",
+      "Separate what the person said from how the voice sounded. Spoken profession, role names, and topics can influence content interpretation only as questionnaire/transcript evidence; they must not be treated as acoustic voice evidence.",
       "Prefer evidence-based interpretation: questionnaire first, transcript/content second, measurable voice metrics third, photo/micromimic observations only as weak visual presentation signals.",
       "If a signal is missing or low quality, still write a useful recommendation, but explicitly soften the evidence strength."
     ].join("\n")
@@ -128,15 +129,16 @@ export const defaultReportPromptTemplates: PromptDraft[] = [
   {
     key: REPORT_FULL_USER_PROMPT_KEY,
     locale: "ru",
-    version: 6,
+    version: 7,
     status: "ACTIVE",
     title: "ORKEN.LIFE PREMIUM report user prompt",
     content: [
       "Output language: {{language}}.",
       "Create a detailed paid ORKEN.LIFE ikigai/career report.",
       "Evidence hierarchy: questionnaire is the primary source; transcript shows vocabulary, themes, and clarity of thought; voiceMetricsJson shows delivery signals; image/photo is only a weak visual presentation signal.",
+      "Explicitly separate content analysis from voice delivery analysis: if the user says a profession or role, use it only as self-described context and explain that it does not automatically determine the result.",
       "If media evidence is unavailable or weak, still write useful sections, but ground them in the questionnaire and clearly phrase media parts as limited hypotheses.",
-      "Return a practical premium report with detailed voice_analysis, face_analysis, 3 to 5 top_roles, personalized ikigai_zones, career_action, and final_insight.",
+      "Return a practical premium report with detailed voice_analysis, face_analysis, exactly 5 top_roles, personalized ikigai_zones, career_action, and final_insight.",
       "Sections 2 through 8 must be personalized. Do not output placeholders, one-word labels, English trait words, raw scores, or 'unavailable' as a value.",
       "Each voice_analysis and face_analysis value must be a Russian short paragraph with exactly these three visible labeled parts: 'Ваш результат:', 'Что это значит:', and 'Рекомендация:'.",
       "Use this style for every diagnostic parameter: 'Ваш результат: [конкретный результат по параметру]. Что это значит: [рабочая интерпретация, где это помогает и какой риск возникает]. Рекомендация: [одно конкретное действие развития]'.",
@@ -152,7 +154,7 @@ export const defaultReportPromptTemplates: PromptDraft[] = [
       "For face_analysis, describe observable presentation effects only: facial readability, steadiness, expressiveness, visual organization, and perceived communication style in the submitted image. Do not infer identity, ethnicity, health, attractiveness, age, or hidden psychological states.",
       "For ikigai_zones, write personalized answers for passion, mission, profession, vocation, and ikigai. Each zone must have title, insight, and recommendation. These texts are shown when the user selects a zone, so they must be useful without extra context.",
       "For each ikigai zone, connect the recommendation to one of the user's questionnaire answers and one career experiment or communication behavior.",
-      "Top roles must include 3 to 5 roles with realistic match percentages from 55 to 95, sorted descending. Each role must include role-specific why, voiceEvidence, faceEvidence, strengths, and risks.",
+      "Top roles must include exactly 5 roles with realistic match percentages from 55 to 95, sorted descending. Each role must include role-specific why, voiceEvidence, faceEvidence, strengths, and risks.",
       "Do not reuse the same evidence sentence across all roles. Each role must explain a different practical fit.",
       "career_action must be a 30-day implementation route with Week 1, Week 2, Week 3, and Week 4 steps, each with a concrete deliverable and a measurable check.",
       "final_insight is section 8, titled 'Итоговое аналитическое заключение'. Write it as one cohesive analytical paragraph, not a list. It must synthesize the visible presentation, voice signal, facial/micromimic signal, inner potential, leadership/learning vector, and the user's deeper Ikigai direction.",

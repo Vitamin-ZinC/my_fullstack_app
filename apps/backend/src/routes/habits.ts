@@ -81,7 +81,7 @@ const settingsSchema = z.object({
   weakZone: weakZoneSchema.optional(),
   reminderEnabled: z.boolean().optional(),
   reminderTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
-  avatar: z.string().trim().max(24).optional()
+  avatar: z.string().trim().max(50000).optional()
 });
 
 const advanceProgramSchema = z.object({
@@ -108,6 +108,13 @@ const calendarEventSchema = z.object({
 });
 
 type NavigatorContext = z.infer<typeof navigatorContextSchema>;
+type WeekCompletionMode = "FULL" | "SOFT" | "FROZEN";
+type WeekReward = {
+  type: string;
+  label: string;
+  xp: number;
+  percent: number;
+};
 
 export async function habitsRoutes(app: FastifyInstance) {
   app.get("/api/habits/config", async () => getHabitSubscriptionConfig());
@@ -370,8 +377,8 @@ export async function habitsRoutes(app: FastifyInstance) {
         data: {
           programId: body.programId,
           type: "daily_metric",
-          label: "Метрика дня сохранена",
-          xp: 5
+          label: "Состояние дня: энергия, ясность, устойчивость",
+          xp: 15
         }
       });
     }
@@ -440,7 +447,7 @@ export async function habitsRoutes(app: FastifyInstance) {
         data: {
           programId: body.programId,
           type: "daily_checkin",
-          label: `Мягкий шаг: ${enrollment.title}`,
+          label: `Привычка дня: ${enrollment.title}`,
           xp: 10
         }
       });
@@ -653,10 +660,13 @@ export async function habitsRoutes(app: FastifyInstance) {
       include: programInclude()
     });
 
-    if (session.userId && body.name !== undefined) {
+    if (session.userId && (body.name !== undefined || body.avatar !== undefined)) {
       await prisma.user.update({
         where: { id: session.userId },
-        data: { name: body.name || null }
+        data: {
+          ...(body.name !== undefined ? { name: body.name || null } : {}),
+          ...(body.avatar !== undefined ? { avatarUrl: body.avatar || null } : {})
+        }
       });
     }
 
@@ -693,9 +703,9 @@ export async function habitsRoutes(app: FastifyInstance) {
     const isComplete = nextSortOrder > snapshot.stats.totalWeeks;
     const nextCycle = isComplete ? snapshot.stats.currentCycle : Math.ceil(nextSortOrder / HABIT_WEEKS_PER_CYCLE);
     const nextWeek = isComplete ? snapshot.stats.currentWeek : ((nextSortOrder - 1) % HABIT_WEEKS_PER_CYCLE) + 1;
-    const completionMode = body.force ? "SOFT" : "FULL";
-    const weekXp = isComplete ? 120 : body.force ? 10 : 35;
-    const weekSummaryData = await buildWeekSummaryDataForProgram(activeEnrollment, completionMode, weekXp, isComplete, request.log);
+    const completionMode = activeEnrollment.checkinsDone >= 7 ? "FULL" : "SOFT";
+    const weekReward = getWeekReward(activeEnrollment.checkinsDone, isComplete);
+    const weekSummaryData = await buildWeekSummaryDataForProgram(activeEnrollment, completionMode, weekReward, isComplete, request.log);
 
     await prisma.$transaction([
       prisma.habitWeekSummary.upsert({
@@ -728,9 +738,9 @@ export async function habitsRoutes(app: FastifyInstance) {
       prisma.habitRewardEvent.create({
         data: {
           programId: body.programId,
-          type: isComplete ? "program_completed" : body.force ? "week_soft_advanced" : "week_completed",
-          label: isComplete ? "Годовая программа завершена" : body.force ? "Мягкий переход к следующей неделе" : "Неделя завершена",
-          xp: weekXp
+          type: isComplete ? "program_completed" : weekReward.type,
+          label: isComplete ? `Годовая программа завершена · ${weekReward.label}` : weekReward.label,
+          xp: weekReward.xp
         }
       })
     ]);
@@ -766,7 +776,7 @@ export async function habitsRoutes(app: FastifyInstance) {
     const snapshot = serializeProgram(program);
     const activeEnrollment = snapshot.activeEnrollment;
     if (!activeEnrollment) return reply.code(404).send({ error: "Active habit not found" });
-    const weekSummaryData = await buildWeekSummaryDataForProgram(activeEnrollment, "FROZEN", 5, false, request.log);
+    const weekSummaryData = await buildWeekSummaryDataForProgram(activeEnrollment, "FROZEN", getFrozenWeekReward(), false, request.log);
 
     await prisma.$transaction([
       prisma.habitWeekSummary.upsert({
@@ -786,8 +796,8 @@ export async function habitsRoutes(app: FastifyInstance) {
         data: {
           programId: body.programId,
           type: "weekly_freeze_used",
-          label: "Неделя заморожена без потери ритма",
-          xp: 5
+          label: "Неделя поставлена на паузу без XP",
+          xp: 0
         }
       })
     ]);
@@ -1047,50 +1057,33 @@ async function completeNextDailyTask(programId: string, enrollmentId: string, da
 }
 
 function buildDailyTaskData(enrollment: { title: string; practice: string; essence: string; why: string }, dayIndex: number) {
-  const variants = [
-    {
-      title: "Первый мягкий шаг",
-      microAction: "Сделай только минимальную версию практики за 3 минуты.",
-      whyToday: "Первый день нужен не для результата, а для входа без сопротивления."
-    },
-    {
-      title: "Повтор без давления",
-      microAction: "Повтори практику и отметь, где было легче, чем вчера.",
-      whyToday: "Повтор закрепляет ритм лучше, чем большой рывок."
-    },
-    {
-      title: "Один наблюдаемый сигнал",
-      microAction: "После практики запиши один факт: что изменилось в состоянии или ясности.",
-      whyToday: "Так привычка становится не обязанностью, а источником данных о себе."
-    },
-    {
-      title: "Связь с твоим вектором",
-      microAction: "Сделай практику и сформулируй, как она помогает твоему текущему направлению.",
-      whyToday: "Привычка должна быть связана с личным смыслом, а не жить отдельно."
-    },
-    {
-      title: "Упрощение шага",
-      microAction: "Сократи практику до самой простой версии и всё равно засчитай день.",
-      whyToday: "Устойчивость появляется, когда есть право на маленький формат."
-    },
-    {
-      title: "Закрепление через инсайт",
-      microAction: "Сделай практику и сохрани короткий инсайт одной фразой.",
-      whyToday: "Архив инсайтов покажет, что реально меняется по ходу недели."
-    },
-    {
-      title: "Итог недели",
-      microAction: "Сделай финальный шаг и выбери: продолжать, смягчить или перейти дальше.",
-      whyToday: "Седьмой день помогает закрыть неделю осознанно, без автоматизма."
-    }
-  ];
-  const variant = variants[Math.max(0, Math.min(variants.length - 1, dayIndex - 1))];
+  const copy = buildDailyTaskPresentation(enrollment, dayIndex);
   return {
     dayIndex,
-    title: `День ${dayIndex}: ${variant.title}`,
-    taskText: `${enrollment.title}. ${enrollment.practice}`,
-    microAction: variant.microAction,
-    whyToday: `${variant.whyToday} ${enrollment.essence}`
+    title: copy.title,
+    taskText: copy.taskText,
+    microAction: copy.microAction,
+    whyToday: copy.whyToday
+  };
+}
+
+function buildDailyTaskPresentation(enrollment: { title: string; practice: string; essence: string; why: string }, dayIndex: number) {
+  const minutes = [3, 5, 7, 10, 5, 8, 12][Math.max(0, Math.min(6, dayIndex - 1))] ?? 5;
+  const lazySteps = [
+    "открой заметку и запиши одно слово по теме",
+    "сделай только первую часть действия",
+    "поставь таймер на 30 секунд и начни без оценки",
+    "скажи вслух, какой самый маленький шаг возможен",
+    "убери все лишнее и оставь одну строку",
+    "сохрани один короткий вывод",
+    "запиши один итог недели без анализа"
+  ];
+  const lazyStep = lazySteps[Math.max(0, Math.min(lazySteps.length - 1, dayIndex - 1))];
+  return {
+    title: `${enrollment.title}: день ${dayIndex}`,
+    taskText: `Суть: ${enrollment.essence}`,
+    microAction: `Что сделать: ${enrollment.practice} Время: ${minutes} мин. Если совсем нет сил: ${lazyStep} за 30 секунд.`,
+    whyToday: `Зачем: ${enrollment.why}`
   };
 }
 
@@ -1115,16 +1108,59 @@ function buildReplacementDailyTaskPatch(enrollment: { title: string; practice: s
   };
 }
 
+function getWeekReward(checkinsDone: number, isProgramComplete = false): WeekReward {
+  const percent = Math.min(100, Math.max(0, Math.round((checkinsDone / 7) * 100)));
+  if (isProgramComplete || percent >= 100) {
+    return {
+      type: "week_gold_chest",
+      label: "Золотой сундук — идеальная неделя",
+      xp: 50,
+      percent: 100
+    };
+  }
+  if (percent >= 70) {
+    return {
+      type: "week_silver_chest",
+      label: "Серебряный сундук — сильная неделя",
+      xp: 20,
+      percent
+    };
+  }
+  if (percent >= 40) {
+    return {
+      type: "week_bronze_badge",
+      label: "Бронзовый значок — есть движение",
+      xp: 0,
+      percent
+    };
+  }
+  return {
+    type: "week_no_reward",
+    label: "Неделя без бонусной награды",
+    xp: 0,
+    percent
+  };
+}
+
+function getFrozenWeekReward(): WeekReward {
+  return {
+    type: "week_frozen",
+    label: "Пауза недели",
+    xp: 0,
+    percent: 0
+  };
+}
+
 function buildWeekSummaryData(
   enrollment: { cycle?: number; week: number; title: string; focus: string; checkinsDone: number },
-  completionMode: "FULL" | "SOFT" | "FROZEN",
-  xpAwarded: number,
+  completionMode: WeekCompletionMode,
+  reward: WeekReward,
   isProgramComplete: boolean
 ) {
   const modeLabels = {
     FULL: "неделя закрыта полностью",
-    SOFT: "мягкий переход к следующей неделе",
-    FROZEN: "неделя сохранена без давления"
+    SOFT: "неделя закрыта без полного ритма",
+    FROZEN: "неделя поставлена на паузу"
   };
   const checkinsText = `${enrollment.checkinsDone}/7 отметок`;
   return {
@@ -1132,16 +1168,18 @@ function buildWeekSummaryData(
     week: enrollment.week,
     checkinsDone: enrollment.checkinsDone,
     completionMode,
-    summary: `${modeLabels[completionMode]}: "${enrollment.title}". Фокус недели: ${enrollment.focus}. Зафиксировано ${checkinsText}.`,
+    summary: `${modeLabels[completionMode]}: "${enrollment.title}". Фокус недели: ${enrollment.focus}. Зафиксировано ${checkinsText}, прогресс недели ${reward.percent}%.`,
     pingviFeedback: isProgramComplete
       ? "Ты закрыл весь маршрут. Теперь важнее не начинать новый бег сразу, а посмотреть, какие привычки реально стали твоими."
       : completionMode === "FULL"
-        ? "Хороший ритм: можно переходить дальше и оставить один короткий вывод в архиве."
+        ? `Ты закрыл(а) неделю на 100% — ${reward.label}. Можно переходить дальше и оставить один короткий вывод в архиве.`
         : completionMode === "SOFT"
-          ? "Мягкий переход засчитан. Это не провал, а способ сохранить движение без лишнего давления."
-          : "Неделя поставлена на паузу. Вернуться к ней можно без ощущения, что путь сброшен.",
-    rewardLabel: isProgramComplete ? "Маршрут завершён" : completionMode === "FULL" ? "Неделя завершена" : completionMode === "SOFT" ? "Мягкий переход" : "Неделя заморожена",
-    xpAwarded
+          ? reward.xp > 0
+            ? `${reward.label}. Движение есть, продолжаем без давления.`
+            : "Эта неделя закрыта без бонусных XP. Ничего не отнимается: отметки за реальные действия остаются при тебе."
+          : "Неделя поставлена на паузу. Это не награда и не штраф, просто способ сохранить маршрут.",
+    rewardLabel: isProgramComplete ? `Маршрут завершен · ${reward.label}` : reward.label,
+    xpAwarded: reward.xp
   };
 }
 
@@ -1153,12 +1191,12 @@ const weekSummaryLlmSchema = z.object({
 
 async function buildWeekSummaryDataForProgram(
   enrollment: { cycle?: number; week: number; title: string; focus: string; essence?: string | null; practice?: string | null; why?: string | null; checkinsDone: number; checkins?: Array<{ note?: string | null; date?: string; completed?: boolean }> },
-  completionMode: "FULL" | "SOFT" | "FROZEN",
-  xpAwarded: number,
+  completionMode: WeekCompletionMode,
+  reward: WeekReward,
   isProgramComplete: boolean,
   log?: { warn: (payload: unknown, message?: string) => void }
 ) {
-  const fallback = buildWeekSummaryData(enrollment, completionMode, xpAwarded, isProgramComplete);
+  const fallback = buildWeekSummaryData(enrollment, completionMode, reward, isProgramComplete);
   const settings = await getHabitAiSettings(env.OPENAI_MODEL);
   if (settings.weekSummaryMode !== HABIT_WEEK_SUMMARY_MODE_LLM || !hasOpenAiClient()) return fallback;
 
@@ -1193,6 +1231,7 @@ async function buildWeekSummaryDataForProgram(
             completionMode,
             isProgramComplete,
             checkinsDone: enrollment.checkinsDone,
+            weekReward: reward,
             notes: (enrollment.checkins ?? [])
               .filter((checkin) => checkin.completed && checkin.note)
               .slice(0, 5)
@@ -1208,8 +1247,7 @@ async function buildWeekSummaryDataForProgram(
     return {
       ...fallback,
       summary: parsed.summary,
-      pingviFeedback: parsed.pingviFeedback,
-      rewardLabel: parsed.rewardLabel
+      pingviFeedback: parsed.pingviFeedback
     };
   } catch (error) {
     log?.warn({
@@ -1244,19 +1282,22 @@ function serializeProgram(program: any) {
       createdAt: checkin.createdAt.toISOString()
     }));
     const doneCheckins = checkins.filter((checkin: any) => checkin.completed);
-    const dailyTasks = (enrollment.dailyTasks ?? []).map((task: any) => ({
-      id: task.id,
-      enrollmentId: task.enrollmentId,
-      date: task.date?.toISOString().slice(0, 10) ?? null,
-      dayIndex: task.dayIndex,
-      title: task.title,
-      taskText: task.taskText,
-      microAction: task.microAction,
-      whyToday: task.whyToday,
-      completedAt: task.completedAt?.toISOString() ?? null,
-      xpAwarded: task.xpAwarded,
-      createdAt: task.createdAt.toISOString()
-    }));
+    const dailyTasks = (enrollment.dailyTasks ?? []).map((task: any) => {
+      const copy = buildDailyTaskPresentation(enrollment, task.dayIndex);
+      return {
+        id: task.id,
+        enrollmentId: task.enrollmentId,
+        date: task.date?.toISOString().slice(0, 10) ?? null,
+        dayIndex: task.dayIndex,
+        title: copy.title,
+        taskText: copy.taskText,
+        microAction: copy.microAction,
+        whyToday: copy.whyToday,
+        completedAt: task.completedAt?.toISOString() ?? null,
+        xpAwarded: task.xpAwarded,
+        createdAt: task.createdAt.toISOString()
+      };
+    });
     return {
       id: enrollment.id,
       slug: enrollment.habitDefinition?.slug,
@@ -1294,6 +1335,12 @@ function serializeProgram(program: any) {
     ? Math.max(0, Math.ceil((program.trialEndsAt.getTime() - now.getTime()) / 86400000))
     : null;
   const completedWeekCheckins = activeEnrollment?.checkinsDone ?? 0;
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const monthRewards = program.rewards.filter((reward: any) => reward.createdAt >= monthStart);
+  const monthXp = monthRewards.reduce((sum: number, reward: any) => sum + reward.xp, 0);
+  const daysElapsedThisMonth = Math.max(1, daysBetween(monthStart, now));
+  const weeksClosedThisMonth = (program.weekSummaries ?? []).filter((summary: any) => summary.createdAt >= monthStart).length;
+  const monthMaxXp = (daysElapsedThisMonth * 40) + (Math.max(1, weeksClosedThisMonth) * 50);
 
   return {
     id: program.id,
@@ -1388,37 +1435,44 @@ function serializeProgram(program: any) {
       completedWeekCheckins,
       weekProgress: Math.min(100, Math.round((completedWeekCheckins / 7) * 100)),
       wellnessScore,
-      rank: getHabitRank(xp, currentSortOrder)
+      rank: getHabitRank(monthXp, currentSortOrder, monthMaxXp)
     }
   };
 }
 
 const HABIT_RANKS = [
-  { minXp: 0, title: "Начало пути" },
-  { minXp: 420, title: "Практик Икигай" },
-  { minXp: 1260, title: "Исследователь вектора" },
-  { minXp: 2520, title: "Архитектор привычек" },
-  { minXp: 3780, title: "Проводник Икигай" },
-  { minXp: 5040, title: "Мастер Икигай" }
+  { minPercent: 0, title: "Новичок пути" },
+  { minPercent: 20, title: "Искатель баланса" },
+  { minPercent: 40, title: "Практик осознанности" },
+  { minPercent: 60, title: "Хранитель энергии" },
+  { minPercent: 80, title: "Мастер равновесия" },
+  { minPercent: 95, title: "Гуру Икигай" }
 ] as const;
 
-function getHabitRank(xp: number, currentSortOrder: number) {
+function getHabitRank(monthXp: number, currentSortOrder: number, monthMaxXp: number) {
+  const monthPercent = monthMaxXp > 0 ? Math.min(100, Math.round((monthXp / monthMaxXp) * 100)) : 0;
   let index = 0;
   for (let rankIndex = HABIT_RANKS.length - 1; rankIndex >= 0; rankIndex -= 1) {
-    if (xp >= HABIT_RANKS[rankIndex].minXp) {
+    if (monthPercent >= HABIT_RANKS[rankIndex].minPercent) {
       index = rankIndex;
       break;
     }
   }
   const current = HABIT_RANKS[index];
   const next = HABIT_RANKS[index + 1] ?? null;
+  const nextAtXp = next ? Math.ceil((next.minPercent / 100) * monthMaxXp) : null;
+  const currentBand = current.minPercent;
+  const nextBand = next?.minPercent ?? 100;
   return {
     title: current.title,
     level: index + 1,
     nextTitle: next?.title ?? null,
-    nextAtXp: next?.minXp ?? null,
-    progress: next ? Math.min(100, Math.round(((xp - current.minXp) / (next.minXp - current.minXp)) * 100)) : 100,
-    currentSortOrder
+    nextAtXp,
+    progress: next ? Math.min(100, Math.round(((monthPercent - currentBand) / Math.max(1, nextBand - currentBand)) * 100)) : 100,
+    currentSortOrder,
+    monthXp,
+    monthMaxXp,
+    monthPercent
   };
 }
 
@@ -1492,7 +1546,7 @@ function buildManualProgramProfile(
     rhythm: {
       title: "Базовый путь привычек",
       weakZone: null,
-      topRole: "Мягкая ежедневная практика",
+      topRole: "Базовый путь привычек",
       careerAction: "Начать с одного маленького шага: ресурс, фокус, наблюдение и сохранённый инсайт.",
       finalInsight: "Можно начать работу с привычками без повторной диагностики: сначала собрать устойчивый ритм, а персонализацию подключить позже из отчёта."
     }

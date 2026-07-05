@@ -66,13 +66,14 @@ export default function FullReportPage() {
           </section>
           <section id="section-2" className="report-section">
             <h2>{visibleSections[2]}</h2>
+            <p className="report-section-note">{text.voiceIntro}</p>
             <div className="metric-grid">
               {Object.entries(report.voice_analysis).map(([key, value]) => {
                 const label = getMetricLabel(text.voiceLabels, key);
                 return (
                   <div className="metric-card" key={key}>
                     <h3>{label}</h3>
-                    <p>{formatDiagnosticValue(label, value)}</p>
+                    <DiagnosticValue label={label} value={value} />
                   </div>
                 );
               })}
@@ -80,13 +81,14 @@ export default function FullReportPage() {
           </section>
           <section id="section-3" className="report-section">
             <h2>{visibleSections[3]}</h2>
+            <p className="report-section-note">{text.faceIntro}</p>
             <div className="metric-grid">
               {Object.entries(report.face_analysis).map(([key, value]) => {
                 const label = getMetricLabel(text.faceLabels, key);
                 return (
                   <div className="metric-card" key={key}>
                     <h3>{label}</h3>
-                    <p>{formatDiagnosticValue(label, value)}</p>
+                    <DiagnosticValue label={label} value={value} />
                   </div>
                 );
               })}
@@ -94,6 +96,7 @@ export default function FullReportPage() {
           </section>
           <section id="section-4" className="report-section">
             <h2>{visibleSections[4]}</h2>
+            <p className="report-section-note">{text.rolesIntro}</p>
             <div className="roles-grid">
               {report.top_roles.map((role) => (
                 <div className="role-card" key={role.name}>
@@ -112,6 +115,7 @@ export default function FullReportPage() {
           </section>
           <section id="section-5" className="report-section">
             <h2>{visibleSections[5]}</h2>
+            <p className="report-section-note">{text.risksIntro}</p>
             <p className="report-lead">{report.top_roles.map((role) => role.risks).join(" ")}</p>
           </section>
           <section id="section-6" className="report-section">
@@ -158,6 +162,38 @@ function formatDiagnosticValue(label: string, value: string) {
   if (trimmed.length > 24 && trimmed.toLowerCase() !== label.toLowerCase()) return value;
 
   return `По параметру "${label}" для старых отчетов не было сохранено развернутое пояснение. Новые диагностики ORKEN.LIFE формируют здесь персональную интерпретацию: что сигнал может означать в работе, где он помогает, какой риск создает и какой шаг развития выбрать.`;
+}
+
+function DiagnosticValue({ label, value }: { label: string; value: string }) {
+  const formatted = formatDiagnosticValue(label, value);
+  const parts = splitDiagnosticParts(formatted);
+  if (!parts) return <p>{formatted}</p>;
+
+  return (
+    <div className="diagnostic-parts">
+      {parts.map((part) => (
+        <p key={part.label}>
+          <strong>{part.label}</strong>
+          {part.text}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+function splitDiagnosticParts(value: string) {
+  const labels = ["Ваш результат:", "Что это значит:", "Рекомендация:"];
+  const indexes = labels.map((label) => ({ label, index: value.indexOf(label) }));
+  if (indexes.some((item) => item.index === -1)) return null;
+
+  return indexes.map((item, index) => {
+    const start = item.index + item.label.length;
+    const end = indexes[index + 1]?.index ?? value.length;
+    return {
+      label: item.label,
+      text: value.slice(start, end).trim()
+    };
+  });
 }
 
 function storeHabitProfile(report: ReportFull) {

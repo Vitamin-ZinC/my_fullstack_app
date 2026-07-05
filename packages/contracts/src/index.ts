@@ -293,6 +293,7 @@ export type ReportContactResponse = {
   ok: true;
   emailSent: boolean;
   emailId?: string;
+  error?: string;
 };
 
 export type HabitDefinitionSummary = {
@@ -461,6 +462,9 @@ export type HabitProgramSummary = {
       nextAtXp?: number | null;
       progress: number;
       currentSortOrder: number;
+      monthXp?: number;
+      monthMaxXp?: number;
+      monthPercent?: number;
     };
   };
 };

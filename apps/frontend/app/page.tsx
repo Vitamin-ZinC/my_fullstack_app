@@ -1,12 +1,49 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { IkigaiPremiumMap } from "@/components/IkigaiPremiumMap";
+import { api } from "@/lib/api";
 import { useSiteText } from "@/lib/useSiteText";
+
+type CabinetTab = "dashboard" | "journey" | "subscription";
 
 export default function LandingPage() {
   const text = useSiteText();
   const landing = text.landing;
+  const [reportPriceLabel, setReportPriceLabel] = useState("$3");
+  const [habitPriceLabel, setHabitPriceLabel] = useState("$8");
+  const [habitTrialDays, setHabitTrialDays] = useState(14);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    api.getPaymentConfig()
+      .then((config) => {
+        if (!cancelled) setReportPriceLabel(config.priceLabel);
+      })
+      .catch(() => {
+        if (!cancelled) setReportPriceLabel("$3");
+      });
+
+    api.habitConfig()
+      .then((config) => {
+        if (!cancelled) {
+          setHabitPriceLabel(config.priceLabel);
+          setHabitTrialDays(config.trialDays);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setHabitPriceLabel("$8");
+          setHabitTrialDays(14);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <>
@@ -81,6 +118,17 @@ export default function LandingPage() {
               </div>
             </section>
 
+            <ProductSection
+              reportPriceLabel={reportPriceLabel}
+              habitPriceLabel={habitPriceLabel}
+              habitTrialDays={habitTrialDays}
+            />
+
+            <CabinetSection
+              habitPriceLabel={habitPriceLabel}
+              habitTrialDays={habitTrialDays}
+            />
+
             <section className="landing-section compact">
               <div className="card cyan-border card-lg ikigai-landing-card">
                 <h2 className="ub cyan landing-card-title">{landing.modelTitle}</h2>
@@ -115,6 +163,119 @@ export default function LandingPage() {
         </main>
       </div>
     </>
+  );
+}
+
+function ProductSection({ habitPriceLabel, habitTrialDays, reportPriceLabel }: { habitPriceLabel: string; habitTrialDays: number; reportPriceLabel: string }) {
+  const { landing } = useSiteText();
+
+  return (
+    <section className="landing-section compact">
+      <div className="landing-section-head">
+        <h2 className="ub landing-section-title">{landing.productsTitle}</h2>
+        <p className="landing-small-copy">{landing.productsSubtitle}</p>
+      </div>
+      <div className="landing-product-grid">
+        <article className="card cyan-border landing-product-card">
+          <div className="landing-product-icon">✦</div>
+          <h3 className="ub">{landing.diagnosisProduct.title}</h3>
+          <p>{landing.diagnosisProduct.copy}</p>
+          <div className="landing-product-list">
+            {landing.diagnosisProduct.items.map((item) => (
+              <span key={item}>{item}</span>
+            ))}
+          </div>
+          <div className="landing-product-price">
+            <strong>{landing.diagnosisProduct.price}</strong>
+            <small>{formatTemplate(landing.diagnosisProduct.fullReport, { price: reportPriceLabel })}</small>
+          </div>
+          <a className="btn-primary" href="/flow/voice">{landing.diagnosisProduct.cta}</a>
+        </article>
+        <article className="card violet-border landing-product-card">
+          <div className="landing-product-icon violet">◈</div>
+          <h3 className="ub">{landing.habitsProduct.title}</h3>
+          <p>{landing.habitsProduct.copy}</p>
+          <div className="landing-product-list accent">
+            {landing.habitsProduct.items.map((item) => (
+              <span key={item}>{item}</span>
+            ))}
+          </div>
+          <div className="landing-product-price">
+            <strong>{formatTemplate(landing.habitsProduct.price, { price: habitPriceLabel })}</strong>
+            <small>{formatTemplate(landing.habitsProduct.trial, { days: habitTrialDays })}</small>
+          </div>
+          <a className="btn-primary" href="/habits">{landing.habitsProduct.cta}</a>
+        </article>
+      </div>
+    </section>
+  );
+}
+
+function CabinetSection({ habitPriceLabel, habitTrialDays }: { habitPriceLabel: string; habitTrialDays: number }) {
+  const { landing } = useSiteText();
+  const [activeTab, setActiveTab] = useState<CabinetTab>("dashboard");
+  const copy = landing.cabinetPreview;
+  const tabContent = {
+    dashboard: {
+      title: copy.dashboardTitle,
+      body: copy.dashboardCopy,
+      details: ["30/30 дней", "XP и звание", "карта года"]
+    },
+    journey: {
+      title: copy.journeyTitle,
+      body: copy.journeyCopy,
+      details: ["привычка дня", "состояние", "инсайт"]
+    },
+    subscription: {
+      title: copy.subscriptionTitle,
+      body: copy.subscriptionCopy,
+      details: [formatTemplate(copy.trialBadge, { days: habitTrialDays }), "active / paused / cancelled", "Stripe"]
+    }
+  } satisfies Record<CabinetTab, { title: string; body: string; details: string[] }>;
+  const active = tabContent[activeTab];
+
+  return (
+    <section className="landing-section compact" id="cabinet">
+      <div className="card card-lg landing-cabinet-card">
+        <div className="landing-section-head">
+          <h2 className="ub landing-card-title">{landing.cabinetTitle}</h2>
+          <p className="landing-small-copy">{landing.cabinetSubtitle}</p>
+        </div>
+        <div className="landing-cabinet-layout">
+          <div className="landing-cabinet-tabs" role="tablist" aria-label={landing.cabinetTitle}>
+            {(Object.keys(landing.cabinetTabs) as CabinetTab[]).map((tab) => (
+              <button
+                key={tab}
+                className={activeTab === tab ? "active" : ""}
+                type="button"
+                role="tab"
+                aria-selected={activeTab === tab}
+                onClick={() => setActiveTab(tab)}
+              >
+                {landing.cabinetTabs[tab]}
+              </button>
+            ))}
+          </div>
+          <div className="landing-cabinet-preview" role="tabpanel">
+            <div className="landing-cabinet-status">{formatTemplate(copy.trialBadge, { days: habitTrialDays })}</div>
+            <h3 className="ub">{active.title}</h3>
+            <p>{active.body}</p>
+            <div className="landing-cabinet-detail-grid">
+              {active.details.map((detail) => (
+                <span key={detail}>{detail}</span>
+              ))}
+            </div>
+            {activeTab === "subscription" && (
+              <div className="landing-subscription-actions">
+                <button className="btn-primary" type="button">{formatTemplate(copy.subscribe, { price: habitPriceLabel })}</button>
+                <button className="btn-back" type="button">{copy.pause}</button>
+                <button className="btn-back danger" type="button">{copy.cancel}</button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -222,4 +383,8 @@ function highlightProblemText(text: string) {
   }
 
   return text;
+}
+
+function formatTemplate(template: string, values: Record<string, string | number>) {
+  return Object.entries(values).reduce((result, [key, value]) => result.replaceAll(`{${key}}`, String(value)), template);
 }

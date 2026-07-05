@@ -17,6 +17,7 @@ export default function AnalysisPage() {
   const [analysisId, setAnalysisId] = useState("");
   const [email, setEmail] = useState("");
   const [emailError, setEmailError] = useState("");
+  const [contactSavedWithoutEmail, setContactSavedWithoutEmail] = useState(false);
   const [contactBusy, setContactBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -90,9 +91,15 @@ export default function AnalysisPage() {
 
     setContactBusy(true);
     setEmailError("");
+    setContactSavedWithoutEmail(false);
     try {
       window.sessionStorage.setItem("levelup_contact_email", trimmed);
-      await api.saveReportContact(analysisId, trimmed);
+      const result = await api.saveReportContact(analysisId, trimmed);
+      if (!result.emailSent) {
+        setContactSavedWithoutEmail(true);
+        setEmailError(text.contactEmailNotSent);
+        return;
+      }
       window.location.assign(`/report/${analysisId}/free`);
     } catch (reason) {
       setEmailError(reason instanceof Error ? reason.message : text.contactSendError);
@@ -166,6 +173,7 @@ export default function AnalysisPage() {
             onChange={(event) => {
               setEmail(event.target.value);
               setEmailError("");
+              setContactSavedWithoutEmail(false);
             }}
             placeholder={text.contactPlaceholder}
           />
@@ -173,6 +181,11 @@ export default function AnalysisPage() {
           <button className="button" data-testid="free-report-link" onClick={saveEmailAndOpen} disabled={contactBusy}>
             {contactBusy ? text.contactSaving : text.contactSubmit}
           </button>
+          {contactSavedWithoutEmail && (
+            <button className="button secondary" type="button" onClick={() => window.location.assign(`/report/${analysisId}/free`)}>
+              {text.contactOpenReport}
+            </button>
+          )}
         </div>
       )}
     </div>

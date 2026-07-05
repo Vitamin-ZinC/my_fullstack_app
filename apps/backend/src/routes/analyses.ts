@@ -217,7 +217,8 @@ export async function analysisRoutes(app: FastifyInstance) {
     return {
       ok: true,
       emailSent: emailResult.emailSent,
-      emailId: emailResult.emailId
+      emailId: emailResult.emailId,
+      error: emailResult.error
     };
   });
 

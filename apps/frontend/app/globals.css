@@ -4421,33 +4421,56 @@ svg {
 
 .habits-wellness-row {
   align-items: stretch;
+  grid-template-columns: minmax(104px, 122px) minmax(0, 1fr);
   margin: 14px 0;
 }
 
 .habits-progress-ring {
   --progress: 0%;
-  min-height: 132px;
-  border-radius: 16px;
+  position: relative;
   display: grid;
-  place-items: center;
-  background:
-    radial-gradient(circle at center, #020b18 0 54%, transparent 55%),
-    conic-gradient(var(--cyan) var(--progress), rgba(255, 255, 255, 0.09) 0);
-  border: 1px solid rgba(0, 212, 255, 0.18);
-  box-shadow: 0 0 24px rgba(0, 212, 255, 0.1);
+  grid-template-rows: auto auto;
+  width: min(100%, 112px);
+  aspect-ratio: 1;
+  align-content: center;
+  justify-items: center;
+  gap: 4px;
+  justify-self: center;
+  align-self: center;
+  border-radius: 50%;
+  background: conic-gradient(var(--cyan) var(--progress), rgba(148, 163, 184, 0.18) 0);
+  border: 1px solid rgba(0, 212, 255, 0.16);
+  box-shadow: 0 0 18px rgba(0, 212, 255, 0.08);
   text-align: center;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.habits-progress-ring::before {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border-radius: inherit;
+  background: #020b18;
+  box-shadow: inset 0 0 0 1px rgba(0, 212, 255, 0.08);
 }
 
 .habits-progress-ring strong {
+  position: relative;
+  z-index: 1;
   display: block;
   color: #fff;
   font-family: "Unbounded", sans-serif;
-  font-size: 26px;
+  font-size: 24px;
+  line-height: 1;
 }
 
 .habits-progress-ring span {
+  position: relative;
+  z-index: 1;
   color: rgba(255, 255, 255, 0.52);
-  font-size: 11px;
+  font-size: 10px;
+  line-height: 1.2;
 }
 
 .habits-rank-card,
@@ -4458,6 +4481,7 @@ svg {
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.04);
   padding: 14px;
+  min-width: 0;
 }
 
 .habits-compact-week {

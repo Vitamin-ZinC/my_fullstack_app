@@ -1085,13 +1085,25 @@ function DashboardTab(props: {
         </div>
       </section>
 
-      <section className="habits-panel">
-        <h2>{props.t.dashboard.metricTitle}</h2>
-        <p className="habits-muted">{props.t.dashboard.metricOverviewCopy}</p>
-        <div className="habits-wellness-row">
-          <div className="habits-progress-ring" style={{ "--progress": `${wellness}%` } as CSSProperties}>
+      <section className="habits-panel habits-metrics-panel">
+        <div className="habits-metrics-head">
+          <div>
+            <h2>{props.t.dashboard.metricTitle}</h2>
+            <p className="habits-muted">{props.program.metrics[0] ? `${props.t.dashboard.metricUpdated}: ${formatDate(props.program.metrics[0].date)}` : props.t.dashboard.noMetricYet}</p>
+          </div>
+          <div className="habits-wellness-score">
             <strong>{wellness}</strong>
             <span>{props.t.stats.wellness}</span>
+          </div>
+        </div>
+        <div className="habits-wellness-row">
+          <div className="habits-progress-ring" style={{ "--progress": `${wellness}%` } as CSSProperties}>
+            <svg className="habits-progress-ring-svg" viewBox="0 0 120 120" aria-hidden="true" focusable="false">
+              <circle className="habits-progress-ring-track" cx="60" cy="60" r="45" pathLength={100} />
+              <circle className="habits-progress-ring-value" cx="60" cy="60" r="45" pathLength={100} strokeDasharray={`${wellness} 100`} />
+            </svg>
+            <strong>{wellness}</strong>
+            <span>/100</span>
           </div>
           <div className="habits-rank-card">
             <span>{props.program.stats.rank.title}</span>

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import type { IkigaiScores, ReportFull } from "@levelup/contracts";
+import type { HabitConfigResponse, IkigaiScores, ReportFull } from "@levelup/contracts";
 import { IkigaiPremiumMap } from "@/components/IkigaiPremiumMap";
 import { api, restoreSessionFromUrl } from "@/lib/api";
 import { useSiteText } from "@/lib/useSiteText";
@@ -16,6 +16,7 @@ export default function FullReportPage() {
   const habitsText = siteText.habits;
   const { analysisId } = useParams<{ analysisId: string }>();
   const [report, setReport] = useState<ReportFull | null>(null);
+  const [habitConfig, setHabitConfig] = useState<HabitConfigResponse | null>(null);
   const [error, setError] = useState("");
   const visibleToc = text.toc;
   const visibleSections = text.sections;
@@ -25,6 +26,9 @@ export default function FullReportPage() {
     api.getFullReport(analysisId)
       .then((result) => setReport(result.reportFull))
       .catch((reason) => setError(reason instanceof Error ? reason.message : "Не удалось загрузить отчет"));
+    api.habitConfig()
+      .then((config) => setHabitConfig(config))
+      .catch(() => setHabitConfig(null));
   }, [analysisId]);
 
   if (error) {
@@ -127,7 +131,11 @@ export default function FullReportPage() {
             <p className="report-lead">{report.final_insight}</p>
           </section>
           <section className="habit-bridge-card">
-            <div className="habit-bridge-kicker">{habitsText.trial}</div>
+            <div className="habit-bridge-kicker">
+              {habitConfig?.trialDays
+                ? `${habitConfig.trialDays} дней trial · затем ${habitConfig.priceLabel} в месяц`
+                : `${habitConfig?.priceLabel ?? "$8"} в месяц`}
+            </div>
             <div className="habit-bridge-title">{habitsText.currentHabit.title}</div>
             <div className="habit-bridge-text">{habitsText.currentHabit.essence}</div>
             <div className="habit-bridge-grid">
@@ -139,9 +147,9 @@ export default function FullReportPage() {
               className="button"
               data-testid="activate-habits-link"
               href={`/habits?from=ikigai&analysisId=${analysisId}`}
-              onClick={() => storeHabitProfile(report)}
+              onClick={() => storeHabitProfile(report, habitConfig)}
             >
-              {habitsText.trialButton}
+              {habitConfig?.trialDays ? `Активировать трекер привычек — ${habitConfig.trialDays} дней trial` : "Активировать трекер привычек"}
             </Link>
           </section>
           <div className="print-actions">
@@ -196,7 +204,7 @@ function splitDiagnosticParts(value: string) {
   });
 }
 
-function storeHabitProfile(report: ReportFull) {
+function storeHabitProfile(report: ReportFull, habitConfig: HabitConfigResponse | null) {
   if (typeof window === "undefined") return;
 
   const topRole = report.top_roles[0];
@@ -211,7 +219,7 @@ function storeHabitProfile(report: ReportFull) {
     voiceInsight: topRole?.voiceEvidence || report.voice_analysis.communication,
     careerAction: report.career_action,
     finalInsight: report.final_insight,
-    subscriptionPrice: "$8"
+    subscriptionPrice: habitConfig?.priceLabel ?? "$8"
   };
 
   window.localStorage.setItem("levelup_habit_profile", JSON.stringify(profile));

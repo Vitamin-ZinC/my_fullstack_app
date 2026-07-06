@@ -6,7 +6,7 @@ import {
   renderPromptTemplate
 } from "./reportPrompts.js";
 
-test("Pingvi system prompt contains safety rules for web and Telegram", () => {
+test("ORKEN system prompt contains safety rules for web and Telegram", () => {
   const prompt = defaultReportPromptTemplates.find((item) => item.key === HABIT_NAVIGATOR_SYSTEM_PROMPT_KEY);
 
   assert.ok(prompt);
@@ -17,7 +17,7 @@ test("Pingvi system prompt contains safety rules for web and Telegram", () => {
   assert.match(prompt.content, /If in Telegram/);
 });
 
-test("Pingvi system prompt renders only explicit backend context variables", () => {
+test("ORKEN system prompt renders only explicit backend context variables", () => {
   const prompt = defaultReportPromptTemplates.find((item) => item.key === HABIT_NAVIGATOR_SYSTEM_PROMPT_KEY);
 
   assert.ok(prompt);

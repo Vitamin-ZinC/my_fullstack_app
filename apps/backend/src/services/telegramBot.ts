@@ -154,13 +154,13 @@ async function processTelegramMessage(message: TelegramMessage) {
   if (!text && (message.voice || message.audio)) {
     const file = message.voice ?? message.audio;
     if (!file) return { ok: true, ignored: true };
-    await sendTelegramMessage(chatId, "Слушаю голосовое и передаю Пингви...");
+    await sendTelegramMessage(chatId, "Слушаю голосовое и передаю ORKEN...");
     const transcript = await transcribeTelegramAudio(file.file_id, file.mime_type).catch(() => null);
     if (!transcript) {
       await sendTelegramMessage(chatId, "Не получилось разобрать голосовое. Напиши вопрос текстом или попробуй ещё раз короче.");
       return { ok: true };
     }
-    await sendTelegramMessage(chatId, await askPingviFromTelegram(account, `Голосовое сообщение пользователя:\n${transcript}`), await defaultKeyboard(account));
+    await sendTelegramMessage(chatId, await askOrkenFromTelegram(account, `Голосовое сообщение пользователя:\n${transcript}`), await defaultKeyboard(account));
     return { ok: true };
   }
 
@@ -186,9 +186,9 @@ async function processTelegramMessage(message: TelegramMessage) {
     await sendTelegramMessage(chatId, await saveInsightFromTelegram(account, insight), await defaultKeyboard(account));
     return { ok: true };
   }
-  if (text.startsWith("/pingvi")) {
-    const question = text.replace(/^\/pingvi\b/i, "").trim() || "Что мне сделать сегодня?";
-    await sendTelegramMessage(chatId, await askPingviFromTelegram(account, question), await defaultKeyboard(account));
+  if (text.startsWith("/orken")) {
+    const question = text.replace(/^\/orken\b/i, "").trim() || "Что мне сделать сегодня?";
+    await sendTelegramMessage(chatId, await askOrkenFromTelegram(account, question), await defaultKeyboard(account));
     return { ok: true };
   }
   if (text.startsWith("/")) {
@@ -196,7 +196,7 @@ async function processTelegramMessage(message: TelegramMessage) {
     return { ok: true };
   }
 
-  await sendTelegramMessage(chatId, await askPingviFromTelegram(account, text || "Что мне сделать сегодня?"), await defaultKeyboard(account));
+  await sendTelegramMessage(chatId, await askOrkenFromTelegram(account, text || "Что мне сделать сегодня?"), await defaultKeyboard(account));
   return { ok: true };
 }
 
@@ -246,7 +246,7 @@ async function linkTelegramAccount(token: string, chatId: string, from?: Telegra
     "Готово, Telegram подключён к ORKEN.LIFE.",
     "Я вижу твой кабинет через backend и могу напоминать про текущий шаг.",
     "",
-    "Команды: /today, /checkin, /metrics, /insight текст, /pingvi вопрос, /stop."
+    "Команды: /today, /checkin, /metrics, /insight текст, /orken вопрос, /stop."
   ].join("\n"), await defaultKeyboard(account));
   return { ok: true, linked: true };
 }
@@ -403,7 +403,7 @@ async function saveInsightFromTelegram(account: { userId?: string | null; sessio
   return "Инсайт сохранён в архив. +15 XP.";
 }
 
-async function askPingviFromTelegram(account: { userId?: string | null; sessionId?: string | null }, question: string) {
+async function askOrkenFromTelegram(account: { userId?: string | null; sessionId?: string | null }, question: string) {
   const result = await askHabitNavigator({
     identity: { userId: account.userId, sessionId: account.sessionId, locale: "ru" },
     message: question,
@@ -610,7 +610,7 @@ function helpText() {
     "/checkin - отметить выполнение",
     "/metrics - показать последние показатели",
     "/insight текст - сохранить инсайт в архив",
-    "/pingvi вопрос - спросить Пингви с учетом привычек",
+    "/orken вопрос - спросить ORKEN с учетом привычек",
     "/stop - отключить Telegram-напоминания"
   ].join("\n");
 }

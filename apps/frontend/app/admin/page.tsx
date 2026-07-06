@@ -70,7 +70,7 @@ export default function AdminPage() {
     rateLimitWindowMs: "600000",
     rateLimitMax: "20",
     reminderTemplate: [
-      "Пингви на связи. Сегодняшний мягкий шаг:",
+      "ORKEN на связи. Сегодняшний мягкий шаг:",
       "{{habitTitle}}",
       "{{taskText}}",
       "{{metricText}}",
@@ -611,7 +611,7 @@ export default function AdminPage() {
                 <input className="input" value={habitAiForm.weekSummaryModel} onChange={(event) => setHabitAiForm({ ...habitAiForm, weekSummaryModel: event.target.value })} placeholder="gpt-4o-mini" />
               </label>
               <label className="stack">
-                <span className="eyebrow">Pingvi temperature</span>
+                <span className="eyebrow">ORKEN temperature</span>
                 <input className="input" value={habitAiForm.navigatorTemperature} onChange={(event) => setHabitAiForm({ ...habitAiForm, navigatorTemperature: event.target.value })} placeholder="0.45" inputMode="decimal" />
               </label>
               <button className="button" onClick={saveHabitAiSettings}>Save Habit AI settings</button>

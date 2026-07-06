@@ -167,7 +167,7 @@ async function resolveNavigatorThread(identity: HabitNavigatorIdentity, programI
       programId: programId ?? undefined,
       userId: identity.userId ?? undefined,
       sessionId: identity.sessionId ?? undefined,
-      title: "Pingvi"
+      title: "ORKEN"
     }
   });
 }

@@ -27,7 +27,7 @@ type TelegramFrequency = "off" | "daily" | "weekdays" | "weekly";
 type ChatMessage = { role: "user" | "assistant"; text: string };
 type NavItem = { id: Tab; icon: string } | { id: Tab; penguin: true };
 
-const logoSrc = "/assets/levelup-logo.jpg";
+const orkenAvatarSrc = "/assets/orken12.jpg";
 
 const navItems: NavItem[] = [
   { id: "dashboard", icon: "⬡" },
@@ -68,8 +68,8 @@ export default function HabitsPage() {
 function PenguinIcon({ size = 24, className = "" }: { size?: number; className?: string }) {
   return (
     <img
-      src={logoSrc}
-      alt="Пингви"
+      src={orkenAvatarSrc}
+      alt="ORKEN"
       width={size}
       height={size}
       className={className}
@@ -82,8 +82,8 @@ function PenguinHeadIcon({ size = 24 }: { size?: number }) {
   return (
     <span className="habits-penguin-head" style={{ width: size, height: size }}>
       <img
-        src={logoSrc}
-        alt="Пингви"
+        src={orkenAvatarSrc}
+        alt="ORKEN"
         width={Math.round(size * 1.55)}
         height={Math.round(size * 1.55)}
       />
@@ -141,7 +141,6 @@ function HabitsContent() {
   const [energy, setEnergy] = useState(6);
   const [clarity, setClarity] = useState(6);
   const [stability, setStability] = useState(6);
-  const [note, setNote] = useState("");
   const [insight, setInsight] = useState("");
   const [selectedCycle, setSelectedCycle] = useState<number | "all">("all");
   const [expandedHabitId, setExpandedHabitId] = useState<string | null>(null);
@@ -359,13 +358,12 @@ function HabitsContent() {
         programId: program.id,
         enrollmentId: habit.id,
         completed,
-        note: noteOverride ?? (note.trim() || undefined),
+        note: noteOverride,
         energy,
         clarity,
         stability
       });
       applyProgramResponse(result);
-      setNote("");
       const message = completed ? t.messages.checkinSaved : t.messages.checkinRemoved;
       setDailyFeedback(message);
       markSaved(message);
@@ -715,7 +713,6 @@ function HabitsContent() {
             energy={energy}
             clarity={clarity}
             stability={stability}
-            note={note}
             insight={insight}
             busy={busy}
             metricSavedFlash={metricSavedFlash}
@@ -723,7 +720,6 @@ function HabitsContent() {
             setEnergy={setEnergy}
             setClarity={setClarity}
             setStability={setStability}
-            setNote={setNote}
             setInsight={setInsight}
             saveMetric={saveMetric}
             saveCheckin={saveCheckin}
@@ -944,21 +940,29 @@ function DashboardTab(props: {
   openJourney: () => void;
   openNavigator: () => void;
 }) {
-  const wellness = props.program.stats.wellnessScore ?? 0;
-  const totalWeeks = props.program.stats.totalWeeks || props.program.cycles.reduce((sum, cycle) => sum + cycle.weeks, 0);
-  const routeProgress = totalWeeks
-    ? Math.min(100, Math.round(((props.program.stats.currentSortOrder - 1 + props.program.stats.weekProgress / 100) / totalWeeks) * 100))
-    : 0;
-  const activeCycle = props.program.cycles.find((cycle) => cycle.id === props.program.currentCycle) ?? props.program.cycles[0];
-  const activeCycleVisual = cycleVisuals[((activeCycle?.id ?? props.program.currentCycle) - 1) % cycleVisuals.length];
-  const activeCycleWeeks = activeCycle?.weeks ?? 12;
-  const activeCycleProgress = Math.min(100, Math.round(((props.program.currentWeek - 1 + props.program.stats.weekProgress / 100) / activeCycleWeeks) * 100));
-  const weekProgress = Math.min(100, Math.max(0, props.program.stats.weekProgress));
+  const currentCycle = Math.max(1, Math.round(finiteNumber(props.program.currentCycle, props.program.stats.currentCycle ?? 1)));
+  const currentWeek = Math.max(1, Math.round(finiteNumber(props.program.currentWeek, props.program.stats.currentWeek ?? 1)));
+  const currentSortOrder = Math.max(1, Math.round(finiteNumber(props.program.stats.currentSortOrder, props.program.currentSortOrder ?? 1)));
+  const completedWeekCheckins = Math.max(0, Math.round(finiteNumber(props.program.stats.completedWeekCheckins, 0)));
+  const checkinsDone = Math.max(0, Math.round(finiteNumber(props.program.stats.checkinsDone, 0)));
+  const insightsCount = Math.max(0, Math.round(finiteNumber(props.program.stats.insightsCount, 0)));
+  const xp = Math.max(0, Math.round(finiteNumber(props.program.stats.xp, 0)));
+  const wellness = clampPercent(props.program.stats.wellnessScore ?? 0);
+  const computedWeeks = props.program.cycles.reduce((sum, cycle) => sum + Math.max(0, finiteNumber(cycle.weeks, 0)), 0);
+  const totalWeeks = Math.max(1, Math.round(finiteNumber(props.program.stats.totalWeeks, computedWeeks || 48)));
+  const weekProgress = clampPercent(props.program.stats.weekProgress ?? 0);
+  const routeProgress = clampPercent(((currentSortOrder - 1 + weekProgress / 100) / totalWeeks) * 100);
+  const activeCycle = props.program.cycles.find((cycle) => cycle.id === currentCycle) ?? props.program.cycles[0];
+  const activeCycleVisual = cycleVisuals[((activeCycle?.id ?? currentCycle) - 1) % cycleVisuals.length];
+  const activeCycleWeeks = Math.max(1, Math.round(finiteNumber(activeCycle?.weeks, 12)));
+  const activeCycleProgress = clampPercent(((currentWeek - 1 + weekProgress / 100) / activeCycleWeeks) * 100);
   const nextRank = props.program.stats.rank.nextTitle ?? props.t.dashboard.rankComplete;
-  const monthXp = props.program.stats.rank.monthXp ?? 0;
-  const monthMaxXp = props.program.stats.rank.monthMaxXp ?? 0;
-  const monthPercent = props.program.stats.rank.monthPercent ?? props.program.stats.rank.progress;
-  const xpToNextRank = props.program.stats.rank.nextAtXp ? Math.max(0, props.program.stats.rank.nextAtXp - monthXp) : 0;
+  const monthXp = Math.max(0, Math.round(finiteNumber(props.program.stats.rank.monthXp, 0)));
+  const monthMaxXp = Math.max(0, Math.round(finiteNumber(props.program.stats.rank.monthMaxXp, 0)));
+  const rankProgress = clampPercent(props.program.stats.rank.progress ?? 0);
+  const monthPercent = clampPercent(props.program.stats.rank.monthPercent ?? rankProgress);
+  const nextAtXp = finiteNumber(props.program.stats.rank.nextAtXp, 0);
+  const xpToNextRank = nextAtXp > 0 ? Math.max(0, Math.round(nextAtXp - monthXp)) : 0;
   const weakZoneId = zoneIds.includes(props.program.weakZone as (typeof zoneIds)[number])
     ? props.program.weakZone as (typeof zoneIds)[number]
     : "ikigai";
@@ -971,12 +975,13 @@ function DashboardTab(props: {
             : weakZoneId === "clarity" ? "🧭"
               : weakZoneId === "stability" ? "🌳"
                 : "✦";
-  const zoneProgress = Math.min(100, Math.round((props.program.stats.checkinsDone / Math.max(1, props.program.enrollments.length * 7)) * 100));
-  const rankIcon = ["🌱", "🔥", "🧭", "⚡", "🌟", "👑"][Math.max(0, Math.min(5, props.program.stats.rank.level - 1))];
+  const zoneProgress = clampPercent((checkinsDone / Math.max(1, props.program.enrollments.length * 7)) * 100);
+  const rankLevel = Math.max(1, Math.round(finiteNumber(props.program.stats.rank.level, 1)));
+  const rankIcon = ["🌱", "🔥", "🧭", "⚡", "🌟", "👑"][Math.max(0, Math.min(5, rankLevel - 1))];
   const statTiles: Array<{ label: string; value: string | number; icon: string; color: string }> = [
-    { label: props.t.stats.checkins, value: props.program.stats.checkinsDone, icon: "✅", color: "#00d4ff" },
-    { label: props.t.stats.insights, value: props.program.stats.insightsCount, icon: "💡", color: "#a855f7" },
-    { label: props.t.stats.xp, value: props.program.stats.xp, icon: "⭐", color: "#f59e0b" },
+    { label: props.t.stats.checkins, value: checkinsDone, icon: "✅", color: "#00d4ff" },
+    { label: props.t.stats.insights, value: insightsCount, icon: "💡", color: "#a855f7" },
+    { label: props.t.stats.xp, value: xp, icon: "⭐", color: "#f59e0b" },
     { label: props.t.dashboard.rankShort, value: props.program.stats.rank.title, icon: rankIcon, color: "#f59e0b" }
   ];
   return (
@@ -1007,7 +1012,7 @@ function DashboardTab(props: {
             <div>
               <span>{props.t.dashboard.weeklyReward}</span>
               <h3>{weekProgress >= 100 ? "Золотой сундук" : weekProgress >= 70 ? "Серебряный сундук" : "Недельный ритм"}</h3>
-              <p>{props.program.stats.completedWeekCheckins}/7 отметок · {weekProgress}%</p>
+            <p>{completedWeekCheckins}/7 отметок · {weekProgress}%</p>
             </div>
             <strong>{weekProgress >= 100 ? "+50" : weekProgress >= 70 ? "+20" : "+0"} XP</strong>
           </article>
@@ -1026,7 +1031,7 @@ function DashboardTab(props: {
             </button>
             <button className="button secondary habits-cta" type="button" title={props.t.habitsUx.tooltips.navigator} onClick={props.openNavigator}>
               <PenguinHeadIcon size={18} />
-              {props.t.dashboard.askPingvi}
+              {props.t.dashboard.askOrken}
             </button>
           </div>
         </div>
@@ -1039,12 +1044,12 @@ function DashboardTab(props: {
           </div>
           <div className="habits-status-card">
             <span><span className="habits-inline-icon">🧭</span>{props.t.dashboard.totalRoute}</span>
-            <strong>{props.program.stats.currentSortOrder}/{totalWeeks || props.program.stats.currentSortOrder}</strong>
+            <strong>{currentSortOrder}/{totalWeeks}</strong>
             <small>{routeProgress}%</small>
           </div>
           <div className="habits-status-card">
             <span><span className="habits-inline-icon">✦</span>{props.t.dashboard.weeklyRhythm}</span>
-            <strong>{props.program.stats.completedWeekCheckins}/7</strong>
+            <strong>{completedWeekCheckins}/7</strong>
             <small>{weekProgress}%</small>
           </div>
         </div>
@@ -1076,8 +1081,8 @@ function DashboardTab(props: {
 
         <div className="habits-cycle-map">
           {props.program.cycles.map((cycle) => {
-            const isActive = cycle.id === props.program.currentCycle;
-            const isDone = cycle.id < props.program.currentCycle;
+            const isActive = cycle.id === currentCycle;
+            const isDone = cycle.id < currentCycle;
             const visual = cycleVisuals[(cycle.id - 1) % cycleVisuals.length];
             const progress = isDone ? 100 : isActive ? activeCycleProgress : 0;
             return (
@@ -1087,7 +1092,7 @@ function DashboardTab(props: {
                 <h3>{cycle.title}</h3>
                 <p>{cycle.goal}</p>
                 <div className="progress-bg"><div className="progress-fill" style={{ width: `${progress}%`, "--progress-fill": `linear-gradient(90deg, ${visual.color}88, ${visual.color})` } as CSSProperties} /></div>
-                {isActive && <small>{props.t.dashboard.weekOfCycle}: {Math.min(props.program.currentWeek, cycle.weeks)}/{cycle.weeks}</small>}
+                {isActive && <small>{props.t.dashboard.weekOfCycle}: {Math.min(currentWeek, cycle.weeks)}/{cycle.weeks}</small>}
               </article>
             );
           })}
@@ -1117,7 +1122,7 @@ function DashboardTab(props: {
           <div className="habits-rank-card">
             <span>{props.program.stats.rank.title}</span>
             <strong>{monthPercent}%</strong>
-            <div className="progress-bg"><div className="progress-fill" style={{ width: `${props.program.stats.rank.progress}%` }} /></div>
+            <div className="progress-bg"><div className="progress-fill" style={{ width: `${rankProgress}%` }} /></div>
           </div>
         </div>
         {props.program.metrics[0] ? (
@@ -1143,7 +1148,7 @@ function DashboardTab(props: {
         <div className="progress-bg habits-progress-slim">
           <div className="progress-fill" style={{ width: `${zoneProgress}%`, "--progress-fill": "linear-gradient(90deg, #00d4ff88, #00d4ff)" } as CSSProperties} />
         </div>
-        <p>{props.program.stats.checkinsDone} {props.t.stats.checkins.toLowerCase()} · {props.t.dashboard.continuePath}</p>
+        <p>{checkinsDone} {props.t.stats.checkins.toLowerCase()} · {props.t.dashboard.continuePath}</p>
       </section>
 
       <section className="habits-panel habits-wide">
@@ -1172,7 +1177,6 @@ function JourneyTab(props: {
   energy: number;
   clarity: number;
   stability: number;
-  note: string;
   insight: string;
   busy: boolean;
   metricSavedFlash: boolean;
@@ -1180,7 +1184,6 @@ function JourneyTab(props: {
   setEnergy: (value: number) => void;
   setClarity: (value: number) => void;
   setStability: (value: number) => void;
-  setNote: (value: string) => void;
   setInsight: (value: string) => void;
   saveMetric: () => void;
   saveCheckin: (habit?: HabitEnrollmentSummary | null, completed?: boolean, noteOverride?: string) => void;
@@ -1200,13 +1203,17 @@ function JourneyTab(props: {
   const scheduledEvent = calendarEvents.find((event) => event.dailyTaskId === todayTask?.id)
     ?? calendarEvents.find((event) => event.enrollmentId === activeHabit?.id && event.status === "SCHEDULED")
     ?? null;
+  const habitDay = todayTask?.dayIndex ?? Math.min(7, (activeHabit?.checkinsDone ?? 0) + 1);
+  const habitTitle = activeHabit?.title
+    ? `${activeHabit.title}: день ${habitDay}`
+    : todayTask?.title ?? props.t.journey.title;
   return (
     <div className="habits-grid">
       <section className="habits-panel habits-wide habits-journey-daily">
         <div className="row">
           <div>
             <div className="habit-week">{props.t.habitsUx.journeySteps.habit}</div>
-            <h2>{todayTask?.title ?? activeHabit?.title ?? props.t.journey.title}</h2>
+            <h2 className="habits-today-title">{habitTitle}</h2>
           </div>
           <div className="habits-mini-reward">
             <Trophy size={15} />
@@ -1231,10 +1238,6 @@ function JourneyTab(props: {
             <strong>{dailyPlan.time}</strong>
           </div>
         </div>
-        <label className="habits-field compact">
-          <span>{props.t.journey.noteOptional}</span>
-          <textarea className="input habits-note" placeholder={props.t.dashboard.notePlaceholder} value={props.note} onChange={(event) => props.setNote(event.target.value)} />
-        </label>
         <div className="habits-action-row">
           <button className="button habits-cta" type="button" disabled={props.busy || !activeHabit || props.doneToday} onClick={() => props.saveCheckin(activeHabit, true)}>
             <CheckCircle2 size={17} />
@@ -1857,10 +1860,20 @@ function Coachmark(props: {
 }
 
 function HelpTip({ label }: { label: string }) {
+  const [open, setOpen] = useState(false);
   return (
-    <span className="habits-help-tip" tabIndex={0} aria-label={label}>
+    <span className="habits-help-wrap">
+      <button
+        className="habits-help-tip"
+        type="button"
+        aria-label={label}
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+        onBlur={() => window.setTimeout(() => setOpen(false), 120)}
+      >
       ?
-      <span>{label}</span>
+      </button>
+      <span className={`habits-help-popover ${open ? "open" : ""}`}>{label}</span>
     </span>
   );
 }
@@ -1955,10 +1968,18 @@ function rankForMonth(program: HabitProgramSummary, key: string) {
   return program.rankHistory.find((rank) => rank.year === year && rank.month === month) ?? null;
 }
 
-function metricStatus(value: number) {
-  if (value >= 7) return "🙂 Хорошо";
-  if (value >= 5) return "😐 Норма";
-  return "🌧 Низко";
+function metricStatus(value: number, scale: readonly string[]) {
+  const item = metricValueHint(value, scale);
+  const label = item.split(":")[1]?.split(".")[0]?.trim();
+  return label ? `${value}/10 · ${label}` : `${value}/10`;
+}
+
+function finiteNumber(value: unknown, fallback = 0) {
+  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function clampPercent(value: unknown, fallback = 0) {
+  return Math.max(0, Math.min(100, Math.round(finiteNumber(value, fallback))));
 }
 
 function normalizeTelegramFrequency(value?: string | null): TelegramFrequency {
@@ -2002,9 +2023,10 @@ function groupWeekSummariesByMonth(summaries: HabitProgramSummary["weekSummaries
 }
 
 function MetricSlider(props: { icon: string; color: string; label: string; value: number; hint: string; scale: readonly string[]; numberHints: readonly string[]; onChange: (value: number) => void }) {
-  const progress = Math.max(0, Math.min(100, props.value * 10));
-  const selectedNumberHint = props.numberHints[props.value] ?? props.hint;
-  const helpText = `${selectedNumberHint} ${props.scale.join(" ")}`;
+  const progress = Math.max(0, Math.min(100, ((props.value - 1) / 9) * 100));
+  const selectedNumberHint = props.numberHints[Math.max(0, props.value - 1)] ?? props.hint;
+  const helpText = `${selectedNumberHint}\n\n${props.scale.join("\n")}`;
+  const status = metricStatus(props.value, props.scale);
   return (
     <div className="habits-slider" style={{ "--metric-color": props.color, "--metric-progress": `${progress}%` } as CSSProperties}>
       <label htmlFor={`metric-${props.label}`}>
@@ -2012,9 +2034,9 @@ function MetricSlider(props: { icon: string; color: string; label: string; value
         {props.label}
         <HelpTip label={helpText} />
       </label>
-      <em>{metricStatus(props.value)}</em>
+      <em>{status}</em>
       <strong>{props.value}/10</strong>
-      <input id={`metric-${props.label}`} type="range" min={0} max={10} value={props.value} onChange={(event) => props.onChange(Number(event.target.value))} />
+      <input id={`metric-${props.label}`} type="range" min={1} max={10} value={props.value} onChange={(event) => props.onChange(Number(event.target.value))} />
     </div>
   );
 }

@@ -32,6 +32,7 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: "Mulish", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  overflow-x: hidden;
 }
 
 a {
@@ -528,8 +529,8 @@ svg {
 }
 
 #app.landing-shell {
-  width: min(100%, 1080px);
-  max-width: 1080px;
+  width: 100%;
+  max-width: none;
 }
 
 .glow-tl,
@@ -1106,6 +1107,12 @@ svg {
   overflow-wrap: anywhere;
 }
 
+.account-hero .btn-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .account-metrics {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1118,13 +1125,25 @@ svg {
   gap: 8px;
 }
 
+.account-fact,
+.account-empty-panel {
+  display: grid;
+  gap: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 14px;
+}
+
 .account-metric span,
+.account-fact span,
 .report-date {
   color: rgba(255, 255, 255, 0.48);
   font-size: 11px;
 }
 
-.account-metric strong {
+.account-metric strong,
+.account-fact strong {
   font-family: "Unbounded", sans-serif;
   color: var(--cyan);
   font-size: 18px;
@@ -1135,10 +1154,128 @@ svg {
   gap: 14px;
 }
 
-.account-action-stack,
-.account-pingvi {
+.account-action-stack {
   display: grid;
   gap: 12px;
+}
+
+.account-action-stack.horizontal {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.account-accordion {
+  padding: 0;
+  overflow: hidden;
+}
+
+.account-accordion summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 58px;
+  padding: 18px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.account-accordion summary::-webkit-details-marker {
+  display: none;
+}
+
+.account-accordion summary span {
+  display: inline-flex;
+  color: var(--cyan);
+}
+
+.account-accordion summary strong {
+  font-family: "Unbounded", sans-serif;
+  font-size: 15px;
+  line-height: 1.3;
+}
+
+.account-accordion summary::after {
+  content: "+";
+  margin-left: auto;
+  color: rgba(255, 255, 255, 0.42);
+  font-family: "Unbounded", sans-serif;
+}
+
+.account-accordion[open] summary::after {
+  content: "−";
+}
+
+.account-accordion-body {
+  display: grid;
+  gap: 16px;
+  padding: 0 18px 18px;
+}
+
+.account-subscription-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.account-orken-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.account-orken-head strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #fff;
+}
+
+.account-orken-avatar {
+  position: relative;
+  flex: 0 0 58px;
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: #fff;
+  padding: 5px;
+  border: 1px solid rgba(0, 212, 255, 0.28);
+  box-shadow: 0 0 18px rgba(0, 212, 255, 0.16);
+}
+
+.account-orken-avatar img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+  border-radius: 50%;
+}
+
+.account-orken-avatar i {
+  position: absolute;
+  right: 3px;
+  bottom: 4px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 12px rgba(0, 255, 136, 0.8);
+  animation: orken-online-pulse 1.8s ease-in-out infinite;
+}
+
+.account-telegram-status {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.045);
+  color: rgba(255, 255, 255, 0.72);
+  padding: 14px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.account-toggle {
+  min-height: 42px;
 }
 
 .account-daily-step {
@@ -1191,6 +1328,10 @@ svg {
 .report-history-card {
   display: grid;
   gap: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 14px;
 }
 
 .report-history-card p {
@@ -1233,6 +1374,18 @@ svg {
   }
   50% {
     opacity: 0.5;
+  }
+}
+
+@keyframes orken-online-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.22);
+    opacity: 0.72;
   }
 }
 
@@ -1455,62 +1608,43 @@ svg {
 
 .landing-branch {
   position: relative;
-  width: min(420px, 72%);
-  height: 58px;
-  margin: 26px auto 30px;
+  width: min(520px, 80%);
+  height: 92px;
+  margin: 22px auto -8px;
 }
 
-.landing-branch::before,
-.landing-branch::after {
-  content: "";
-  position: absolute;
-  top: 16px;
-  width: 38%;
-  height: 1px;
-  background: linear-gradient(90deg, rgba(255, 184, 0, 0.72), rgba(255, 255, 255, 0.08));
+.landing-branch svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
 }
 
-.landing-branch::before {
-  right: 50%;
-  transform-origin: right center;
-  transform: rotate(13deg);
+.landing-branch path {
+  fill: none;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  opacity: 0.86;
+  filter: drop-shadow(0 0 10px rgba(0, 212, 255, 0.18));
 }
 
-.landing-branch::after {
-  left: 50%;
-  transform-origin: left center;
-  transform: rotate(-13deg);
+.landing-branch .branch-dot {
+  filter: drop-shadow(0 0 12px currentColor);
 }
 
-.landing-branch-dot {
-  position: absolute;
-  z-index: 1;
-  width: 11px;
-  height: 11px;
-  border-radius: 999px;
-  box-shadow: 0 0 18px currentColor;
-}
-
-.landing-branch-dot.top {
-  top: 3px;
-  left: 50%;
+.landing-branch .branch-dot.top {
   color: var(--gold);
-  background: var(--gold);
-  transform: translateX(-50%);
+  fill: var(--gold);
 }
 
-.landing-branch-dot.left {
-  left: 12%;
-  bottom: 6px;
+.landing-branch .branch-dot.left {
   color: var(--cyan);
-  background: var(--cyan);
+  fill: var(--cyan);
 }
 
-.landing-branch-dot.right {
-  right: 12%;
-  bottom: 6px;
+.landing-branch .branch-dot.right {
   color: var(--violet);
-  background: var(--violet);
+  fill: var(--violet);
 }
 
 .landing-product-grid {
@@ -3044,21 +3178,25 @@ svg {
 }
 
 .habits-penguin-head {
+  position: relative;
   flex: none;
   display: inline-flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
   overflow: hidden;
   border: 1px solid rgba(0, 212, 255, 0.28);
   border-radius: 50%;
-  background: #0d2137;
+  background: #fff;
+  padding: 4px;
   box-shadow: 0 0 16px rgba(0, 212, 255, 0.16);
 }
 
 .habits-penguin-head img {
-  object-fit: cover;
-  transform: translateY(-8%) scale(1.35);
-  transform-origin: center top;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transform: none;
+  transform-origin: center;
 }
 
 .habits-brand-title {
@@ -3261,7 +3399,9 @@ svg {
 
 .habits-main {
   padding: 24px;
-  max-width: 1120px;
+  width: 100%;
+  max-width: none;
+  min-width: 0;
 }
 
 .habits-topbar {
@@ -3299,20 +3439,17 @@ svg {
   filter: drop-shadow(0 0 8px rgba(0, 212, 255, 0.18));
 }
 
-.habits-top-pill.online .habits-penguin-head {
-  position: relative;
-}
-
 .habits-top-pill.online .habits-penguin-head::after {
   content: "";
   position: absolute;
-  right: 0;
-  bottom: 0;
-  width: 6px;
-  height: 6px;
+  right: 1px;
+  bottom: 1px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: var(--green);
   box-shadow: 0 0 10px rgba(0, 255, 136, 0.75);
+  animation: orken-online-pulse 1.8s ease-in-out infinite;
 }
 
 .habits-top-pill.accent {
@@ -3501,6 +3638,10 @@ svg {
   padding: 16px;
 }
 
+.habits-today-title {
+  margin-bottom: 24px;
+}
+
 .habits-day-plan-row {
   display: grid;
   grid-template-columns: 128px minmax(0, 1fr);
@@ -3608,32 +3749,41 @@ svg {
   line-height: 1.35;
 }
 
-.habits-help-tip {
+.habits-help-wrap {
   position: relative;
+  display: inline-flex;
+  vertical-align: middle;
+}
+
+.habits-help-tip {
+  appearance: none;
   display: inline-grid;
   place-items: center;
-  width: 19px;
-  height: 19px;
+  flex: none;
+  width: 20px;
+  height: 20px;
   margin-left: 8px;
   border: 1px solid rgba(0, 212, 255, 0.35);
   border-radius: 50%;
+  background: rgba(0, 212, 255, 0.08);
   color: var(--cyan);
   cursor: help;
   font-family: Inter, sans-serif;
   font-size: 12px;
   line-height: 1;
-  vertical-align: middle;
+  padding: 0;
 }
 
-.habits-help-tip > span {
+.habits-help-popover {
   position: absolute;
   z-index: 12;
   top: calc(100% + 8px);
   left: 50%;
-  width: min(260px, 78vw);
+  width: min(340px, 84vw);
   border: 1px solid rgba(0, 212, 255, 0.24);
   border-radius: 12px;
-  background: rgba(2, 11, 24, 0.98);
+  background: rgba(2, 11, 24, 0.92);
+  backdrop-filter: blur(12px);
   box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
   color: rgba(226, 232, 240, 0.86);
   font-family: Inter, sans-serif;
@@ -3645,11 +3795,12 @@ svg {
   text-align: left;
   transform: translate(-50%, -4px);
   transition: opacity 0.15s ease, transform 0.15s ease;
+  white-space: pre-line;
 }
 
-.habits-help-tip:hover > span,
-.habits-help-tip:focus > span,
-.habits-help-tip:focus-visible > span {
+.habits-help-wrap:hover .habits-help-popover,
+.habits-help-wrap:focus-within .habits-help-popover,
+.habits-help-popover.open {
   opacity: 1;
   transform: translate(-50%, 0);
 }
@@ -5216,6 +5367,8 @@ p {
 
   .habits-grid,
   .habits-stats,
+  .account-metrics,
+  .account-subscription-grid,
   .habits-status-strip,
   .habits-chat-form,
   .habits-form-row,
@@ -5257,6 +5410,21 @@ p {
 
   .habits-dashboard-hero-head .button {
     width: 100%;
+  }
+
+  .account-hero,
+  .account-action-stack.horizontal,
+  .account-orken-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .account-accordion summary {
+    padding: 16px;
+  }
+
+  .account-accordion-body {
+    padding: 0 16px 16px;
   }
 
   .habits-slider {

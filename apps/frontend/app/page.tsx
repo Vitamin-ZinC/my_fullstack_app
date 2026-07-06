@@ -133,7 +133,6 @@ export default function LandingPage() {
                 <a className="btn-primary" data-testid="landing-start-final" href="/flow/voice">{landing.cta}</a>
                 <a className="btn-primary" href="/habits">{landing.habitsCta}</a>
               </div>
-              <p className="very-muted landing-note center">{landing.finalNote}</p>
             </section>
             <footer className="landing-footer">
               <span>{text.nav.brand}</span>
@@ -176,9 +175,23 @@ function ProductSection({ habitPriceLabel, habitTrialDays, reportPriceLabel }: {
         <p className="landing-small-copy">{landing.productsSubtitle}</p>
       </div>
       <div className="landing-branch" aria-hidden="true">
-        <span className="landing-branch-dot top" />
-        <span className="landing-branch-dot left" />
-        <span className="landing-branch-dot right" />
+        <svg viewBox="0 0 520 92" role="presentation" focusable="false">
+          <defs>
+            <linearGradient id="landingBranchLeft" x1="260" x2="96" y1="14" y2="78" gradientUnits="userSpaceOnUse">
+              <stop stopColor="#ffb800" />
+              <stop offset="1" stopColor="#00d4ff" />
+            </linearGradient>
+            <linearGradient id="landingBranchRight" x1="260" x2="424" y1="14" y2="78" gradientUnits="userSpaceOnUse">
+              <stop stopColor="#ffb800" />
+              <stop offset="1" stopColor="#9b5de5" />
+            </linearGradient>
+          </defs>
+          <path d="M260 18 C228 34 182 70 96 78" stroke="url(#landingBranchLeft)" />
+          <path d="M260 18 C292 34 338 70 424 78" stroke="url(#landingBranchRight)" />
+          <circle className="branch-dot top" cx="260" cy="16" r="6" />
+          <circle className="branch-dot left" cx="96" cy="78" r="6" />
+          <circle className="branch-dot right" cx="424" cy="78" r="6" />
+        </svg>
       </div>
       <div className="landing-product-grid">
         <article className="card cyan-border landing-product-card">

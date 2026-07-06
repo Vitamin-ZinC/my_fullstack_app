@@ -78,7 +78,7 @@ export async function getTelegramPolicySettings() {
     rateLimitWindowMs: readInteger(values.get(TELEGRAM_RATE_LIMIT_WINDOW_MS_KEY), 10 * 60 * 1000, 60 * 1000, 24 * 60 * 60 * 1000),
     rateLimitMax: readInteger(values.get(TELEGRAM_RATE_LIMIT_MAX_KEY), 20, 1, 500),
     reminderTemplate: readTemplate(values.get(TELEGRAM_REMINDER_TEMPLATE_KEY), [
-      "Пингви на связи. Сегодняшний мягкий шаг:",
+      "ORKEN на связи. Сегодняшний мягкий шаг:",
       "{{habitTitle}}",
       "{{taskText}}",
       "{{metricText}}",

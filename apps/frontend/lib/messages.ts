@@ -10,22 +10,22 @@ export const ruSiteText = {
   },
   landing: {
     kicker: BRAND_NAME,
-    titlePrefix: "Найди свою точку",
-    titleAccent: "ИКИГАЙ",
-    subtitle: "за 3 минуты с помощью AI",
-    lead: "Экспресс-диагностика по лицу и голосу помогает увидеть, как ты на самом деле распределяешь энергию и фокус.",
-    heroBridge: "Один сервис — два инструмента: сначала пойми себя, потом начни меняться.",
-    cta: "👉 Пройти экспресс-диагностику",
-    habitsCta: "Открыть Навигатор привычек",
+    titlePrefix: "Почему так сложно понять,",
+    titleAccent: "что с тобой происходит?",
+    cta: "Пройти диагностику",
+    habitsCta: "Открыть навигатор привычек",
     note: "Займёт 3–5 минут · Без тестов · Бесплатный отчёт",
-    problemTitle: "🤔 Почему так сложно понять, что с тобой происходит?",
+    problemListLabel: "С чем помогает разобраться ORKEN",
     problemItems: [
       "Ты вроде бы справляешься, но постоянно устаёшь",
-      "Достигать целей, но терять ощущение смысла",
+      "Достигаешь целей, но теряешь ощущение смысла",
       "Решения даются тяжело, даже когда всё «логично»",
-      "Хочется ясности, но не очередного теста"
+      "Хочется ясности, но не очередного теста на 150 вопросов"
     ],
-    problemCopy: "Большинство тестов задают 150 вопросов и анализируют прошлый опыт. Но твои реальные состояния проявляются раньше мыслей — в лице, голосе, микрореакциях.",
+    heroTools: [
+      { prefix: "Один сервис — два инструмента: сначала", accent: "пойми себя", cta: "Пройти диагностику" },
+      { prefix: "потом", accent: "начни меняться", cta: "Открыть навигатор привычек" }
+    ],
     signalsTitle: `🔬 Что анализирует ${BRAND_NAME}`,
     faceTitle: "Лицо",
     voiceTitle: "Голос",
@@ -45,20 +45,20 @@ export const ruSiteText = {
       "Намёк на более подходящие профессии"
     ],
     productsTitle: "Выбирай, с чего начать",
-    productsSubtitle: "Оба продукта используют одну диагностику, но решают разные задачи.",
+    productsSubtitle: "Оба работают независимо — можно начать с любого.",
     diagnosisProduct: {
       title: "ИИ-диагностика лица и голоса",
-      copy: "Короткий анализ показывает, как сейчас считываются твоя энергия, фокус и профессиональный вектор.",
-      items: ["бесплатный старт за 3–5 минут", "голос, лицо и ответы в одной карте", "полный отчёт с расширенным разбором"],
+      copy: "Нейросеть сканирует мимику и голос и находит твои сильные стороны, подходящую профессию и навыки — на основе Икигай.",
+      items: ["Фото 10–15 сек + голос 30–60 сек", "Профессиональная роль и направления", "Полный отчёт: риски, топ профессий, PDF"],
       price: "Бесплатно",
       fullReport: "Полный отчёт — {price}, разово",
       cta: "Пройти диагностику →"
     },
     habitsProduct: {
       title: "Навигатор привычек",
-      copy: "Личный кабинет помогает превращать выводы диагностики в ежедневные мягкие действия.",
-      items: ["энергия", "устойчивость", "ясность"],
-      price: "{price}/мес",
+      copy: "Профиль, ИИ-гид ORKEN и раздел «Мой путь» — твоё внутреннее состояние и привычки в одном месте.",
+      items: ["Шкалы состояния: энергия, устойчивость", "Ежедневные привычки, подсказки, инсайты", "Баллы и вознаграждения за регулярность"],
+      price: "{price} / мес",
       trial: "Первые {days} дней бесплатно",
       cta: "Открыть навигатор →"
     },
@@ -337,8 +337,13 @@ export const ruSiteText = {
     savePrice: "Save price",
     savedPrice: "Цена отчёта сохранена",
     habitPriceTitle: "Habit subscription",
-    habitPriceCopy: "Цена и trial берутся из AppSetting и используются в новом кабинете привычек.",
-    habitTrialDays: "Trial days",
+    habitPriceCopy: "Цена подписки и число дней trial берутся из AppSetting. Они автоматически применяются на лендинге, в онбординге кабинета, настройках подписки и Stripe Checkout. Укажи 0 дней, чтобы отключить trial.",
+    habitPriceAmount: "Subscription amount, cents",
+    habitPriceCurrency: "Subscription currency",
+    habitTrialDays: "Trial days (0 = no trial)",
+    habitPriceTargets: "Применяется: лендинг, Навигатор привычек, настройки подписки, Stripe Checkout.",
+    habitPricePreview: "Preview",
+    habitTrialDisabled: "Trial отключен",
     saveHabitPrice: "Save habit settings",
     savedHabitPrice: "Настройки привычек сохранены",
     promptTitle: "AI report prompts",
@@ -433,6 +438,7 @@ export const ruSiteText = {
         reportCopy: "Если да, опрос не нужен: мы возьмем архетип, зону роста и выводы отчета, чтобы прокачивать именно найденный вектор.",
         useReport: "Да, использовать мой платный отчет",
         useReportCopy: "Откроем {days} дней trial, затем подписка {price} в месяц. Фокус: {focus}.",
+        useReportCopyNoTrial: "Подписка {price} в месяц. Фокус: {focus}.",
         shortSurvey: "Нет, пройти короткий опрос",
         shortSurveyCopy: "4 вопроса помогут определить стартовую зону роста и подобрать базовый маршрут привычек.",
         noReportTitle: "{name}, настроим стартовый план",
@@ -442,6 +448,7 @@ export const ruSiteText = {
         activatingTitle: "План активирован",
         activatingFromReport: "План из Вашего отчета активирован",
         activatingCopy: "Фокус: {focus}. Trial {days} дней, затем {price} в месяц.",
+        activatingCopyNoTrial: "Фокус: {focus}. Подписка {price} в месяц.",
         activatingManualCopy: "Подбираем программу по Вашим ответам...",
         progressAlt: "Прогресс настройки плана",
         questions: [
@@ -884,10 +891,10 @@ export const defaultSiteText: Record<Locale, SiteText> = {
     nav: { brand: BRAND_NAME, sub: "AI IKIGAI diagnostics", backHome: "← Home" },
     landing: {
       ...ruSiteText.landing,
-      titlePrefix: "Find your",
-      titleAccent: "IKIGAI point",
-      subtitle: "in 3 minutes with AI",
-      cta: "👉 Start express diagnostics",
+      titlePrefix: "Why is it so hard to understand",
+      titleAccent: "what is happening to you?",
+      cta: "Start diagnostics",
+      habitsCta: "Open habit navigator",
       finalNote: "3 minutes · Free report · No registration"
     },
     admin: {

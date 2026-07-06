@@ -480,6 +480,12 @@ export default function AdminPage() {
       .map((prompt) => ({ label: `${prompt.key}/${prompt.locale}/v${prompt.version} default`, value: `${prompt.key}|${prompt.locale}|${prompt.version}|default`, prompt }))
   ];
   const promptVersionHistory = promptVersionsFor(promptForm);
+  const reportPricePreview = formatAdminPriceLabel(priceForm.amount, priceForm.currency);
+  const habitPricePreview = formatAdminPriceLabel(habitPriceForm.amount, habitPriceForm.currency);
+  const habitTrialDaysNumber = Number(habitPriceForm.trialDays);
+  const habitTrialPreview = Number.isInteger(habitTrialDaysNumber) && habitTrialDaysNumber > 0
+    ? `${habitTrialDaysNumber} days trial`
+    : adminText.habitTrialDisabled;
 
   return (
     <main className="page stack">
@@ -553,6 +559,10 @@ export default function AdminPage() {
               <input className="input" value={priceForm.currency} onChange={(event) => setPriceForm({ ...priceForm, currency: event.target.value.toLowerCase() })} placeholder={adminText.priceCurrency} />
               <button className="button" onClick={saveReportPrice}>{adminText.savePrice}</button>
             </div>
+            <div className="prompt-help">
+              <strong>{adminText.habitPricePreview}: {reportPricePreview}</strong>
+              <span>{adminText.priceCopy}</span>
+            </div>
           </section>
 
           <section className="card stack">
@@ -561,9 +571,24 @@ export default function AdminPage() {
               <p className="muted">{adminText.habitPriceCopy}</p>
             </div>
             <div className="grid grid-3">
-              <input className="input" value={habitPriceForm.amount} onChange={(event) => setHabitPriceForm({ ...habitPriceForm, amount: event.target.value })} placeholder={adminText.priceAmount} inputMode="numeric" />
-              <input className="input" value={habitPriceForm.currency} onChange={(event) => setHabitPriceForm({ ...habitPriceForm, currency: event.target.value.toLowerCase() })} placeholder={adminText.priceCurrency} />
-              <input className="input" value={habitPriceForm.trialDays} onChange={(event) => setHabitPriceForm({ ...habitPriceForm, trialDays: event.target.value })} placeholder={adminText.habitTrialDays} inputMode="numeric" />
+              <label className="stack">
+                <span className="eyebrow">{adminText.habitPriceAmount}</span>
+                <input className="input" value={habitPriceForm.amount} onChange={(event) => setHabitPriceForm({ ...habitPriceForm, amount: event.target.value })} placeholder={adminText.priceAmount} inputMode="numeric" />
+              </label>
+              <label className="stack">
+                <span className="eyebrow">{adminText.habitPriceCurrency}</span>
+                <input className="input" value={habitPriceForm.currency} onChange={(event) => setHabitPriceForm({ ...habitPriceForm, currency: event.target.value.toLowerCase() })} placeholder={adminText.priceCurrency} />
+              </label>
+              <label className="stack">
+                <span className="eyebrow">{adminText.habitTrialDays}</span>
+                <input className="input" value={habitPriceForm.trialDays} onChange={(event) => setHabitPriceForm({ ...habitPriceForm, trialDays: event.target.value })} placeholder={adminText.habitTrialDays} inputMode="numeric" />
+              </label>
+            </div>
+            <div className="prompt-help">
+              <strong>{adminText.habitPricePreview}: {habitPricePreview} / month · {habitTrialPreview}</strong>
+              <span>{adminText.habitPriceTargets}</span>
+            </div>
+            <div className="grid grid-3">
               <button className="button" onClick={saveHabitPrice}>{adminText.saveHabitPrice}</button>
             </div>
           </section>
@@ -780,6 +805,22 @@ function Metric({ label, value }: { label: string; value: string | number }) {
       <h2>{value}</h2>
     </div>
   );
+}
+
+function formatAdminPriceLabel(amountValue: string, currencyValue: string) {
+  const amount = Number(amountValue);
+  const currency = currencyValue.trim().toUpperCase();
+  if (!Number.isInteger(amount) || amount <= 0 || !/^[A-Z]{3}$/.test(currency)) return "Invalid price";
+  const majorAmount = amount / 100;
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency,
+      maximumFractionDigits: Number.isInteger(majorAmount) ? 0 : 2
+    }).format(majorAmount);
+  } catch {
+    return `${amount} ${currency.toLowerCase()}`;
+  }
 }
 
 function List({ title, items }: { title: string; items: string[] }) {

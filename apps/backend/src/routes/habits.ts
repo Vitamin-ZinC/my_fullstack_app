@@ -752,6 +752,7 @@ export async function habitsRoutes(app: FastifyInstance) {
         userId: program.userId ?? session.userId ?? ""
       },
       subscription_data: {
+        ...(config.trialDays > 0 ? { trial_period_days: config.trialDays } : {}),
         metadata: {
           kind: "habit_subscription",
           programId: program.id,

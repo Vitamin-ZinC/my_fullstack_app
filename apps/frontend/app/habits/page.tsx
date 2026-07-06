@@ -817,6 +817,8 @@ function OnboardingPanel(props: {
   const trialDays = props.config?.trialDays ?? 30;
   const price = props.config?.priceLabel ?? "$8";
   const focus = props.latestReport?.profession || "Продуктовый стратег";
+  const useReportCopy = trialDays > 0 ? props.t.onboarding.useReportCopy : props.t.onboarding.useReportCopyNoTrial;
+  const activatingCopy = trialDays > 0 ? props.t.onboarding.activatingCopy : props.t.onboarding.activatingCopyNoTrial;
   const currentQuestion = props.t.onboarding.questions[props.questionIndex];
   const currentZone = onboardingZones[props.questionIndex];
   const currentAnswer = props.answers[currentZone];
@@ -827,7 +829,7 @@ function OnboardingPanel(props: {
         <div className="habits-onboarding-activating">
           <div className="habits-onboarding-hero-icon">💰</div>
           <h1>{props.activatingFromReport ? props.t.onboarding.activatingFromReport : props.t.onboarding.activatingTitle}</h1>
-          <p>{formatTemplate(props.t.onboarding.activatingCopy, { focus, days: trialDays, price })}</p>
+          <p>{formatTemplate(activatingCopy, { focus, days: trialDays, price })}</p>
           <span>{props.t.onboarding.activatingManualCopy}</span>
           <div className="habits-onboarding-progress-line" />
           {props.error && <p className="auth-error">{props.error}</p>}
@@ -870,7 +872,7 @@ function OnboardingPanel(props: {
           <div className="habits-onboarding-choice-grid">
             <button className="habits-onboarding-choice-card" type="button" disabled={props.busy || !props.latestReport} onClick={props.startFromReport}>
               <strong>{props.t.onboarding.useReport}</strong>
-              <span>{formatTemplate(props.t.onboarding.useReportCopy, { days: trialDays, price, focus })}</span>
+              <span>{formatTemplate(useReportCopy, { days: trialDays, price, focus })}</span>
             </button>
             <button className="habits-onboarding-choice-card" type="button" disabled={props.busy} onClick={props.startQuestions}>
               <strong>{props.t.onboarding.shortSurvey}</strong>

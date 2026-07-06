@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { Camera, Compass } from "lucide-react";
 import { IkigaiPremiumMap } from "@/components/IkigaiPremiumMap";
 import { api } from "@/lib/api";
 import { useSiteText } from "@/lib/useSiteText";
@@ -11,7 +12,7 @@ export default function LandingPage() {
   const landing = text.landing;
   const [reportPriceLabel, setReportPriceLabel] = useState("$3");
   const [habitPriceLabel, setHabitPriceLabel] = useState("$8");
-  const [habitTrialDays, setHabitTrialDays] = useState(30);
+  const [habitTrialDays, setHabitTrialDays] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -34,7 +35,7 @@ export default function LandingPage() {
       .catch(() => {
         if (!cancelled) {
           setHabitPriceLabel("$8");
-          setHabitTrialDays(30);
+          setHabitTrialDays(0);
         }
       });
 
@@ -47,7 +48,7 @@ export default function LandingPage() {
     <>
       <div className="glow-tl" />
       <div className="glow-br" />
-      <div id="app">
+      <div id="app" className="landing-shell">
         <AppNav />
         <main className="screen">
           <div className="landing-flow">
@@ -59,33 +60,21 @@ export default function LandingPage() {
               <h1 className="ub landing-title">
                 {landing.titlePrefix}
                 <br />
-                <span className="cyan cyan-glow">{landing.titleAccent}</span>
+                <span className="landing-gradient-text">{landing.titleAccent}</span>
               </h1>
-              <p className="muted landing-sub">{landing.subtitle}</p>
-              <p className="very-muted landing-lead">{renderLandingLead(landing.lead)}</p>
-              <div className="landing-hero-bridge">{landing.heroBridge}</div>
-              <div className="landing-hero-actions">
-                <a className="btn-primary" data-testid="landing-start-primary" href="/flow/voice">{landing.cta}</a>
-                <a className="btn-back landing-secondary-cta" href="/habits">{landing.habitsCta}</a>
+              <div className="landing-pain-list" aria-label={landing.problemListLabel}>
+                {landing.problemItems.map((item) => (
+                  <div className="landing-pain-row" key={item}>
+                    <span aria-hidden="true">—</span>
+                    <span>{item}</span>
+                  </div>
+                ))}
               </div>
+              <HeroToolCard />
               <p className="very-muted landing-note">{landing.note}</p>
             </section>
 
             <div className="divider landing-divider" />
-
-            <section className="landing-section">
-              <div className="card card-lg">
-                <h2 className="ub landing-card-title">{renderProblemTitle(landing.problemTitle)}</h2>
-                {landing.problemItems.map((item) => (
-                  <div className="landing-list-row" key={item}>
-                    <span className="cyan">—</span>
-                    <span>{item}</span>
-                  </div>
-                ))}
-                <div className="divider" />
-                <ProblemCopy copy={landing.problemCopy} />
-              </div>
-            </section>
 
             <section className="landing-section compact">
               <h2 className="ub landing-section-title">{landing.signalsTitle}</h2>
@@ -95,18 +84,11 @@ export default function LandingPage() {
               </div>
             </section>
 
-            <section className="landing-section compact">
-              <h2 className="ub landing-section-title">{landing.howTitle}</h2>
-              {landing.steps.map(([number, title, description]) => (
-                <a className="card landing-step" href="/flow/voice" key={number}>
-                  <span className="landing-step-number">{number}</span>
-                  <div>
-                    <div className="ub landing-step-title">{title}</div>
-                    <div className="landing-step-copy">{description}</div>
-                  </div>
-                </a>
-              ))}
-            </section>
+            <ProductSection
+              reportPriceLabel={reportPriceLabel}
+              habitPriceLabel={habitPriceLabel}
+              habitTrialDays={habitTrialDays}
+            />
 
             <section className="landing-section compact">
               <div className="card cyan-border card-lg">
@@ -119,12 +101,6 @@ export default function LandingPage() {
                 ))}
               </div>
             </section>
-
-            <ProductSection
-              reportPriceLabel={reportPriceLabel}
-              habitPriceLabel={habitPriceLabel}
-              habitTrialDays={habitTrialDays}
-            />
 
             <section className="landing-section compact">
               <div className="card cyan-border card-lg ikigai-landing-card">
@@ -153,21 +129,40 @@ export default function LandingPage() {
             <section className="landing-section final">
               <h2 className="ub landing-final-title">{landing.finalTitle}</h2>
               <p className="landing-final-copy">{landing.finalCopy}</p>
-              <div className="landing-hero-actions">
+              <div className="landing-final-actions">
                 <a className="btn-primary" data-testid="landing-start-final" href="/flow/voice">{landing.cta}</a>
-                <a className="btn-back landing-secondary-cta" href="/habits">{landing.habitsCta}</a>
+                <a className="btn-primary" href="/habits">{landing.habitsCta}</a>
               </div>
               <p className="very-muted landing-note center">{landing.finalNote}</p>
             </section>
             <footer className="landing-footer">
               <span>{text.nav.brand}</span>
-              <a href="https://instagram.com/orken.life" target="_blank" rel="noreferrer">Instagram</a>
-              <a href="https://www.threads.net/@orken.life" target="_blank" rel="noreferrer">Threads</a>
+              <a href="https://www.threads.com/@orken.ai?igshid=NTc4MTIwNjQ2YQ==" target="_blank" rel="noreferrer">Threads</a>
+              <a href="https://www.instagram.com/orken.ai?igsh=ZXBuMXJzcmtjNDBl&utm_source=qr" target="_blank" rel="noreferrer">Instagram</a>
             </footer>
           </div>
         </main>
       </div>
     </>
+  );
+}
+
+function HeroToolCard() {
+  const { landing } = useSiteText();
+
+  return (
+    <div className="landing-tool-card">
+      {landing.heroTools.map((tool, index) => (
+        <div className="landing-tool-row" key={tool.cta}>
+          <div className="landing-tool-copy">
+            {tool.prefix} <strong>{tool.accent}</strong>
+          </div>
+          <a className="btn-primary landing-tool-button" data-testid={index === 0 ? "landing-start-primary" : undefined} href={index === 0 ? "/flow/voice" : "/habits"}>
+            {tool.cta}
+          </a>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -180,9 +175,14 @@ function ProductSection({ habitPriceLabel, habitTrialDays, reportPriceLabel }: {
         <h2 className="ub landing-section-title">{landing.productsTitle}</h2>
         <p className="landing-small-copy">{landing.productsSubtitle}</p>
       </div>
+      <div className="landing-branch" aria-hidden="true">
+        <span className="landing-branch-dot top" />
+        <span className="landing-branch-dot left" />
+        <span className="landing-branch-dot right" />
+      </div>
       <div className="landing-product-grid">
         <article className="card cyan-border landing-product-card">
-          <div className="landing-product-icon">✦</div>
+          <div className="landing-product-icon"><Camera size={20} strokeWidth={2.3} aria-hidden="true" /></div>
           <h3 className="ub">{landing.diagnosisProduct.title}</h3>
           <p>{landing.diagnosisProduct.copy}</p>
           <div className="landing-product-list">
@@ -197,7 +197,7 @@ function ProductSection({ habitPriceLabel, habitTrialDays, reportPriceLabel }: {
           <a className="btn-primary" href="/flow/voice">{landing.diagnosisProduct.cta}</a>
         </article>
         <article className="card violet-border landing-product-card">
-          <div className="landing-product-icon violet">◈</div>
+          <div className="landing-product-icon violet"><Compass size={20} strokeWidth={2.3} aria-hidden="true" /></div>
           <h3 className="ub">{landing.habitsProduct.title}</h3>
           <p>{landing.habitsProduct.copy}</p>
           <div className="landing-product-list accent">
@@ -207,7 +207,7 @@ function ProductSection({ habitPriceLabel, habitTrialDays, reportPriceLabel }: {
           </div>
           <div className="landing-product-price">
             <strong>{formatTemplate(landing.habitsProduct.price, { price: habitPriceLabel })}</strong>
-            <small>{formatTemplate(landing.habitsProduct.trial, { days: habitTrialDays })}</small>
+            {habitTrialDays > 0 && <small>{formatTemplate(landing.habitsProduct.trial, { days: habitTrialDays })}</small>}
           </div>
           <a className="btn-primary" href="/habits">{landing.habitsProduct.cta}</a>
         </article>
@@ -245,81 +245,6 @@ function SignalCard({ icon, items, title, tone }: { icon: string; items: readonl
       ))}
     </div>
   );
-}
-
-function renderLandingLead(lead: string) {
-  const needle = "увидеть, как";
-  const index = lead.indexOf(needle);
-  if (index === -1) return lead;
-
-  return (
-    <>
-      {lead.slice(0, index)}увидеть,
-      <br />
-      как{lead.slice(index + needle.length)}
-    </>
-  );
-}
-
-function renderProblemTitle(title: string) {
-  const accent = "что с тобой происходит";
-  const index = title.indexOf(accent);
-  if (index === -1) return title;
-
-  return (
-    <>
-      {title.slice(0, index)}
-      <span className="cyan">{accent}</span>
-      {title.slice(index + accent.length)}
-    </>
-  );
-}
-
-function ProblemCopy({ copy }: { copy: string }) {
-  const [first, ...rest] = copy.split(" Но ");
-  const second = rest.length ? `Но ${rest.join(" Но ")}` : "";
-
-  return (
-    <p className="landing-small-copy">
-      {highlightProblemText(first)}
-      {second && (
-        <>
-          <br />
-          <br />
-          {highlightProblemText(second)}
-        </>
-      )}
-    </p>
-  );
-}
-
-function highlightProblemText(text: string) {
-  const first = "150 вопросов";
-  const second = "раньше мыслей";
-
-  if (text.includes(first)) {
-    const [before, after] = text.split(first);
-    return (
-      <>
-        {before}
-        <strong>{first}</strong>
-        {after}
-      </>
-    );
-  }
-
-  if (text.includes(second)) {
-    const [before, after] = text.split(second);
-    return (
-      <>
-        {before}
-        <strong className="cyan">{second}</strong>
-        {after}
-      </>
-    );
-  }
-
-  return text;
 }
 
 function formatTemplate(template: string, values: Record<string, string | number>) {

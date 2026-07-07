@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { join, resolve, sep } from "node:path";
 import { GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { env } from "../env.js";
@@ -18,6 +18,12 @@ const client = new S3Client({
 });
 
 const hasS3Config = Boolean(env.S3_ACCESS_KEY_ID && env.S3_SECRET_ACCESS_KEY && env.S3_BUCKET);
+
+function assertSafeUploadKey(key: string) {
+  if (!key || key.includes("/") || key.includes("..")) {
+    throw new Error("Invalid upload key");
+  }
+}
 
 function resolveLocalUpload(key: string | null | undefined) {
   if (!key || key.includes("/") || key.includes("..")) return null;
@@ -125,6 +131,31 @@ export async function getMediaAssetPublicUrl(key: string) {
     Bucket: env.S3_BUCKET,
     Key: key
   }), { expiresIn: 900 });
+}
+
+export function createImageUploadKey(prefix = "image", format: "jpeg" | "png" | "webp" = "jpeg") {
+  const ext = format === "jpeg" ? "jpg" : format;
+  return `${prefix}-${randomUUID()}.${ext}`;
+}
+
+export async function writeUploadBuffer(key: string, buffer: Buffer, contentType: string) {
+  assertSafeUploadKey(key);
+
+  if (!hasS3Config) {
+    await mkdir(env.LOCAL_UPLOAD_DIR, { recursive: true });
+    const uploadRoot = resolve(env.LOCAL_UPLOAD_DIR);
+    const uploadPath = resolve(join(uploadRoot, key));
+    if (uploadPath !== uploadRoot && !uploadPath.startsWith(`${uploadRoot}${sep}`)) throw new Error("Invalid upload key");
+    await writeFile(uploadPath, buffer);
+    return;
+  }
+
+  await client.send(new PutObjectCommand({
+    Bucket: env.S3_BUCKET,
+    Key: key,
+    Body: buffer,
+    ContentType: contentType
+  }));
 }
 
 export async function validateUploadedPhoto(mediaAssetId: string, key: string) {

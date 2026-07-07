@@ -13,11 +13,14 @@ import {
   habitTrialDaysSettingKey,
   habitWeekSummaryModeSettingKey,
   habitWeekSummaryModelSettingKey,
+  habitAssistantAvatarUrlSettingKey,
   reportPriceAmountSettingKey,
   reportPriceCurrencySettingKey,
   telegramRateLimitMaxSettingKey,
   telegramRateLimitWindowMsSettingKey,
   telegramReminderTemplateSettingKey,
+  telegramTodayTemplateSettingKey,
+  telegramWelcomeTemplateSettingKey,
   telegramWebLoginEnabledSettingKey
 } from "@/lib/api";
 import { defaultSiteText } from "@/lib/messages";
@@ -75,8 +78,38 @@ export default function AdminPage() {
       "{{taskText}}",
       "{{metricText}}",
       "",
-      "Команды: /checkin, /today, /metrics или просто задай вопрос."
+      "Кнопки ниже помогут отметить шаг, сохранить состояние или открыть кабинет."
     ].join("\n"),
+    welcomeTemplate: [
+      "Привет! Я твой личный ИИ-помощник ORKEN от Навигатора привычек ORKEN.LIFE. 🚀",
+      "",
+      "Я помогаю тебе оставаться в фокусе, отслеживать прогресс и прокачивать дисциплину прямо в мессенджере. Вот что я умею делать:",
+      "",
+      "1. Подтягивать твою текущую привычку на сегодня из личного кабинета: что сделать, если нет сил, зачем и сколько времени нужно.",
+      "2. Фиксировать внутреннее состояние: энергию, ясность и устойчивость.",
+      "3. Сохранять важные инсайты и мысли в личный Архив.",
+      "4. Начислять XP за ежедневные активности в общий профиль на сайте.",
+      "",
+      "Давай начнем. Синхронизируем твой аккаунт."
+    ].join("\n"),
+    todayTemplate: [
+      "Сегодня: {{habitTitle}}",
+      "",
+      "1. Что нужно сделать",
+      "{{whatToDo}}",
+      "",
+      "2. Если нет сил",
+      "{{lowEnergy}}",
+      "",
+      "3. Зачем",
+      "{{why}}",
+      "",
+      "4. Время",
+      "{{time}}",
+      "",
+      "Прогресс недели: {{weekProgress}}/7."
+    ].join("\n"),
+    assistantAvatarUrl: "/assets/orken12.jpg",
     webLoginEnabled: true
   });
   const [promoForm, setPromoForm] = useState({
@@ -202,11 +235,17 @@ export default function AdminPage() {
     const rateLimitWindowMs = nextSettings.find((item) => item.key === telegramRateLimitWindowMsSettingKey)?.value;
     const rateLimitMax = nextSettings.find((item) => item.key === telegramRateLimitMaxSettingKey)?.value;
     const reminderTemplate = nextSettings.find((item) => item.key === telegramReminderTemplateSettingKey)?.value;
+    const welcomeTemplate = nextSettings.find((item) => item.key === telegramWelcomeTemplateSettingKey)?.value;
+    const todayTemplate = nextSettings.find((item) => item.key === telegramTodayTemplateSettingKey)?.value;
+    const assistantAvatarUrl = nextSettings.find((item) => item.key === habitAssistantAvatarUrlSettingKey)?.value;
     const webLoginEnabled = nextSettings.find((item) => item.key === telegramWebLoginEnabledSettingKey)?.value;
     setTelegramPolicyForm((current) => ({
       rateLimitWindowMs: typeof rateLimitWindowMs === "number" || typeof rateLimitWindowMs === "string" ? String(rateLimitWindowMs) : current.rateLimitWindowMs,
       rateLimitMax: typeof rateLimitMax === "number" || typeof rateLimitMax === "string" ? String(rateLimitMax) : current.rateLimitMax,
       reminderTemplate: typeof reminderTemplate === "string" && reminderTemplate.trim() ? reminderTemplate : current.reminderTemplate,
+      welcomeTemplate: typeof welcomeTemplate === "string" && welcomeTemplate.trim() ? welcomeTemplate : current.welcomeTemplate,
+      todayTemplate: typeof todayTemplate === "string" && todayTemplate.trim() ? todayTemplate : current.todayTemplate,
+      assistantAvatarUrl: typeof assistantAvatarUrl === "string" ? assistantAvatarUrl : current.assistantAvatarUrl,
       webLoginEnabled: typeof webLoginEnabled === "boolean" ? webLoginEnabled : current.webLoginEnabled
     }));
   }
@@ -435,13 +474,42 @@ export default function AdminPage() {
       setMessage("Telegram reminder template is required");
       return;
     }
+    if (!telegramPolicyForm.welcomeTemplate.trim()) {
+      setMessage("Telegram welcome template is required");
+      return;
+    }
+    if (!telegramPolicyForm.todayTemplate.trim()) {
+      setMessage("Telegram daily plan template is required");
+      return;
+    }
+    const assistantAvatarUrl = telegramPolicyForm.assistantAvatarUrl.trim();
+    if (assistantAvatarUrl && !/^(\/[A-Za-z0-9/_.,?=&%:+#-]+|https?:\/\/\S{1,500})$/.test(assistantAvatarUrl)) {
+      setMessage("Assistant avatar must be a public path or http(s) URL");
+      return;
+    }
 
     await adminApi.upsertSetting(telegramRateLimitWindowMsSettingKey, rateLimitWindowMs);
     await adminApi.upsertSetting(telegramRateLimitMaxSettingKey, rateLimitMax);
     await adminApi.upsertSetting(telegramReminderTemplateSettingKey, telegramPolicyForm.reminderTemplate);
+    await adminApi.upsertSetting(telegramWelcomeTemplateSettingKey, telegramPolicyForm.welcomeTemplate);
+    await adminApi.upsertSetting(telegramTodayTemplateSettingKey, telegramPolicyForm.todayTemplate);
+    await adminApi.upsertSetting(habitAssistantAvatarUrlSettingKey, assistantAvatarUrl);
     await adminApi.upsertSetting(telegramWebLoginEnabledSettingKey, telegramPolicyForm.webLoginEnabled);
     setMessage("Telegram policy settings saved");
     await refresh();
+  }
+
+  async function uploadAssistantAvatar(file: File | null) {
+    if (!file) return;
+    setMessage("");
+    try {
+      const result = await adminApi.uploadAssistantAvatar(file);
+      setTelegramPolicyForm((current) => ({ ...current, assistantAvatarUrl: result.url }));
+      setMessage("Assistant avatar uploaded");
+      await refresh();
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "Failed to upload assistant avatar");
+    }
   }
 
   function resetTexts(locale: string) {
@@ -647,6 +715,45 @@ export default function AdminPage() {
               spellCheck={false}
             />
             <p className="muted">Placeholders: {"{{habitTitle}}"}, {"{{taskText}}"}, {"{{metricText}}"}</p>
+            <div className="grid grid-2">
+              <label className="stack">
+                <span className="eyebrow">Welcome template</span>
+                <textarea
+                  className="input text-editor compact"
+                  value={telegramPolicyForm.welcomeTemplate}
+                  onChange={(event) => setTelegramPolicyForm({ ...telegramPolicyForm, welcomeTemplate: event.target.value })}
+                  spellCheck={false}
+                />
+              </label>
+              <label className="stack">
+                <span className="eyebrow">Daily plan template</span>
+                <textarea
+                  className="input text-editor compact"
+                  value={telegramPolicyForm.todayTemplate}
+                  onChange={(event) => setTelegramPolicyForm({ ...telegramPolicyForm, todayTemplate: event.target.value })}
+                  spellCheck={false}
+                />
+              </label>
+            </div>
+            <p className="muted">Daily placeholders: {"{{habitTitle}}"}, {"{{whatToDo}}"}, {"{{lowEnergy}}"}, {"{{why}}"}, {"{{time}}"}, {"{{weekProgress}}"}</p>
+            <div className="admin-avatar-control">
+              {telegramPolicyForm.assistantAvatarUrl.trim() && (
+                <img src={telegramPolicyForm.assistantAvatarUrl.trim()} alt="Assistant avatar preview" />
+              )}
+              <label className="stack">
+                <span className="eyebrow">Assistant avatar URL</span>
+                <input
+                  className="input"
+                  value={telegramPolicyForm.assistantAvatarUrl}
+                  onChange={(event) => setTelegramPolicyForm({ ...telegramPolicyForm, assistantAvatarUrl: event.target.value })}
+                  placeholder="/assets/orken12.jpg"
+                />
+              </label>
+              <label className="button secondary admin-upload-button">
+                Upload avatar
+                <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => void uploadAssistantAvatar(event.target.files?.[0] ?? null)} />
+              </label>
+            </div>
             <button className="button" onClick={saveTelegramPolicySettings}>Save Telegram policy</button>
           </section>
 

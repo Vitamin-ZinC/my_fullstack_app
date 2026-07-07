@@ -185,6 +185,9 @@ export const telegramRateLimitWindowMsSettingKey = "telegram_rate_limit_window_m
 export const telegramRateLimitMaxSettingKey = "telegram_rate_limit_max";
 export const telegramReminderTemplateSettingKey = "telegram_reminder_template";
 export const telegramWebLoginEnabledSettingKey = "telegram_web_login_enabled";
+export const telegramWelcomeTemplateSettingKey = "telegram_welcome_template";
+export const telegramTodayTemplateSettingKey = "telegram_today_template";
+export const habitAssistantAvatarUrlSettingKey = "habit_assistant_avatar_url";
 
 export const contentApi = {
   get: (locale: TextLocale) => request<{ locale: TextLocale; value: unknown | null }>(`/api/content/${locale}`)
@@ -310,6 +313,20 @@ export const api = {
     method: "PATCH",
     body: JSON.stringify(payload)
   }),
+  uploadHabitAvatar: async (file: Blob) => {
+    await ensureGuestSession();
+    const res = await fetch(`${API_URL}/api/habits/avatar`, {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        ...sessionHeaders(),
+        "Content-Type": file.type || "application/octet-stream"
+      },
+      body: file
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json() as Promise<{ ok: true; url: string }>;
+  },
   startHabitSubscriptionCheckout: (programId: string) => request<{ url?: string; sessionId?: string } | HabitProgramResponse>("/api/habits/subscription/checkout", {
     method: "POST",
     body: JSON.stringify({ programId })
@@ -543,6 +560,22 @@ export const adminApi = {
     method: "PUT",
     body: JSON.stringify({ value })
   }),
+  uploadAssistantAvatar: async (file: Blob) => {
+    if (!hasWindow()) throw new Error("Admin API is only available in the browser");
+    const token = window.sessionStorage.getItem("levelup_admin_token") ?? "";
+    const adminSession = window.sessionStorage.getItem("levelup_admin_session") ?? "";
+    const res = await fetch(`${API_URL}/api/admin/assets/assistant-avatar`, {
+      method: "POST",
+      headers: {
+        ...(token ? { "x-admin-token": token } : {}),
+        ...(adminSession ? { "x-admin-session": adminSession } : {}),
+        "Content-Type": file.type || "application/octet-stream"
+      },
+      body: file
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json() as Promise<{ ok: true; url: string; setting: AppSetting }>;
+  },
   flags: () => adminRequest<FeatureFlag[]>("/api/admin/feature-flags"),
   upsertFlag: (key: string, enabled: boolean, payload?: unknown) => adminRequest<FeatureFlag>(`/api/admin/feature-flags/${encodeURIComponent(key)}`, {
     method: "PUT",

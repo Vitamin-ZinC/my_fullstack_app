@@ -277,6 +277,7 @@ export type PaymentConfigResponse = {
 
 export type HabitConfigResponse = PaymentConfigResponse & {
   trialDays: number;
+  assistantAvatarUrl?: string;
 };
 
 export type CheckoutSessionResponse = {

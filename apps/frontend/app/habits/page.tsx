@@ -99,7 +99,7 @@ function NavIcon({ item, size }: { item: NavItem; size: number }) {
 function HabitsLoading() {
   return (
     <main className="habits-app habits-single">
-      <section className="habits-panel">
+      <section className="habits-panel habits-insight-panel">
         <div className="eyebrow">ORKEN.LIFE</div>
         <h1>Загружаем кабинет привычек...</h1>
       </section>
@@ -465,14 +465,19 @@ function HabitsContent() {
     }
   }
 
-  function handleAvatarFile(file: File | null) {
+  async function handleAvatarFile(file: File | null) {
     if (!file || !file.type.startsWith("image/")) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const value = typeof reader.result === "string" ? reader.result : "";
-      if (value) setSettingsAvatar(value);
-    };
-    reader.readAsDataURL(file);
+    setBusy(true);
+    setError("");
+    try {
+      const result = await api.uploadHabitAvatar(file);
+      setSettingsAvatar(result.url);
+      markSaved(t.messages.avatarUploaded);
+    } catch (reason) {
+      setError(readableError(reason, t.errors.avatar));
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function addCalendarEvent() {
@@ -747,6 +752,7 @@ function HabitsContent() {
             t={t}
             messages={messages}
             input={chatInput}
+            avatarSrc={config?.assistantAvatarUrl || orkenAvatarSrc}
             setInput={setChatInput}
             askNavigator={askNavigator}
           />
@@ -1252,7 +1258,7 @@ function JourneyTab(props: {
         {props.dailyFeedback && <div className="habits-inline-feedback">{props.dailyFeedback}</div>}
       </section>
 
-      <section className="habits-panel">
+      <section className="habits-panel habits-journey-telegram">
         <div className="habit-week">{props.t.habitsUx.journeySteps.state}</div>
         <h2>{props.t.dashboard.metricTitle}<HelpTip label={props.t.habitsUx.tooltips.saveMetric} /></h2>
         <p className="habits-muted">{props.t.dashboard.metricCopy}</p>
@@ -1292,7 +1298,7 @@ function JourneyTab(props: {
         </button>
       </section>
 
-      <section className="habits-panel">
+      <section className="habits-panel habits-calendar-panel">
         <div className="habit-week">{props.t.habitsUx.journeySteps.insight}</div>
         <h2>{props.t.dashboard.insightTitle}<HelpTip label={props.t.habitsUx.tooltips.saveInsight} /></h2>
         <textarea className="input habits-note" placeholder={props.t.dashboard.insightPlaceholder} value={props.insight} onChange={(event) => props.setInsight(event.target.value)} />
@@ -1397,12 +1403,21 @@ function NavigatorTab(props: {
   t: ReturnType<typeof useSiteText>["habits"]["app"];
   messages: ChatMessage[];
   input: string;
+  avatarSrc: string;
   setInput: (value: string) => void;
   askNavigator: (prompt?: string) => void;
 }) {
   return (
     <section className="habits-panel habits-chat">
-      <h2>{props.t.habitsUx.navigator.promptTitle}<HelpTip label={props.t.habitsUx.tooltips.navigator} /></h2>
+      <div className="habits-navigator-head">
+        <span className="habits-navigator-avatar" aria-hidden="true">
+          <img src={props.avatarSrc} alt="" />
+        </span>
+        <div>
+          <div className="habit-week">{props.t.navigator.title}</div>
+          <h2>{props.t.habitsUx.navigator.promptTitle}<HelpTip label={props.t.habitsUx.tooltips.navigator} /></h2>
+        </div>
+      </div>
       <div className="habits-tabs">
         {props.t.habitsUx.navigator.prompts.map((prompt) => (
           <button className="btn-back" type="button" key={prompt} onClick={() => props.askNavigator(prompt)}>{prompt}</button>
@@ -1445,6 +1460,8 @@ function ArchiveTab(props: {
   const closedWeeks = props.program.enrollments.filter((habit) => habit.status === "COMPLETED");
   const weekSummaries = props.program.weekSummaries ?? [];
   const groupedWeekSummaries = groupWeekSummariesByMonth(weekSummaries);
+  const groupedInsights = groupByMonth(props.program.insights, (item) => item.createdAt);
+  const groupedRewards = groupByMonth(props.program.rewards, (item) => item.createdAt);
   return (
     <div className="habits-grid">
       <section className="habits-panel habits-wide">
@@ -1462,12 +1479,22 @@ function ArchiveTab(props: {
           <div className="habits-archive">
             {props.program.insights.length === 0 ? (
               <div className="habits-current">{props.t.archive.empty}</div>
-            ) : props.program.insights.map((item) => (
-              <article className="habits-card" key={item.id}>
-                <div className="habit-week">{formatDate(item.createdAt)}{item.habitTitle ? ` · ${item.habitTitle}` : ""}</div>
-                <p>{clipText(item.text, 300)}</p>
-                <button className="btn-back" type="button" onClick={() => copyInsight(item.text, props.markSaved, props.t.archive.copied)}>{props.t.archive.copyInsight}</button>
-              </article>
+            ) : groupedInsights.map((group, index) => (
+              <details className="habits-month-accordion" open={index === 0} key={group.key}>
+                <summary>
+                  <strong>{group.label}</strong>
+                  <span>{group.items.length}</span>
+                </summary>
+                <div className="habits-month-content">
+                  {group.items.map((item) => (
+                    <article className="habits-card" key={item.id}>
+                      <div className="habit-week">{formatDate(item.createdAt)}{item.habitTitle ? ` · ${item.habitTitle}` : ""}</div>
+                      <p>{clipText(item.text, 300)}</p>
+                      <button className="btn-back" type="button" onClick={() => copyInsight(item.text, props.markSaved, props.t.archive.copied)}>{props.t.archive.copyInsight}</button>
+                    </article>
+                  ))}
+                </div>
+              </details>
             ))}
           </div>
         </section>
@@ -1476,12 +1503,24 @@ function ArchiveTab(props: {
         <section className="habits-panel">
           <h2>{props.t.archive.filters.rewards}</h2>
           <div className="habits-reward-list">
-            {props.program.rewards.map((reward) => (
-              <div className="habits-mini-reward" key={reward.id}>
-                <span className="habits-reward-emoji">{rewardIcon(reward.type)}</span>
-                <span>{reward.label}</span>
-                <strong>+{reward.xp}</strong>
-              </div>
+            {props.program.rewards.length === 0 ? (
+              <div className="habits-current">{props.t.archive.empty}</div>
+            ) : groupedRewards.map((group, index) => (
+              <details className="habits-month-accordion" open={index === 0} key={group.key}>
+                <summary>
+                  <strong>{group.label}</strong>
+                  <span>{group.items.length}</span>
+                </summary>
+                <div className="habits-month-content">
+                  {group.items.map((reward) => (
+                    <div className="habits-mini-reward" key={reward.id}>
+                      <span className="habits-reward-emoji">{rewardIcon(reward.type)}</span>
+                      <span>{reward.label}<small>{formatDate(reward.createdAt)}</small></span>
+                      <strong>+{reward.xp} XP</strong>
+                    </div>
+                  ))}
+                </div>
+              </details>
             ))}
           </div>
         </section>
@@ -2007,6 +2046,19 @@ function formatTemplate(template: string, values: Record<string, string | number
 
 function clipText(value: string, maxLength: number) {
   return value.length > maxLength ? `${value.slice(0, maxLength - 1)}…` : value;
+}
+
+function groupByMonth<T>(items: T[], getDate: (item: T) => string) {
+  const groups = new Map<string, { key: string; label: string; items: T[] }>();
+  for (const item of items) {
+    const date = new Date(getDate(item));
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+    const label = new Intl.DateTimeFormat("ru-RU", { month: "long", year: "numeric" }).format(date);
+    const group = groups.get(key) ?? { key, label, items: [] };
+    group.items.push(item);
+    groups.set(key, group);
+  }
+  return Array.from(groups.values());
 }
 
 function groupWeekSummariesByMonth(summaries: HabitProgramSummary["weekSummaries"]) {

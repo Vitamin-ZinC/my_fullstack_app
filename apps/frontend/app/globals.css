@@ -2477,6 +2477,36 @@ svg {
   min-height: 140px;
 }
 
+.admin-avatar-control {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.admin-avatar-control img {
+  width: 74px;
+  height: 74px;
+  border: 1px solid rgba(0, 212, 255, 0.22);
+  border-radius: 18px;
+  background: rgba(2, 11, 24, 0.56);
+  object-fit: cover;
+  object-position: top center;
+}
+
+.admin-upload-button {
+  position: relative;
+  overflow: hidden;
+  justify-content: center;
+}
+
+.admin-upload-button input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
 .prompt-editor {
   min-height: 360px;
 }
@@ -3570,6 +3600,21 @@ svg {
   background: rgba(0, 212, 255, 0.06);
 }
 
+.habits-journey-daily .habits-day-plan-card {
+  margin-top: 18px;
+}
+
+.habits-journey-daily .habits-action-row,
+.habits-insight-panel .button,
+.habits-journey-telegram .button,
+.habits-calendar-panel .habits-action-stack {
+  margin-top: 18px;
+}
+
+.habits-insight-panel .habits-note {
+  margin-top: 14px;
+}
+
 .habits-journey-details-duplicate {
   display: none;
 }
@@ -3875,6 +3920,35 @@ svg {
 .habits-chat {
   display: grid;
   gap: 16px;
+}
+
+.habits-navigator-head {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+
+.habits-navigator-avatar {
+  display: inline-grid;
+  place-items: center;
+  width: 74px;
+  height: 74px;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border: 1px solid rgba(0, 212, 255, 0.28);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 50% 20%, rgba(0, 212, 255, 0.2), transparent 58%),
+    rgba(2, 11, 24, 0.72);
+  box-shadow: 0 0 24px rgba(0, 212, 255, 0.12);
+}
+
+.habits-navigator-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center;
+  transform: scale(1.18);
 }
 
 .habits-bubble {
@@ -4558,6 +4632,51 @@ svg {
 .habits-archive {
   display: grid;
   gap: 10px;
+}
+
+.habits-month-accordion {
+  border: 1px solid rgba(0, 212, 255, 0.14);
+  border-radius: 16px;
+  background: rgba(2, 11, 24, 0.28);
+  overflow: hidden;
+}
+
+.habits-month-accordion summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  list-style: none;
+  padding: 13px 14px;
+}
+
+.habits-month-accordion summary::-webkit-details-marker {
+  display: none;
+}
+
+.habits-month-accordion summary strong {
+  color: rgba(255, 255, 255, 0.9);
+  font-family: "Unbounded", sans-serif;
+  font-size: 12px;
+}
+
+.habits-month-accordion summary span {
+  min-width: 28px;
+  border: 1px solid rgba(0, 212, 255, 0.18);
+  border-radius: 999px;
+  color: var(--cyan);
+  font-size: 11px;
+  line-height: 1;
+  text-align: center;
+  padding: 5px 8px;
+}
+
+.habits-month-content {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  padding: 10px;
 }
 
 .habits-bubble.user {
@@ -5312,6 +5431,14 @@ p {
   .grid-2,
   .grid-3 {
     grid-template-columns: 1fr;
+  }
+
+  .admin-avatar-control {
+    grid-template-columns: 64px minmax(0, 1fr);
+  }
+
+  .admin-avatar-control .admin-upload-button {
+    grid-column: 1 / -1;
   }
 
   .compare-row,

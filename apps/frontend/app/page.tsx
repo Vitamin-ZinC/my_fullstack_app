@@ -71,7 +71,6 @@ export default function LandingPage() {
                 ))}
               </div>
               <HeroToolCard />
-              <p className="very-muted landing-note">{landing.note}</p>
             </section>
 
             <div className="divider landing-divider" />

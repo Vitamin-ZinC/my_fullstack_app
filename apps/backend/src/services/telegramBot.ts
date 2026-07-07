@@ -4,6 +4,7 @@ import { prisma } from "../lib/prisma.js";
 import { getTelegramPolicySettings } from "./habitSettings.js";
 import { askHabitNavigator } from "./habitNavigator.js";
 import { getOpenAiApiKey } from "./openaiClient.js";
+import { createDailyHabitRewardIfNeeded } from "./habitRewards.js";
 
 type TelegramUser = {
   id: number;
@@ -114,8 +115,29 @@ async function processTelegramCallback(callback: TelegramCallbackQuery) {
     await sendTelegramMessage(chatId, await buildTodayText(account), await defaultKeyboard(account));
   } else if (data === "checkin") {
     await sendTelegramMessage(chatId, await completeTodayFromTelegram(account), await defaultKeyboard(account));
+  } else if (data === "state") {
+    await sendTelegramMessage(chatId, "Оцени энергию сейчас по шкале 1-10.", buildStateKeyboard("energy"));
+  } else if (data.startsWith("state:e:")) {
+    const energy = parseStateValue(data.split(":")[2]);
+    if (!energy) return { ok: true };
+    await sendTelegramMessage(chatId, `Энергия: ${energy}/10. Теперь оцени ясность.`, buildStateKeyboard("clarity", { energy }));
+  } else if (data.startsWith("state:c:")) {
+    const [, , energyRaw, clarityRaw] = data.split(":");
+    const energy = parseStateValue(energyRaw);
+    const clarity = parseStateValue(clarityRaw);
+    if (!energy || !clarity) return { ok: true };
+    await sendTelegramMessage(chatId, `Ясность: ${clarity}/10. Теперь оцени устойчивость.`, buildStateKeyboard("stability", { energy, clarity }));
+  } else if (data.startsWith("state:s:")) {
+    const [, , energyRaw, clarityRaw, stabilityRaw] = data.split(":");
+    const energy = parseStateValue(energyRaw);
+    const clarity = parseStateValue(clarityRaw);
+    const stability = parseStateValue(stabilityRaw);
+    if (!energy || !clarity || !stability) return { ok: true };
+    await sendTelegramMessage(chatId, await saveMetricFromTelegram(account, energy, clarity, stability), await defaultKeyboard(account));
   } else if (data === "metrics") {
     await sendTelegramMessage(chatId, await buildMetricsText(account), await defaultKeyboard(account));
+  } else if (data === "insight_help") {
+    await sendTelegramMessage(chatId, "Чтобы сохранить инсайт, напиши: /insight твоя мысль\nНапример: /insight мне легче двигаться маленькими шагами", await defaultKeyboard(account));
   }
   return { ok: true };
 }
@@ -129,7 +151,12 @@ async function processTelegramMessage(message: TelegramMessage) {
   if (text.startsWith("/start")) {
     const token = text.split(/\s+/)[1];
     if (!token) {
-      await sendTelegramMessage(chatId, "Открой подключение Telegram из кабинета ORKEN.LIFE, чтобы я понял, чей это путь.");
+      const settings = await getTelegramPolicySettings();
+      await sendTelegramMessage(chatId, [
+        settings.welcomeTemplate,
+        "",
+        "Открой подключение Telegram из кабинета ORKEN.LIFE, чтобы я понял, чей это путь."
+      ].join("\n"));
       return { ok: true };
     }
     return linkTelegramAccount(token, chatId, message.from);
@@ -176,6 +203,10 @@ async function processTelegramMessage(message: TelegramMessage) {
     await sendTelegramMessage(chatId, await buildMetricsText(account), await defaultKeyboard(account));
     return { ok: true };
   }
+  if (text === "/state") {
+    await sendTelegramMessage(chatId, "Оцени энергию сейчас по шкале 1-10.", buildStateKeyboard("energy"));
+    return { ok: true };
+  }
   if (text === "/stop") {
     await disableTelegram(account.id);
     await sendTelegramMessage(chatId, "Telegram-напоминания отключены. Связку можно включить снова в кабинете.");
@@ -183,6 +214,11 @@ async function processTelegramMessage(message: TelegramMessage) {
   }
   if (text.startsWith("/insight")) {
     const insight = text.replace(/^\/insight\b/i, "").trim();
+    await sendTelegramMessage(chatId, await saveInsightFromTelegram(account, insight), await defaultKeyboard(account));
+    return { ok: true };
+  }
+  if (/^(инсайт|мысль)\s*[:—-]/i.test(text)) {
+    const insight = text.replace(/^(инсайт|мысль)\s*[:—-]\s*/i, "").trim();
     await sendTelegramMessage(chatId, await saveInsightFromTelegram(account, insight), await defaultKeyboard(account));
     return { ok: true };
   }
@@ -242,11 +278,13 @@ async function linkTelegramAccount(token: string, chatId: string, from?: Telegra
     });
   }
 
+  const settings = await getTelegramPolicySettings();
   await sendTelegramMessage(account.chatId, [
     "Готово, Telegram подключён к ORKEN.LIFE.",
-    "Я вижу твой кабинет через backend и могу напоминать про текущий шаг.",
     "",
-    "Команды: /today, /checkin, /metrics, /insight текст, /orken вопрос, /stop."
+    settings.welcomeTemplate,
+    "",
+    "Команды: /today, /checkin, /state, /metrics, /insight текст, /orken вопрос, /stop."
   ].join("\n"), await defaultKeyboard(account));
   return { ok: true, linked: true };
 }
@@ -309,18 +347,54 @@ function nextTask(enrollment: ReturnType<typeof activeEnrollment>) {
   return enrollment.dailyTasks.find((task) => !task.completedAt) ?? enrollment.dailyTasks[enrollment.dailyTasks.length - 1] ?? null;
 }
 
+function buildTelegramDailyPlan(task: ReturnType<typeof nextTask>, enrollment: NonNullable<ReturnType<typeof activeEnrollment>>) {
+  const rawAction = task?.microAction ?? enrollment.practice;
+  const actionText = rawAction.replace(/^Что сделать:\s*/i, "");
+  const [beforeTime, afterTimeRaw = ""] = actionText.split(/\sВремя:\s/i);
+  const [timeRaw = "", afterSoftRaw = ""] = afterTimeRaw.split(/\sЕсли совсем нет сил:\s/i);
+  const why = (task?.whyToday ?? enrollment.why).replace(/^Зачем:\s*/i, "");
+  return {
+    whatToDo: beforeTime.trim().replace(/\.$/, "") || enrollment.practice,
+    lowEnergy: (afterSoftRaw || "Сделай только первый маленький шаг на 30 секунд.").trim().replace(/\.$/, ""),
+    why: why.trim().replace(/\.$/, "") || enrollment.why,
+    time: (timeRaw || "5-10 мин").trim().replace(/\.$/, "")
+  };
+}
+
+function parseStateValue(value: string | undefined) {
+  const numberValue = Number(value);
+  return Number.isInteger(numberValue) && numberValue >= 1 && numberValue <= 10 ? numberValue : null;
+}
+
+function buildStateKeyboard(stage: "energy" | "clarity" | "stability", values: { energy?: number; clarity?: number } = {}) {
+  const callbackFor = (value: number) => {
+    if (stage === "energy") return `state:e:${value}`;
+    if (stage === "clarity") return `state:c:${values.energy}:${value}`;
+    return `state:s:${values.energy}:${values.clarity}:${value}`;
+  };
+  return {
+    inline_keyboard: [
+      [1, 2, 3, 4, 5].map((value) => ({ text: String(value), callback_data: callbackFor(value) })),
+      [6, 7, 8, 9, 10].map((value) => ({ text: String(value), callback_data: callbackFor(value) }))
+    ]
+  };
+}
+
 async function buildTodayText(account: { userId?: string | null; sessionId?: string | null }) {
   const program = await findProgramForAccount(account);
   const enrollment = activeEnrollment(program);
   if (!program || !enrollment) return "Я пока не вижу активную программу привычек. Открой кабинет ORKEN.LIFE и запусти привычки.";
   const task = nextTask(enrollment);
-  return [
-    `Сегодня: ${enrollment.title}`,
-    task ? `${task.title}\n${task.microAction}\n${task.whyToday}` : enrollment.practice,
-    "",
-    `Прогресс недели: ${enrollment.checkins.filter((item) => item.completed).length}/7.`,
-    "Когда сделаешь шаг, нажми /checkin."
-  ].join("\n");
+  const settings = await getTelegramPolicySettings();
+  const plan = buildTelegramDailyPlan(task, enrollment);
+  return renderTelegramTemplate(settings.todayTemplate, {
+    habitTitle: enrollment.title,
+    whatToDo: plan.whatToDo,
+    lowEnergy: plan.lowEnergy,
+    why: plan.why,
+    time: plan.time,
+    weekProgress: String(enrollment.checkins.filter((item) => item.completed).length)
+  });
 }
 
 async function completeTodayFromTelegram(account: { userId?: string | null; sessionId?: string | null }) {
@@ -328,7 +402,7 @@ async function completeTodayFromTelegram(account: { userId?: string | null; sess
   const enrollment = activeEnrollment(program);
   if (!program || !enrollment) return "Активная привычка не найдена.";
   const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  today.setUTCHours(0, 0, 0, 0);
   const existing = await prisma.habitCheckin.findUnique({
     where: { enrollmentId_date: { enrollmentId: enrollment.id, date: today } }
   });
@@ -345,18 +419,44 @@ async function completeTodayFromTelegram(account: { userId?: string | null; sess
   });
   if (!existing?.completed) {
     await completeNextDailyTask(program.id, enrollment.id, today);
-    await prisma.habitRewardEvent.create({
-      data: {
-        programId: program.id,
-        type: "daily_checkin",
-        label: "Отметка привычки в Telegram",
-        xp: 10
-      }
+    await createDailyHabitRewardIfNeeded({
+      programId: program.id,
+      type: "daily_checkin",
+      label: "Отметка привычки в Telegram",
+      xp: 10,
+      date: today
     });
   }
   return existing?.completed
     ? "Сегодня уже было отмечено. Повторно XP не начисляю, чтобы прогресс оставался честным."
     : "Сегодня отмечено! +10 XP. Хороший маленький шаг.";
+}
+
+async function saveMetricFromTelegram(account: { userId?: string | null; sessionId?: string | null }, energy: number, clarity: number, stability: number) {
+  const program = await findProgramForAccount(account);
+  if (!program) return "Активная программа не найдена.";
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  const existingMetric = await prisma.habitDailyMetric.findUnique({
+    where: { programId_date: { programId: program.id, date: today } }
+  });
+  await prisma.habitDailyMetric.upsert({
+    where: { programId_date: { programId: program.id, date: today } },
+    update: { energy, clarity, stability },
+    create: { programId: program.id, date: today, energy, clarity, stability }
+  });
+  const reward = !existingMetric
+    ? await createDailyHabitRewardIfNeeded({
+      programId: program.id,
+      type: "daily_metric",
+      label: "Состояние дня из Telegram",
+      xp: 15,
+      date: today
+    })
+    : { awarded: false };
+  return reward.awarded
+    ? `Состояние сохранено: энергия ${energy}/10, ясность ${clarity}/10, устойчивость ${stability}/10. +15 XP.`
+    : `Состояние обновлено: энергия ${energy}/10, ясность ${clarity}/10, устойчивость ${stability}/10. XP за состояние сегодня уже начислялись.`;
 }
 
 async function completeNextDailyTask(programId: string, enrollmentId: string, date: Date) {
@@ -392,15 +492,16 @@ async function saveInsightFromTelegram(account: { userId?: string | null; sessio
       source: "telegram"
     }
   });
-  await prisma.habitRewardEvent.create({
-    data: {
-      programId: program.id,
-      type: "insight_saved",
-      label: "Инсайт из Telegram",
-      xp: 15
-    }
+  const reward = await createDailyHabitRewardIfNeeded({
+    programId: program.id,
+    type: "insight_saved",
+    label: "Инсайт из Telegram",
+    xp: 15,
+    date: new Date()
   });
-  return "Инсайт сохранён в архив. +15 XP.";
+  return reward.awarded
+    ? "Инсайт сохранён в архив. +15 XP."
+    : "Инсайт сохранён в архив. XP за инсайт сегодня уже начислялись.";
 }
 
 async function askOrkenFromTelegram(account: { userId?: string | null; sessionId?: string | null }, question: string) {
@@ -591,7 +692,11 @@ async function defaultKeyboard(account?: { telegramUserId?: string; userId?: str
         { text: "✅ Отметить", callback_data: "checkin" }
       ],
       [
-        { text: "📊 Метрики", callback_data: "metrics" }
+        { text: "📊 Состояние", callback_data: "state" },
+        { text: "💡 Инсайт", callback_data: "insight_help" }
+      ],
+      [
+        { text: "Последние метрики", callback_data: "metrics" }
       ]
     ] as Array<Array<{ text: string; callback_data?: string; url?: string }>>
   };
@@ -608,6 +713,7 @@ function helpText() {
     "Команды ORKEN.LIFE:",
     "/today - показать сегодняшний шаг",
     "/checkin - отметить выполнение",
+    "/state - сохранить энергию, ясность и устойчивость",
     "/metrics - показать последние показатели",
     "/insight текст - сохранить инсайт в архив",
     "/orken вопрос - спросить ORKEN с учетом привычек",

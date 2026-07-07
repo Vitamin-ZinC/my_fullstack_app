@@ -5,6 +5,9 @@ export const TELEGRAM_RATE_LIMIT_WINDOW_MS_KEY = "telegram_rate_limit_window_ms"
 export const TELEGRAM_RATE_LIMIT_MAX_KEY = "telegram_rate_limit_max";
 export const TELEGRAM_REMINDER_TEMPLATE_KEY = "telegram_reminder_template";
 export const TELEGRAM_WEB_LOGIN_ENABLED_KEY = "telegram_web_login_enabled";
+export const TELEGRAM_WELCOME_TEMPLATE_KEY = "telegram_welcome_template";
+export const TELEGRAM_TODAY_TEMPLATE_KEY = "telegram_today_template";
+export const HABIT_ASSISTANT_AVATAR_URL_KEY = "habit_assistant_avatar_url";
 export const HABIT_WEEK_SUMMARY_MODE_RULE = "rule";
 export const HABIT_WEEK_SUMMARY_MODE_LLM = "llm";
 
@@ -67,7 +70,9 @@ export async function getTelegramPolicySettings() {
           TELEGRAM_RATE_LIMIT_WINDOW_MS_KEY,
           TELEGRAM_RATE_LIMIT_MAX_KEY,
           TELEGRAM_REMINDER_TEMPLATE_KEY,
-          TELEGRAM_WEB_LOGIN_ENABLED_KEY
+          TELEGRAM_WEB_LOGIN_ENABLED_KEY,
+          TELEGRAM_WELCOME_TEMPLATE_KEY,
+          TELEGRAM_TODAY_TEMPLATE_KEY
         ]
       }
     }
@@ -83,7 +88,36 @@ export async function getTelegramPolicySettings() {
       "{{taskText}}",
       "{{metricText}}",
       "",
-      "Команды: /checkin, /today, /metrics или просто задай вопрос."
+      "Кнопки ниже помогут отметить шаг, сохранить состояние или открыть кабинет."
+    ].join("\n")),
+    welcomeTemplate: readTemplate(values.get(TELEGRAM_WELCOME_TEMPLATE_KEY), [
+      "Привет! Я твой личный ИИ-помощник ORKEN от Навигатора привычек ORKEN.LIFE. 🚀",
+      "",
+      "Я помогаю тебе оставаться в фокусе, отслеживать прогресс и прокачивать дисциплину прямо в мессенджере. Вот что я умею делать:",
+      "",
+      "1. Подтягивать твою текущую привычку на сегодня из личного кабинета: что сделать, если нет сил, зачем и сколько времени нужно.",
+      "2. Фиксировать внутреннее состояние: энергию, ясность и устойчивость.",
+      "3. Сохранять важные инсайты и мысли в личный Архив.",
+      "4. Начислять XP за ежедневные активности в общий профиль на сайте.",
+      "",
+      "Давай начнем. Синхронизируем твой аккаунт."
+    ].join("\n")),
+    todayTemplate: readTemplate(values.get(TELEGRAM_TODAY_TEMPLATE_KEY), [
+      "Сегодня: {{habitTitle}}",
+      "",
+      "1. Что нужно сделать",
+      "{{whatToDo}}",
+      "",
+      "2. Если нет сил",
+      "{{lowEnergy}}",
+      "",
+      "3. Зачем",
+      "{{why}}",
+      "",
+      "4. Время",
+      "{{time}}",
+      "",
+      "Прогресс недели: {{weekProgress}}/7."
     ].join("\n")),
     webLoginEnabled: readBoolean(values.get(TELEGRAM_WEB_LOGIN_ENABLED_KEY), true)
   };

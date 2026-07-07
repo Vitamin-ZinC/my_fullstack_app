@@ -3,6 +3,9 @@ import { z } from "zod";
 import { env } from "../env.js";
 import { createAdminSessionToken, requireAdmin, verifyAdminPassword, writeAdminAudit } from "../lib/auth.js";
 import { prisma } from "../lib/prisma.js";
+import { validatePhotoBuffer } from "../services/imageValidation.js";
+import { createImageUploadKey, writeUploadBuffer } from "../services/media.js";
+import { HABIT_ASSISTANT_AVATAR_URL_KEY } from "../services/pricing.js";
 import { defaultReportPromptTemplates } from "../services/reportPrompts.js";
 
 const jsonValueSchema: z.ZodType<unknown> = z.lazy(() =>
@@ -175,6 +178,25 @@ export async function adminRoutes(app: FastifyInstance) {
     });
     await writeAdminAudit("setting.upsert", "AppSetting", params.key, body);
     return setting;
+  });
+
+  app.post("/api/admin/assets/assistant-avatar", async (request, reply) => {
+    const body = request.body instanceof Buffer ? request.body : Buffer.from([]);
+    if (body.length > 4 * 1024 * 1024) return reply.code(413).send({ error: "Avatar image is too large" });
+    const validation = validatePhotoBuffer(body);
+    if (!validation.ok) return reply.code(400).send({ error: validation.reason });
+
+    const key = createImageUploadKey("avatar", validation.format);
+    const mimeType = `image/${validation.format === "jpeg" ? "jpeg" : validation.format}`;
+    await writeUploadBuffer(key, body, mimeType);
+    const url = `${env.PUBLIC_API_URL}/api/habits/avatar/${encodeURIComponent(key)}`;
+    const setting = await prisma.appSetting.upsert({
+      where: { key: HABIT_ASSISTANT_AVATAR_URL_KEY },
+      update: { value: url },
+      create: { key: HABIT_ASSISTANT_AVATAR_URL_KEY, value: url }
+    });
+    await writeAdminAudit("asset.assistant_avatar.upload", "AppSetting", HABIT_ASSISTANT_AVATAR_URL_KEY, { url });
+    return { ok: true, url, setting };
   });
 
   app.get("/api/admin/feature-flags", async () => {

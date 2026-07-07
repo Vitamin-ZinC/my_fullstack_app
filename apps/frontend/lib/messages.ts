@@ -842,6 +842,7 @@ export const ruSiteText = {
         checkinRemoved: "Отметка на сегодня убрана",
         insightSaved: "Инсайт сохранен в архив",
         settingsSaved: "Настройки сохранены",
+        avatarUploaded: "Аватар загружен. Нажми «Сохранить настройки», чтобы закрепить его в профиле.",
         telegramLinkCreated: "Открыли Telegram-бота. Нажми Start в Telegram, чтобы связать кабинет.",
         telegramSettingsSaved: "Telegram-настройки сохранены",
         subscriptionUpdated: "Подписка обновлена",
@@ -861,6 +862,7 @@ export const ruSiteText = {
         checkin: "Не удалось отметить привычку",
         insight: "Не удалось сохранить инсайт",
         settings: "Не удалось сохранить настройки",
+        avatar: "Не удалось загрузить аватар",
         advance: "Не удалось перейти к следующей неделе",
         freeze: "Не удалось заморозить неделю",
         server: "Сервер кабинета временно недоступен. Попробуйте позже."

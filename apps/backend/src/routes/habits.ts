@@ -11,6 +11,9 @@ import { getHabitAiSettings, HABIT_WEEK_SUMMARY_MODE_LLM } from "../services/hab
 import { askHabitNavigator } from "../services/habitNavigator.js";
 import { getOpenAiClient, hasOpenAiClient } from "../services/openaiClient.js";
 import { getHabitSubscriptionConfig } from "../services/pricing.js";
+import { createDailyHabitRewardIfNeeded } from "../services/habitRewards.js";
+import { createImageUploadKey, readMediaAssetBuffer, writeUploadBuffer } from "../services/media.js";
+import { validatePhotoBuffer } from "../services/imageValidation.js";
 
 const stripe = env.STRIPE_SECRET_KEY ? new Stripe(env.STRIPE_SECRET_KEY) : null;
 
@@ -84,7 +87,7 @@ const settingsSchema = z.object({
   weakZone: weakZoneSchema.optional(),
   reminderEnabled: z.boolean().optional(),
   reminderTime: z.string().regex(/^\d{2}:\d{2}$/).optional(),
-  avatar: z.string().trim().max(50000).optional()
+  avatar: z.string().trim().max(1200).optional()
 });
 
 const advanceProgramSchema = z.object({
@@ -381,13 +384,12 @@ export async function habitsRoutes(app: FastifyInstance) {
       create: { programId: body.programId, date, energy: body.energy, clarity: body.clarity, stability: body.stability }
     });
     if (!existingMetric) {
-      await prisma.habitRewardEvent.create({
-        data: {
-          programId: body.programId,
-          type: "daily_metric",
-          label: "Состояние дня: энергия, ясность, устойчивость",
-          xp: 15
-        }
+      await createDailyHabitRewardIfNeeded({
+        programId: body.programId,
+        type: "daily_metric",
+        label: "Состояние дня: энергия, ясность, устойчивость",
+        xp: 15,
+        date
       });
     }
     await prisma.analyticsEvent.create({
@@ -451,13 +453,12 @@ export async function habitsRoutes(app: FastifyInstance) {
 
     if (body.completed && !existing?.completed) {
       await completeNextDailyTask(body.programId, enrollment.id, date);
-      await prisma.habitRewardEvent.create({
-        data: {
-          programId: body.programId,
-          type: "daily_checkin",
-          label: `Привычка дня: ${enrollment.title}`,
-          xp: 10
-        }
+      await createDailyHabitRewardIfNeeded({
+        programId: body.programId,
+        type: "daily_checkin",
+        label: `Привычка дня: ${enrollment.title}`,
+        xp: 10,
+        date
       });
     }
     await prisma.analyticsEvent.create({
@@ -495,13 +496,12 @@ export async function habitsRoutes(app: FastifyInstance) {
         source: body.source
       }
     });
-    await prisma.habitRewardEvent.create({
-      data: {
-        programId: body.programId,
-        type: "insight_saved",
-        label: "Инсайт сохранен в архив",
-        xp: 15
-      }
+    await createDailyHabitRewardIfNeeded({
+      programId: body.programId,
+      type: "insight_saved",
+      label: "Инсайт сохранен в архив",
+      xp: 15,
+      date: new Date()
     });
     await prisma.analyticsEvent.create({
       data: {
@@ -638,6 +638,37 @@ export async function habitsRoutes(app: FastifyInstance) {
     });
 
     return buildProgramResponse(await loadProgram(body.programId));
+  });
+
+  app.post("/api/habits/avatar", async (request, reply) => {
+    const session = await requireSession(request, reply);
+    if (!session) return;
+    const body = request.body instanceof Buffer ? request.body : Buffer.from([]);
+    if (body.length > 4 * 1024 * 1024) return reply.code(413).send({ error: "Avatar image is too large" });
+    const validation = validatePhotoBuffer(body);
+    if (!validation.ok) return reply.code(400).send({ error: validation.reason });
+
+    const key = createImageUploadKey("avatar", validation.format);
+    const mimeType = `image/${validation.format === "jpeg" ? "jpeg" : validation.format}`;
+    await writeUploadBuffer(key, body, mimeType);
+    return {
+      ok: true,
+      url: `${env.PUBLIC_API_URL}/api/habits/avatar/${encodeURIComponent(key)}`
+    };
+  });
+
+  app.get("/api/habits/avatar/:key", async (request, reply) => {
+    const params = z.object({ key: z.string().min(1).max(120) }).parse(request.params);
+    if (params.key.includes("/") || params.key.includes("..") || !/^avatar-[a-f0-9-]+\.(jpg|png|webp)$/i.test(params.key)) {
+      return reply.code(400).send({ error: "Invalid avatar key" });
+    }
+    const body = await readMediaAssetBuffer(params.key);
+    if (!body) return reply.code(404).send({ error: "Avatar not found" });
+    const contentType = params.key.endsWith(".png") ? "image/png" : params.key.endsWith(".webp") ? "image/webp" : "image/jpeg";
+    return reply
+      .header("Cache-Control", "public, max-age=86400")
+      .type(contentType)
+      .send(body);
   });
 
   app.patch("/api/habits/settings", async (request, reply) => {

@@ -2507,6 +2507,114 @@ svg {
   cursor: pointer;
 }
 
+.admin-users-list {
+  display: grid;
+  gap: 14px;
+}
+
+.admin-user-card {
+  display: grid;
+  gap: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  background: rgba(2, 11, 24, 0.3);
+  padding: 14px;
+}
+
+.admin-user-head,
+.admin-program-row,
+.admin-user-activity {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: start;
+}
+
+.admin-user-head h3 {
+  margin: 0 0 6px;
+  font-size: 18px;
+}
+
+.admin-user-head code {
+  max-width: 220px;
+  overflow-wrap: anywhere;
+  border: 1px solid rgba(0, 212, 255, 0.16);
+  border-radius: 10px;
+  color: rgba(226, 232, 240, 0.78);
+  font-size: 11px;
+  padding: 7px 9px;
+}
+
+.admin-user-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.admin-mini-metric {
+  display: grid;
+  gap: 4px;
+  border: 1px solid rgba(0, 212, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(0, 212, 255, 0.045);
+  padding: 10px;
+}
+
+.admin-mini-metric span {
+  color: rgba(148, 163, 184, 0.88);
+  font-size: 11px;
+}
+
+.admin-mini-metric strong {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.admin-program-list {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-program-row {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 12px;
+}
+
+.admin-program-row > div:first-child,
+.admin-user-activity > div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.admin-program-row span,
+.admin-user-activity span {
+  color: rgba(226, 232, 240, 0.62);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.admin-gift-form {
+  display: grid;
+  grid-template-columns: 76px minmax(130px, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  min-width: min(100%, 440px);
+}
+
+.admin-gift-form .button {
+  min-height: 42px;
+  white-space: nowrap;
+}
+
+.admin-user-activity {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 12px;
+}
+
 .prompt-editor {
   min-height: 360px;
 }
@@ -5439,6 +5547,17 @@ p {
 
   .admin-avatar-control .admin-upload-button {
     grid-column: 1 / -1;
+  }
+
+  .admin-user-head,
+  .admin-program-row,
+  .admin-user-activity,
+  .admin-gift-form {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-user-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .compare-row,

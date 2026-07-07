@@ -1,5 +1,7 @@
 import type {
+  AdminGiftDaysResponse,
   AdminStats,
+  AdminUserSummary,
   AppSetting,
   AuthResult,
   AuthSessionResponse,
@@ -555,6 +557,16 @@ export const adminApi = {
   }),
   stats: () => adminRequest<AdminStats>("/api/admin/stats"),
   analyses: () => adminRequest<unknown[]>("/api/admin/analyses"),
+  users: (query?: { q?: string; limit?: number }) => {
+    const params = new URLSearchParams();
+    if (query?.q?.trim()) params.set("q", query.q.trim());
+    if (query?.limit) params.set("limit", String(query.limit));
+    return adminRequest<AdminUserSummary[]>(`/api/admin/users${params.size ? `?${params.toString()}` : ""}`);
+  },
+  giftUserDays: (userId: string, payload: { days: number; programId?: string; note?: string }) => adminRequest<AdminGiftDaysResponse>(`/api/admin/users/${encodeURIComponent(userId)}/gift-days`, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  }),
   settings: () => adminRequest<AppSetting[]>("/api/admin/settings"),
   upsertSetting: (key: string, value: unknown) => adminRequest<AppSetting>(`/api/admin/settings/${encodeURIComponent(key)}`, {
     method: "PUT",

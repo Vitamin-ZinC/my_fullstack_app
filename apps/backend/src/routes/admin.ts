@@ -7,6 +7,7 @@ import { validatePhotoBuffer } from "../services/imageValidation.js";
 import { createImageUploadKey, writeUploadBuffer } from "../services/media.js";
 import { HABIT_ASSISTANT_AVATAR_URL_KEY } from "../services/pricing.js";
 import { defaultReportPromptTemplates } from "../services/reportPrompts.js";
+import { calculateGiftedTrialEnd, calculateTrialDaysLeft } from "../services/adminUsers.js";
 
 const jsonValueSchema: z.ZodType<unknown> = z.lazy(() =>
   z.union([
@@ -54,6 +55,17 @@ const promoCodeSchema = z.object({
   expiresAt: z.string().datetime().optional().nullable()
 });
 
+const adminUsersQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(30),
+  q: z.string().trim().max(200).optional()
+});
+
+const giftDaysSchema = z.object({
+  days: z.coerce.number().int().min(1).max(3650),
+  programId: z.string().trim().min(1).optional(),
+  note: z.string().trim().max(300).optional()
+});
+
 function normalizePromoCode(code: string) {
   return code.trim().toUpperCase();
 }
@@ -77,6 +89,89 @@ function toPromoData(input: z.infer<typeof promoCodeSchema>) {
     maxRedemptions: input.maxRedemptions ?? null,
     startsAt: input.startsAt ? new Date(input.startsAt) : null,
     expiresAt: input.expiresAt ? new Date(input.expiresAt) : null
+  };
+}
+
+function serializeAdminUser(user: any) {
+  const now = new Date();
+  const paymentsSucceeded = user.payments.filter((payment: any) => payment.status === "SUCCEEDED");
+  const analysesDone = user.analyses.filter((analysis: any) => analysis.status === "DONE");
+  const habitPrograms = user.habitPrograms.map((program: any) => {
+    const xp = program.rewards.reduce((sum: number, reward: any) => sum + reward.xp, 0);
+    const latestMetric = program.dailyMetrics[0] ?? null;
+    return {
+      id: program.id,
+      title: program.title,
+      status: program.status,
+      subscriptionStatus: program.subscriptionStatus,
+      trialStartedAt: program.trialStartedAt?.toISOString() ?? null,
+      trialEndsAt: program.trialEndsAt?.toISOString() ?? null,
+      trialDaysLeft: calculateTrialDaysLeft(program.trialEndsAt, now),
+      subscriptionCurrentPeriodEnd: program.subscriptionCurrentPeriodEnd?.toISOString() ?? null,
+      currentCycle: program.currentCycle,
+      currentWeek: program.currentWeek,
+      xp,
+      checkinsDone: program.checkins.length,
+      insightsCount: program.insights.length,
+      latestMetric: latestMetric ? {
+        date: latestMetric.date.toISOString().slice(0, 10),
+        energy: latestMetric.energy,
+        clarity: latestMetric.clarity,
+        stability: latestMetric.stability
+      } : null,
+      telegramEnabled: Boolean(program.notificationPreference?.telegramEnabled),
+      createdAt: program.createdAt.toISOString(),
+      updatedAt: program.updatedAt.toISOString()
+    };
+  });
+  const habitXp = habitPrograms.reduce((sum: number, program: any) => sum + program.xp, 0);
+
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    status: user.status,
+    locale: user.locale,
+    avatarUrl: user.avatarUrl,
+    createdAt: user.createdAt.toISOString(),
+    updatedAt: user.updatedAt.toISOString(),
+    lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
+    stats: {
+      sessionsCount: user.sessions.length,
+      analysesTotal: user.analyses.length,
+      analysesDone: analysesDone.length,
+      paymentsSucceeded: paymentsSucceeded.length,
+      revenueSucceeded: paymentsSucceeded.reduce((sum: number, payment: any) => sum + payment.amount, 0),
+      habitProgramsTotal: habitPrograms.length,
+      habitProgramsActive: habitPrograms.filter((program: any) => program.status === "ACTIVE").length,
+      habitXp,
+      habitCheckins: habitPrograms.reduce((sum: number, program: any) => sum + program.checkinsDone, 0),
+      habitInsights: habitPrograms.reduce((sum: number, program: any) => sum + program.insightsCount, 0),
+      telegramAccounts: user.telegramAccounts.length,
+      lastEventAt: user.events[0]?.createdAt?.toISOString() ?? null
+    },
+    habitPrograms,
+    recentAnalyses: user.analyses.slice(0, 5).map((analysis: any) => ({
+      id: analysis.id,
+      status: analysis.status,
+      createdAt: analysis.createdAt.toISOString(),
+      completedAt: analysis.completedAt?.toISOString() ?? null
+    })),
+    recentEvents: user.events.map((event: any) => ({
+      id: event.id,
+      name: event.name,
+      createdAt: event.createdAt.toISOString()
+    })),
+    telegramAccounts: user.telegramAccounts.map((account: any) => ({
+      id: account.id,
+      username: account.username,
+      firstName: account.firstName,
+      lastName: account.lastName,
+      status: account.status,
+      linkedAt: account.linkedAt.toISOString(),
+      lastSeenAt: account.lastSeenAt.toISOString()
+    }))
   };
 }
 
@@ -162,6 +257,136 @@ export async function adminRoutes(app: FastifyInstance) {
         jobEvents: { orderBy: { createdAt: "desc" }, take: 5 }
       }
     });
+  });
+
+  app.get("/api/admin/users", async (request) => {
+    const query = adminUsersQuerySchema.parse(request.query);
+    const search = query.q?.trim();
+    const where = search
+      ? {
+          OR: [
+            { id: search },
+            { email: { contains: search, mode: "insensitive" as const } },
+            { name: { contains: search, mode: "insensitive" as const } }
+          ]
+        }
+      : undefined;
+
+    const users = await prisma.user.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      take: query.limit,
+      include: {
+        sessions: {
+          select: { id: true }
+        },
+        analyses: {
+          orderBy: { createdAt: "desc" },
+          select: { id: true, status: true, createdAt: true, completedAt: true }
+        },
+        payments: {
+          select: { id: true, status: true, amount: true, currency: true, paidAt: true }
+        },
+        events: {
+          orderBy: { createdAt: "desc" },
+          take: 10,
+          select: { id: true, name: true, createdAt: true }
+        },
+        telegramAccounts: {
+          orderBy: { updatedAt: "desc" },
+          select: {
+            id: true,
+            username: true,
+            firstName: true,
+            lastName: true,
+            status: true,
+            linkedAt: true,
+            lastSeenAt: true
+          }
+        },
+        habitPrograms: {
+          orderBy: { createdAt: "desc" },
+          include: {
+            rewards: { select: { xp: true } },
+            checkins: { where: { completed: true }, select: { id: true } },
+            insights: { select: { id: true } },
+            dailyMetrics: {
+              orderBy: { date: "desc" },
+              take: 1,
+              select: { date: true, energy: true, clarity: true, stability: true }
+            },
+            notificationPreference: {
+              select: { telegramEnabled: true }
+            }
+          }
+        }
+      }
+    });
+
+    return users.map(serializeAdminUser);
+  });
+
+  app.post("/api/admin/users/:id/gift-days", async (request, reply) => {
+    const params = z.object({ id: z.string().min(1) }).parse(request.params);
+    const body = giftDaysSchema.parse(request.body ?? {});
+    const user = await prisma.user.findUnique({
+      where: { id: params.id },
+      select: { id: true, email: true }
+    });
+    if (!user) return reply.code(404).send({ error: "User not found" });
+
+    const program = body.programId
+      ? await prisma.habitProgram.findFirst({ where: { id: body.programId, userId: user.id } })
+      : await prisma.habitProgram.findFirst({
+          where: { userId: user.id },
+          orderBy: [{ status: "asc" }, { createdAt: "desc" }]
+        });
+    if (!program) return reply.code(404).send({ error: "User has no habit program" });
+
+    const now = new Date();
+    const trialEndsAt = calculateGiftedTrialEnd({
+      now,
+      currentTrialEndsAt: program.trialEndsAt,
+      days: body.days
+    });
+    const subscriptionStatus = program.subscriptionStatus === "ACTIVE" ? "ACTIVE" : "TRIAL";
+    const updated = await prisma.habitProgram.update({
+      where: { id: program.id },
+      data: {
+        trialStartedAt: program.trialStartedAt ?? now,
+        trialEndsAt,
+        subscriptionStatus,
+        ...(subscriptionStatus === "TRIAL" ? { subscriptionCancelAtPeriodEnd: false } : {})
+      }
+    });
+    const payload = {
+      userId: user.id,
+      email: user.email,
+      programId: updated.id,
+      days: body.days,
+      note: body.note ?? null,
+      previousTrialEndsAt: program.trialEndsAt?.toISOString() ?? null,
+      newTrialEndsAt: updated.trialEndsAt?.toISOString() ?? null
+    };
+    await prisma.analyticsEvent.create({
+      data: {
+        name: "admin_gift_days_granted",
+        locale: "ru",
+        userId: user.id,
+        properties: payload
+      }
+    });
+    await writeAdminAudit("user.gift_days", "HabitProgram", updated.id, payload);
+
+    return {
+      ok: true,
+      userId: user.id,
+      programId: updated.id,
+      days: body.days,
+      subscriptionStatus: updated.subscriptionStatus,
+      trialEndsAt: updated.trialEndsAt?.toISOString() ?? null,
+      trialDaysLeft: calculateTrialDaysLeft(updated.trialEndsAt)
+    };
   });
 
   app.get("/api/admin/settings", async () => {

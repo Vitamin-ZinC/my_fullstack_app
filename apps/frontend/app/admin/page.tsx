@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { AdminStats, AppSetting, FeatureFlag, PromoCode, PromptTemplate, PromptTemplateInput } from "@levelup/contracts";
+import type { AdminStats, AdminUserSummary, AppSetting, FeatureFlag, PromoCode, PromptTemplate, PromptTemplateInput } from "@levelup/contracts";
 import {
   adminApi,
   contentSettingKey,
@@ -40,12 +40,16 @@ export default function AdminPage() {
   const [authenticated, setAuthenticated] = useState(false);
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [analyses, setAnalyses] = useState<unknown[]>([]);
+  const [users, setUsers] = useState<AdminUserSummary[]>([]);
   const [settings, setSettings] = useState<AppSetting[]>([]);
   const [flags, setFlags] = useState<FeatureFlag[]>([]);
   const [prompts, setPrompts] = useState<PromptTemplate[]>([]);
   const [promptDefaults, setPromptDefaults] = useState<PromptTemplateInput[]>([]);
   const [promptForm, setPromptForm] = useState<PromptTemplateInput>(emptyPromptForm);
   const [promoCodes, setPromoCodes] = useState<PromoCode[]>([]);
+  const [userQuery, setUserQuery] = useState("");
+  const [giftDaysByProgram, setGiftDaysByProgram] = useState<Record<string, string>>({});
+  const [giftNoteByProgram, setGiftNoteByProgram] = useState<Record<string, string>>({});
   const [activeTextLocale, setActiveTextLocale] = useState("ru");
   const [textDrafts, setTextDrafts] = useState<Record<string, string>>({
     ru: JSON.stringify(defaultSiteText.ru, null, 2),
@@ -135,9 +139,10 @@ export default function AdminPage() {
   async function refresh() {
     setMessage("");
     try {
-      const [nextStats, nextAnalyses, nextSettings, nextFlags, nextPrompts, nextPromptDefaults, nextPromoCodes] = await Promise.all([
+      const [nextStats, nextAnalyses, nextUsers, nextSettings, nextFlags, nextPrompts, nextPromptDefaults, nextPromoCodes] = await Promise.all([
         adminApi.stats(),
         adminApi.analyses(),
+        adminApi.users({ q: userQuery, limit: 30 }),
         adminApi.settings(),
         adminApi.flags(),
         adminApi.prompts(),
@@ -146,6 +151,7 @@ export default function AdminPage() {
       ]);
       setStats(nextStats);
       setAnalyses(nextAnalyses);
+      setUsers(nextUsers);
       setSettings(nextSettings);
       setFlags(nextFlags);
       setPrompts(nextPrompts);
@@ -541,6 +547,37 @@ export default function AdminPage() {
     await refresh();
   }
 
+  async function loadUsers() {
+    setMessage("");
+    try {
+      setUsers(await adminApi.users({ q: userQuery, limit: 50 }));
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "Failed to load users");
+    }
+  }
+
+  async function giftProgramDays(user: AdminUserSummary, programId: string) {
+    setMessage("");
+    const days = Number(giftDaysByProgram[programId] ?? "");
+    if (!Number.isInteger(days) || days <= 0 || days > 3650) {
+      setMessage("Gift days must be a whole number from 1 to 3650");
+      return;
+    }
+    try {
+      const result = await adminApi.giftUserDays(user.id, {
+        programId,
+        days,
+        note: giftNoteByProgram[programId]?.trim() || undefined
+      });
+      setMessage(`Gifted ${result.days} days to ${user.email}. New trial ends: ${result.trialEndsAt ?? "not set"}`);
+      setGiftDaysByProgram((current) => ({ ...current, [programId]: "" }));
+      setGiftNoteByProgram((current) => ({ ...current, [programId]: "" }));
+      await loadUsers();
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "Failed to gift days");
+    }
+  }
+
   const promptChoices = [
     ...prompts.map((prompt) => ({ label: `${prompt.key}/${prompt.locale}/v${prompt.version} ${prompt.status}`, value: `${prompt.key}|${prompt.locale}|${prompt.version}|saved`, prompt })),
     ...promptDefaults
@@ -597,6 +634,104 @@ export default function AdminPage() {
             <button className="button secondary" onClick={upsertLocaleSettings}>{adminText.seedLocales}</button>
             <button className="button secondary" onClick={upsertFeatureFlag}>{adminText.seedFlag}</button>
             <button className="button secondary" onClick={seedDefaultPrompts}>{adminText.seedPrompt}</button>
+          </section>
+
+          <section className="card stack">
+            <div>
+              <h2>Users and usage</h2>
+              <p className="muted">Search users, inspect diagnostics/habits activity, and grant extra usage days for a selected habits program. Gift actions are written to admin audit and analytics events.</p>
+            </div>
+            <div className="grid grid-3">
+              <input
+                className="input"
+                value={userQuery}
+                onChange={(event) => setUserQuery(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") void loadUsers();
+                }}
+                placeholder="Search by email, name, or user id"
+              />
+              <button className="button secondary" onClick={loadUsers}>Search users</button>
+              <button className="button secondary" onClick={() => {
+                setUserQuery("");
+                void adminApi.users({ limit: 30 }).then(setUsers).catch((reason) => setMessage(reason instanceof Error ? reason.message : "Failed to load users"));
+              }}>Reset</button>
+            </div>
+            <div className="admin-users-list">
+              {users.length === 0 ? (
+                <p className="muted">No users found</p>
+              ) : users.map((user) => (
+                <article className="admin-user-card" key={user.id}>
+                  <div className="admin-user-head">
+                    <div>
+                      <h3>{user.name || user.email}</h3>
+                      <p className="muted">{user.email} · {user.status} · {user.role} · {user.locale}</p>
+                      <p className="muted">Created {formatAdminDate(user.createdAt)} · Last login {user.lastLoginAt ? formatAdminDate(user.lastLoginAt) : "never"}</p>
+                    </div>
+                    <code>{user.id}</code>
+                  </div>
+                  <div className="admin-user-metrics">
+                    <AdminMiniMetric label="Analyses" value={`${user.stats.analysesDone}/${user.stats.analysesTotal}`} />
+                    <AdminMiniMetric label="Payments" value={`${user.stats.paymentsSucceeded} · ${user.stats.revenueSucceeded}`} />
+                    <AdminMiniMetric label="Habits" value={`${user.stats.habitProgramsActive}/${user.stats.habitProgramsTotal}`} />
+                    <AdminMiniMetric label="XP" value={user.stats.habitXp} />
+                    <AdminMiniMetric label="Checkins" value={user.stats.habitCheckins} />
+                    <AdminMiniMetric label="Insights" value={user.stats.habitInsights} />
+                    <AdminMiniMetric label="Telegram" value={user.stats.telegramAccounts} />
+                    <AdminMiniMetric label="Last event" value={user.stats.lastEventAt ? formatAdminDate(user.stats.lastEventAt) : "none"} />
+                  </div>
+                  <div className="admin-program-list">
+                    {user.habitPrograms.length === 0 ? (
+                      <p className="muted">No habits programs yet</p>
+                    ) : user.habitPrograms.map((program) => (
+                      <div className="admin-program-row" key={program.id}>
+                        <div>
+                          <strong>{program.title}</strong>
+                          <span>
+                            {program.status} · {program.subscriptionStatus} · cycle {program.currentCycle}, week {program.currentWeek}
+                          </span>
+                          <span>
+                            Trial left: {program.trialDaysLeft ?? 0} days · ends {program.trialEndsAt ? formatAdminDate(program.trialEndsAt) : "not set"} · XP {program.xp}
+                          </span>
+                        </div>
+                        <div className="admin-gift-form">
+                          <input
+                            className="input"
+                            value={giftDaysByProgram[program.id] ?? ""}
+                            onChange={(event) => setGiftDaysByProgram((current) => ({ ...current, [program.id]: event.target.value }))}
+                            placeholder="Days"
+                            inputMode="numeric"
+                          />
+                          <input
+                            className="input"
+                            value={giftNoteByProgram[program.id] ?? ""}
+                            onChange={(event) => setGiftNoteByProgram((current) => ({ ...current, [program.id]: event.target.value }))}
+                            placeholder="Note"
+                          />
+                          <button className="button secondary" onClick={() => giftProgramDays(user, program.id)}>Gift days</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {(user.recentEvents.length > 0 || user.recentAnalyses.length > 0) && (
+                    <div className="admin-user-activity">
+                      <div>
+                        <strong>Recent events</strong>
+                        {user.recentEvents.length === 0 ? <span className="muted">none</span> : user.recentEvents.slice(0, 5).map((event) => (
+                          <span key={event.id}>{formatAdminDate(event.createdAt)} · {event.name}</span>
+                        ))}
+                      </div>
+                      <div>
+                        <strong>Recent analyses</strong>
+                        {user.recentAnalyses.length === 0 ? <span className="muted">none</span> : user.recentAnalyses.map((analysis) => (
+                          <span key={analysis.id}>{formatAdminDate(analysis.createdAt)} · {analysis.status}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </article>
+              ))}
+            </div>
           </section>
 
           <section className="card stack">
@@ -912,6 +1047,26 @@ function Metric({ label, value }: { label: string; value: string | number }) {
       <h2>{value}</h2>
     </div>
   );
+}
+
+function AdminMiniMetric({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="admin-mini-metric">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function formatAdminDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).format(date);
 }
 
 function formatAdminPriceLabel(amountValue: string, currencyValue: string) {

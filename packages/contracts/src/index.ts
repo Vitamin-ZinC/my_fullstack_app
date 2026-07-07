@@ -258,6 +258,89 @@ export type PromoCode = {
   updatedAt: string;
 };
 
+export type AdminUserHabitProgramSummary = {
+  id: string;
+  title: string;
+  status: HabitProgramStatus;
+  subscriptionStatus: string;
+  trialStartedAt?: string | null;
+  trialEndsAt?: string | null;
+  trialDaysLeft?: number | null;
+  subscriptionCurrentPeriodEnd?: string | null;
+  currentCycle: number;
+  currentWeek: number;
+  xp: number;
+  checkinsDone: number;
+  insightsCount: number;
+  latestMetric?: {
+    date: string;
+    energy: number;
+    clarity: number;
+    stability: number;
+  } | null;
+  telegramEnabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AdminUserSummary = {
+  id: string;
+  email: string;
+  name?: string | null;
+  role: UserRole;
+  status: "ACTIVE" | "DISABLED";
+  locale: string;
+  avatarUrl?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  lastLoginAt?: string | null;
+  stats: {
+    sessionsCount: number;
+    analysesTotal: number;
+    analysesDone: number;
+    paymentsSucceeded: number;
+    revenueSucceeded: number;
+    habitProgramsTotal: number;
+    habitProgramsActive: number;
+    habitXp: number;
+    habitCheckins: number;
+    habitInsights: number;
+    telegramAccounts: number;
+    lastEventAt?: string | null;
+  };
+  habitPrograms: AdminUserHabitProgramSummary[];
+  recentAnalyses: Array<{
+    id: string;
+    status: AnalysisStatus;
+    createdAt: string;
+    completedAt?: string | null;
+  }>;
+  recentEvents: Array<{
+    id: string;
+    name: string;
+    createdAt: string;
+  }>;
+  telegramAccounts: Array<{
+    id: string;
+    username?: string | null;
+    firstName?: string | null;
+    lastName?: string | null;
+    status: string;
+    linkedAt: string;
+    lastSeenAt: string;
+  }>;
+};
+
+export type AdminGiftDaysResponse = {
+  ok: true;
+  userId: string;
+  programId: string;
+  days: number;
+  subscriptionStatus: string;
+  trialEndsAt?: string | null;
+  trialDaysLeft?: number | null;
+};
+
 export type PaymentIntentResponse = {
   clientSecret: string | null;
   paymentIntentId: string;

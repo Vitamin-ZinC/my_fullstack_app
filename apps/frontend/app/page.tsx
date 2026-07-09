@@ -135,6 +135,8 @@ export default function LandingPage() {
             </section>
             <footer className="landing-footer">
               <span>{text.nav.brand}</span>
+              <Link href="/privacy">Политика конфиденциальности</Link>
+              <Link href="/offer">Публичная оферта</Link>
               <a href="https://www.threads.com/@orken.ai?igshid=NTc4MTIwNjQ2YQ==" target="_blank" rel="noreferrer">Threads</a>
               <a href="https://www.instagram.com/orken.ai?igsh=ZXBuMXJzcmtjNDBl&utm_source=qr" target="_blank" rel="noreferrer">Instagram</a>
             </footer>

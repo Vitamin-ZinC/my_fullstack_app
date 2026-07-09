@@ -149,6 +149,9 @@ function LoginContent() {
           </form>
         )}
 
+        <p className="auth-legal-links">
+          Продолжая, вы принимаете <Link href="/offer">публичную оферту</Link> и <Link href="/privacy">политику конфиденциальности</Link>.
+        </p>
         {message && <p className="auth-message" data-testid="auth-message">{message}</p>}
         {error && <p className="auth-error" data-testid="auth-error">{error}</p>}
       </section>

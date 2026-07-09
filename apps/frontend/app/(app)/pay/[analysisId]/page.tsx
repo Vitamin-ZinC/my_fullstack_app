@@ -101,6 +101,9 @@ export default function PayPage() {
       <button className="button" data-testid="checkout-button" onClick={createCheckout} disabled={!mounted || busy}>
         <CreditCard size={18} /> {busy ? text.busy : text.checkoutExternal}
       </button>
+      <p className="legal-inline-links">
+        Нажимая кнопку оплаты, вы принимаете <Link href="/offer" target="_blank">публичную оферту</Link> и соглашаетесь с <Link href="/privacy" target="_blank">политикой конфиденциальности</Link>.
+      </p>
       {message && <div className="card">{message}</div>}
       <Link className="button secondary" href={`/report/${analysisId}/free`}>{text.backToFree}</Link>
     </div>

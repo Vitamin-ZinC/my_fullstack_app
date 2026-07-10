@@ -815,7 +815,7 @@ function OnboardingPanel(props: {
   startQuestions: () => void;
   answerQuestion: (score: number) => void;
 }) {
-  const displayName = props.name.trim() || "Ильяс";
+  const enteredName = props.name.trim();
   const trialDays = props.config?.trialDays ?? 30;
   const price = props.config?.priceLabel ?? "$8";
   const focus = props.latestReport?.profession || "Продуктовый стратег";
@@ -824,6 +824,12 @@ function OnboardingPanel(props: {
   const currentQuestion = props.t.onboarding.questions[props.questionIndex];
   const currentZone = onboardingZones[props.questionIndex];
   const currentAnswer = props.answers[currentZone];
+  const titleTemplate = props.latestReport ? props.t.onboarding.reportTitle : props.t.onboarding.noReportTitle;
+  const fallbackTitle = props.latestReport ? props.t.onboarding.reportTitleFallback : props.t.onboarding.noReportTitleFallback;
+  const onboardingTitle = enteredName ? formatTemplate(titleTemplate, { name: enteredName }) : fallbackTitle;
+  const questionCounter = enteredName
+    ? formatTemplate(props.t.onboarding.questionOf, { name: enteredName, current: props.questionIndex + 1, total: props.t.onboarding.questions.length })
+    : formatTemplate(props.t.onboarding.questionOfFallback, { current: props.questionIndex + 1, total: props.t.onboarding.questions.length });
 
   return (
     <section className={`habits-panel habits-empty habits-onboarding-shell ${props.step === "questions" ? "question-mode" : ""}`}>
@@ -859,17 +865,17 @@ function OnboardingPanel(props: {
               );
             })}
           </div>
-          <p className="habits-onboarding-counter">{formatTemplate(props.t.onboarding.questionOf, { name: displayName, current: props.questionIndex + 1, total: props.t.onboarding.questions.length })}</p>
+          <p className="habits-onboarding-counter">{questionCounter}</p>
           {props.error && <p className="auth-error">{props.error}</p>}
         </div>
       ) : (
         <div className="habits-onboarding-choice">
           <div className="eyebrow">{props.t.onboarding.eyebrow}</div>
-          <h1>{formatTemplate(props.latestReport ? props.t.onboarding.reportTitle : props.t.onboarding.noReportTitle, { name: displayName })}</h1>
+          <h1>{onboardingTitle}</h1>
           <p>{props.latestReport ? props.t.onboarding.reportCopy : props.t.onboarding.noReportCopy}</p>
           <label className="habits-field compact">
             <span>{props.t.settings.name}</span>
-            <input className="input" value={props.name} onChange={(event) => props.setName(event.target.value)} placeholder={displayName} />
+            <input className="input" value={props.name} onChange={(event) => props.setName(event.target.value)} placeholder={props.t.onboarding.namePlaceholder} />
           </label>
           <div className="habits-onboarding-choice-grid">
             <button className="habits-onboarding-choice-card" type="button" disabled={props.busy || !props.latestReport} onClick={props.startFromReport}>

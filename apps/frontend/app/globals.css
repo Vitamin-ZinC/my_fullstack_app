@@ -1390,6 +1390,7 @@ svg {
 }
 
 .landing-flow {
+  --landing-content-width: 1080px;
   padding: 0 0 56px;
 }
 
@@ -1453,7 +1454,8 @@ svg {
 }
 
 .landing-divider {
-  margin: 0 24px;
+  width: min(var(--landing-content-width), calc(100% - 48px));
+  margin: 0 auto;
 }
 
 .landing-section {
@@ -1477,9 +1479,10 @@ svg {
 }
 
 .landing-section-title {
+  max-width: var(--landing-content-width);
   font-size: clamp(18px, 3vw, 30px);
   font-weight: 700;
-  margin: 0 0 12px;
+  margin: 0 auto 12px;
   text-align: center;
   line-height: 1.35;
   letter-spacing: 0;
@@ -1536,6 +1539,8 @@ svg {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
+  width: min(100%, var(--landing-content-width));
+  margin: 0 auto;
 }
 
 .signal-icon {
@@ -1602,7 +1607,7 @@ svg {
 
 .landing-section-head {
   text-align: center;
-  max-width: 680px;
+  width: min(680px, 100%);
   margin: 0 auto;
 }
 
@@ -1815,6 +1820,8 @@ svg {
 }
 
 .landing-footer {
+  width: min(var(--landing-content-width), calc(100% - 32px));
+  margin: 0 auto;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1833,6 +1840,12 @@ svg {
 
 .landing-footer a:hover {
   color: #fff;
+}
+
+.landing-section > .card {
+  width: min(100%, var(--landing-content-width));
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .legal-page {

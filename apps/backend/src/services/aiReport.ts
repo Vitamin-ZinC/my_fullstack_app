@@ -74,6 +74,12 @@ const scoreSchema = z.object({
   world_needs: z.number().int().min(0).max(100)
 });
 
+const diagnosticLabels = {
+  result: "Ваш результат:",
+  meaning: "Что это значит:",
+  recommendation: "Рекомендация:"
+} as const;
+
 const diagnosticTextSchema = z.string().min(20).refine((value) => {
   const normalized = value.trim().toLowerCase();
   return ![
@@ -88,7 +94,9 @@ const diagnosticTextSchema = z.string().min(20).refine((value) => {
     "недоступно"
   ].includes(normalized);
 }, "diagnostic parameters must be explanatory text").refine((value) => (
-  value.includes("Ваш результат:") && value.includes("Что это значит:") && value.includes("Рекомендация:")
+  value.includes(diagnosticLabels.result) &&
+  value.includes(diagnosticLabels.meaning) &&
+  value.includes(diagnosticLabels.recommendation)
 ), "diagnostic parameters must use the required result/meaning/recommendation format");
 
 const ikigaiZoneSchema = z.object({
@@ -96,6 +104,40 @@ const ikigaiZoneSchema = z.object({
   insight: z.string().min(20),
   recommendation: z.string().min(20)
 });
+
+const voiceAnalysisKeys = [
+  "timbre",
+  "emotionality",
+  "confidence",
+  "pace",
+  "energy",
+  "leadership",
+  "anxiety",
+  "communication",
+  "charisma",
+  "analytical",
+  "sociality",
+  "persuasion",
+  "motivation"
+] as const;
+
+const faceAnalysisKeys = [
+  "emotionality",
+  "leadership",
+  "confidence",
+  "thinkingType",
+  "sociality",
+  "stressTolerance",
+  "analytical",
+  "motivation",
+  "empathy",
+  "openness",
+  "communication",
+  "discipline",
+  "ambition"
+] as const;
+
+const ikigaiZoneKeys = ["passion", "mission", "profession", "vocation", "ikigai"] as const;
 
 export const reportFullSchema = z.object({
   profession: z.string().min(2),
@@ -225,36 +267,8 @@ const reportFullJsonSchema = {
     profession: { type: "string" },
     summary: { type: "string" },
     ikigai_scores: scoreJsonSchema,
-    voice_analysis: textMapSchema([
-      "timbre",
-      "emotionality",
-      "confidence",
-      "pace",
-      "energy",
-      "leadership",
-      "anxiety",
-      "communication",
-      "charisma",
-      "analytical",
-      "sociality",
-      "persuasion",
-      "motivation"
-    ]),
-    face_analysis: textMapSchema([
-      "emotionality",
-      "leadership",
-      "confidence",
-      "thinkingType",
-      "sociality",
-      "stressTolerance",
-      "analytical",
-      "motivation",
-      "empathy",
-      "openness",
-      "communication",
-      "discipline",
-      "ambition"
-    ]),
+    voice_analysis: textMapSchema([...voiceAnalysisKeys]),
+    face_analysis: textMapSchema([...faceAnalysisKeys]),
     top_roles: {
       type: "array",
       minItems: 5,
@@ -424,7 +438,7 @@ export async function generateOpenAiReport(context: ReportContext): Promise<Gene
       schemaName: "ikigai_full_report",
       jsonSchema: reportFullJsonSchema,
       useAsync: useCompatibleAsync,
-      parseReport: (content) => normalizeFullReport(reportFullSchema.parse(parseCompletionJson(content)))
+      parseReport: (content) => normalizeFullReport(reportFullSchema.parse(completeFullReportCandidate(parseCompletionJson(content))))
     })
   ]);
   const promptVersion = Math.max(freeCompletion.promptVersion, fullCompletion.promptVersion);
@@ -444,6 +458,137 @@ export async function generateOpenAiReport(context: ReportContext): Promise<Gene
       audioMetrics: Boolean(voiceMetrics),
       photoInput: freeCompletion.photoInputUsed || fullCompletion.photoInputUsed
     }
+  };
+}
+
+type UnknownRecord = Record<string, unknown>;
+
+function isRecord(value: unknown): value is UnknownRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function stringValue(source: UnknownRecord, ...keys: string[]) {
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+function numberValue(source: UnknownRecord, key: string, fallback: number) {
+  const value = Number(source[key]);
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function safeLongText(value: unknown, fallback: string, minLength = 20) {
+  if (typeof value === "string" && value.trim().length >= minLength) return value.trim();
+  return fallback;
+}
+
+function diagnosticSourceValue(source: UnknownRecord, key: string) {
+  const aliases: Record<string, string[]> = {
+    thinkingType: ["thinkingType", "thinking_type"],
+    stressTolerance: ["stressTolerance", "stress_tolerance"]
+  };
+  for (const candidate of [key, ...(aliases[key] ?? [])]) {
+    const value = source[candidate];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+function diagnosticFallback(kind: "voice" | "face", key: string) {
+  const parameter = key.replace(/([A-Z])/g, " $1").toLowerCase();
+  if (kind === "voice") {
+    return `${diagnosticLabels.result} Параметр "${parameter}" оценивается осторожно: в записи достаточно данных для рабочей гипотезы, но не для жёсткого вывода. ${diagnosticLabels.meaning} Основной вывод строится на анкете и содержании речи, а голосовой сигнал используется только как дополнительный признак подачи. ${diagnosticLabels.recommendation} Проверьте это в коротком рабочем выступлении: запишите 60 секунд речи, отметьте темп, паузы и ясность главной мысли.`;
+  }
+  return `${diagnosticLabels.result} Параметр "${parameter}" оценивается как мягкий визуальный сигнал по загруженному изображению. ${diagnosticLabels.meaning} Это не вывод о личности или здоровье, а осторожная гипотеза о том, как может считываться подача в коммуникации. ${diagnosticLabels.recommendation} Проверьте эффект на практике: обновите фото/кадр, попросите нейтральную обратную связь и сравните, стало ли сообщение понятнее.`;
+}
+
+function completeDiagnosticMap(source: unknown, keys: readonly string[], kind: "voice" | "face") {
+  const record = isRecord(source) ? source : {};
+  return Object.fromEntries(keys.map((key) => {
+    const value = diagnosticSourceValue(record, key);
+    if (value && diagnosticTextSchema.safeParse(value).success) return [key, value];
+    if (value) {
+      return [key, `${diagnosticLabels.result} ${value}. ${diagnosticLabels.meaning} Этот вывод рассматривается как осторожная рабочая гипотеза, а не как диагноз или неизменная черта. ${diagnosticLabels.recommendation} Проверьте его на одном практическом действии и сравните с обратной связью.`];
+    }
+    return [key, diagnosticFallback(kind, key)];
+  }));
+}
+
+function completeIkigaiZones(source: unknown, summary: string) {
+  const record = isRecord(source) ? source : {};
+  return Object.fromEntries(ikigaiZoneKeys.map((key) => {
+    const zone = isRecord(record[key]) ? record[key] as UnknownRecord : {};
+    const title = stringValue(zone, "title") ?? {
+      passion: "То, что даёт энергию",
+      mission: "То, чем полезно делиться",
+      profession: "То, что можно упаковать в работу",
+      vocation: "То, где есть запрос",
+      ikigai: "Точка соединения"
+    }[key];
+    return [key, {
+      title,
+      insight: safeLongText(zone.insight, `Эта зона опирается на общий вывод отчёта: ${summary}`),
+      recommendation: safeLongText(zone.recommendation, "Выберите один маленький эксперимент на ближайшие 24 часа и проверьте, даёт ли он больше энергии, ясности и пользы для других.")
+    }];
+  }));
+}
+
+function completeTopRoles(source: unknown, candidate: UnknownRecord, voiceAnalysis: UnknownRecord, faceAnalysis: UnknownRecord) {
+  const roles = Array.isArray(source) ? source.filter(isRecord).slice(0, 5).map((role, index) => ({
+    name: stringValue(role, "name", "role") ?? `Профессиональная роль ${index + 1}`,
+    match: numberValue(role, "match", Math.max(55, 82 - index * 5)),
+    why: safeLongText(role.why, safeLongText(candidate.summary, "Роль подходит как рабочая гипотеза по анкете и общему профилю пользователя.")),
+    voiceEvidence: safeLongText(stringValue(role, "voiceEvidence", "voice_evidence"), String(voiceAnalysis.communication ?? diagnosticFallback("voice", "communication"))),
+    faceEvidence: safeLongText(stringValue(role, "faceEvidence", "face_evidence"), String(faceAnalysis.communication ?? diagnosticFallback("face", "communication"))),
+    strengths: safeLongText(role.strengths, "Сильная сторона роли - соединять личный интерес, структуру действий и понятную пользу для других."),
+    risks: safeLongText(role.risks, "Риск роли - слишком долго оставаться в анализе и не проверять гипотезу через маленький рыночный или рабочий эксперимент.")
+  })) : [];
+
+  while (roles.length < 3) {
+    const index = roles.length;
+    roles.push({
+      name: ["Стратег развития", "Методолог практики", "Навигатор изменений"][index] ?? `Профессиональная роль ${index + 1}`,
+      match: Math.max(55, 78 - index * 5),
+      why: safeLongText(candidate.summary, "Роль добавлена как осторожная рабочая гипотеза по анкете и общему профилю."),
+      voiceEvidence: String(voiceAnalysis.communication ?? diagnosticFallback("voice", "communication")),
+      faceEvidence: String(faceAnalysis.communication ?? diagnosticFallback("face", "communication")),
+      strengths: "Сильная сторона роли - переводить наблюдения в понятные действия и проверяемые решения.",
+      risks: "Риск роли - распыляться между вариантами, если не выбрать один короткий эксперимент."
+    });
+  }
+
+  return roles;
+}
+
+export function completeFullReportCandidate(value: unknown) {
+  if (!isRecord(value)) return value;
+  const summary = safeLongText(value.summary, "Отчёт собран как осторожная рабочая гипотеза на основе анкеты, содержания речи и доступных сигналов подачи.");
+  const profession = safeLongText(value.profession, "Профессиональный навигатор", 2);
+  const voiceSource = value.voice_analysis ?? value.voiceAnalysis ?? value.voice;
+  const faceSource = value.face_analysis ?? value.faceAnalysis ?? value.face;
+  const voiceAnalysis = completeDiagnosticMap(voiceSource, voiceAnalysisKeys, "voice");
+  const faceAnalysis = completeDiagnosticMap(faceSource, faceAnalysisKeys, "face");
+
+  return {
+    ...value,
+    profession,
+    summary,
+    ikigai_scores: {
+      love: numberValue(isRecord(value.ikigai_scores) ? value.ikigai_scores : {}, "love", 70),
+      good_at: numberValue(isRecord(value.ikigai_scores) ? value.ikigai_scores : {}, "good_at", 68),
+      paid_for: numberValue(isRecord(value.ikigai_scores) ? value.ikigai_scores : {}, "paid_for", 64),
+      world_needs: numberValue(isRecord(value.ikigai_scores) ? value.ikigai_scores : {}, "world_needs", 66)
+    },
+    voice_analysis: voiceAnalysis,
+    face_analysis: faceAnalysis,
+    top_roles: completeTopRoles(value.top_roles, value, voiceAnalysis, faceAnalysis),
+    ikigai_zones: completeIkigaiZones(value.ikigai_zones, summary),
+    career_action: safeLongText(value.career_action, "Week 1: выбрать один рабочий эксперимент. Week 2: собрать первую обратную связь. Week 3: улучшить формат и повторить проверку. Week 4: зафиксировать выводы и выбрать следующий шаг."),
+    final_insight: safeLongText(value.final_insight, "Комплексный AI-анализ показывает рабочую гипотезу о направлении развития: сильнее всего сейчас стоит проверять связку личного интереса, ясной коммуникации и маленьких практических экспериментов. Используйте вывод как карту для следующих действий, а не как окончательный ярлык.")
   };
 }
 

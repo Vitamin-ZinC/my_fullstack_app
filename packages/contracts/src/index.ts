@@ -258,6 +258,137 @@ export type PromoCode = {
   updatedAt: string;
 };
 
+export type PartnerCustomerBonusType = "NONE" | "FREE_DAYS" | "DISCOUNT" | "CREDITS" | "CUSTOM_ENTITLEMENT";
+export type PartnerCommissionModel = "FIXED" | "PERCENT" | "HYBRID";
+export type PartnerCommissionWindow = "FIRST_PAYMENT" | "MONTHS" | "LIFETIME";
+export type PartnerProgramStatus = "ACTIVE" | "PAUSED";
+export type PartnerOfferStatus = "DRAFT" | "PENDING_REVIEW" | "APPROVED" | "REJECTED" | "PAUSED";
+export type PartnerRedemptionStatus = "PENDING" | "FULFILLED" | "PARTNER_FAILED" | "REFUNDED";
+
+export type PartnerReferralLinkSummary = {
+  id: string;
+  programConfigId: string;
+  channel: string;
+  referralCode?: string | null;
+  url?: string | null;
+  partnerCoreLinkId?: string | null;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PartnerAffiliateProgramInput = {
+  id?: string;
+  partnerCoreProgramId?: string | null;
+  name: string;
+  referralDestination: string;
+  customerBonusType: PartnerCustomerBonusType;
+  customerBonusValue?: number | null;
+  customerBonusEntitlement?: string | null;
+  commissionModel: PartnerCommissionModel;
+  commissionRateBps?: number | null;
+  fixedPayoutCents?: number | null;
+  commissionWindowType: PartnerCommissionWindow;
+  commissionWindowMonths?: number | null;
+  lockDays: number;
+  status: PartnerProgramStatus;
+  termsVersion: string;
+};
+
+export type PartnerAffiliateProgramSummary = PartnerAffiliateProgramInput & {
+  id: string;
+  referralLinks: PartnerReferralLinkSummary[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PartnerOfferInput = {
+  id?: string;
+  programConfigId?: string | null;
+  partnerId?: string | null;
+  partnerCorePlacementId?: string | null;
+  partnerCoreStatus?: string | null;
+  kind?: string;
+  surface?: string;
+  title: string;
+  description: string;
+  imageUrl?: string | null;
+  redemptionCurrency: string;
+  redemptionAmount: number;
+  userBenefit: string;
+  partnerPayoutCents: number;
+  capPerMonth?: number | null;
+  status: PartnerOfferStatus;
+  entitlementType: string;
+  entitlementValue?: string | null;
+};
+
+export type PartnerOfferSummary = {
+  id: string;
+  programConfigId?: string | null;
+  partnerId?: string | null;
+  partnerCorePlacementId?: string | null;
+  partnerCoreStatus?: string | null;
+  partnerCoreSyncedAt?: string | null;
+  kind?: string;
+  surface?: string;
+  title: string;
+  description: string;
+  imageUrl?: string | null;
+  redemptionCost: {
+    currency: string;
+    amount: number;
+  };
+  userBenefit: string;
+  partnerPayoutCents: number;
+  capPerMonth?: number | null;
+  status: PartnerOfferStatus;
+  entitlementType: string;
+  entitlementValue?: string | null;
+  redemptionsCount?: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PartnerRedemptionSummary = {
+  id: string;
+  offerId: string;
+  offerTitle?: string | null;
+  userId?: string | null;
+  userEmail?: string | null;
+  sessionId?: string | null;
+  costCurrency: string;
+  costAmount: number;
+  status: PartnerRedemptionStatus;
+  entitlementType?: string | null;
+  entitlementValue?: string | null;
+  partnerCoreRedemptionId?: string | null;
+  deliveryError?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PartnerMarketplaceResponse = {
+  balance: number;
+  currency: string;
+  offers: PartnerOfferSummary[];
+  redemptions: PartnerRedemptionSummary[];
+};
+
+export type PartnerOfferRedemptionResponse = {
+  redemption: PartnerRedemptionSummary;
+  balance: number;
+  currency: string;
+};
+
+export type PartnerCoreEmbeddedSessionResponse = {
+  token: string;
+  expiresAt: number;
+  projectId: string;
+  scopes: string[];
+  partnerCoreUrl?: string;
+};
+
 export type AdminUserHabitProgramSummary = {
   id: string;
   title: string;

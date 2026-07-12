@@ -14,11 +14,11 @@ import {
   Trophy,
   User
 } from "lucide-react";
-import type { HabitConfigResponse, HabitEnrollmentSummary, HabitProgramResponse, HabitProgramSummary, TelegramStatusResponse } from "@levelup/contracts";
+import type { HabitConfigResponse, HabitEnrollmentSummary, HabitProgramResponse, HabitProgramSummary, PartnerMarketplaceResponse, TelegramStatusResponse } from "@levelup/contracts";
 import { api, getStoredLocale, restoreSessionFromUrl, type TextLocale } from "@/lib/api";
 import { useSiteText } from "@/lib/useSiteText";
 
-type Tab = "dashboard" | "journey" | "habits" | "navigator" | "archive" | "guide" | "settings";
+type Tab = "dashboard" | "journey" | "habits" | "navigator" | "archive" | "rewards" | "guide" | "settings";
 type ArchiveFilter = "all" | "insights" | "rewards" | "weeks";
 type HabitStartFocus = "energy" | "focus" | "career" | "rhythm";
 type OnboardingStep = "choice" | "questions" | "activating";
@@ -35,6 +35,7 @@ const navItems: NavItem[] = [
   { id: "habits", icon: "✦" },
   { id: "navigator", penguin: true },
   { id: "archive", icon: "📚" },
+  { id: "rewards", icon: "★" },
   { id: "guide", icon: "📖" },
   { id: "settings", icon: "⚙" }
 ];
@@ -129,6 +130,9 @@ function HabitsContent() {
   const [insightSavedFlash, setInsightSavedFlash] = useState(false);
   const [telegramStatus, setTelegramStatus] = useState<TelegramStatusResponse | null>(null);
   const [telegramBusy, setTelegramBusy] = useState(false);
+  const [partnerMarketplace, setPartnerMarketplace] = useState<PartnerMarketplaceResponse | null>(null);
+  const [partnerMarketplaceLoading, setPartnerMarketplaceLoading] = useState(false);
+  const [partnerRedemptionBusy, setPartnerRedemptionBusy] = useState<string | null>(null);
 
   const [onboardingStep, setOnboardingStep] = useState<OnboardingStep>("choice");
   const [onboardingQuestionIndex, setOnboardingQuestionIndex] = useState(0);
@@ -224,6 +228,7 @@ function HabitsContent() {
   useEffect(() => {
     if (!program) {
       setTelegramStatus(null);
+      setPartnerMarketplace(null);
       return;
     }
     let cancelled = false;
@@ -237,6 +242,11 @@ function HabitsContent() {
     return () => {
       cancelled = true;
     };
+  }, [program?.id]);
+
+  useEffect(() => {
+    if (!program) return;
+    void loadPartnerMarketplace();
   }, [program?.id]);
 
   const activeHabit = program?.activeEnrollment ?? program?.enrollments[0] ?? null;
@@ -504,6 +514,38 @@ function HabitsContent() {
     }
   }
 
+  async function loadPartnerMarketplace() {
+    setPartnerMarketplaceLoading(true);
+    try {
+      const result = await api.partnerMarketplace();
+      setPartnerMarketplace(result);
+    } catch {
+      setPartnerMarketplace(null);
+    } finally {
+      setPartnerMarketplaceLoading(false);
+    }
+  }
+
+  async function redeemPartnerOffer(offerId: string) {
+    setPartnerRedemptionBusy(offerId);
+    setError("");
+    try {
+      const result = await api.redeemPartnerOffer(offerId, `orken-web:${offerId}:${todayIso()}`);
+      setPartnerMarketplace((current) => current ? {
+        ...current,
+        balance: result.balance,
+        currency: result.currency,
+        redemptions: [result.redemption, ...current.redemptions.filter((item) => item.id !== result.redemption.id)]
+      } : current);
+      markSaved(t.rewards.redeemed);
+      await loadPartnerMarketplace();
+    } catch (reason) {
+      setError(readableError(reason, t.rewards.notEnough));
+    } finally {
+      setPartnerRedemptionBusy(null);
+    }
+  }
+
   async function startSubscriptionCheckout() {
     if (!program) return;
     setBusy(true);
@@ -766,6 +808,16 @@ function HabitsContent() {
             markSaved={markSaved}
           />
         )}
+        {tab === "rewards" && (
+          <RewardsMarketplaceTab
+            t={t}
+            marketplace={partnerMarketplace}
+            loading={partnerMarketplaceLoading}
+            busyOfferId={partnerRedemptionBusy}
+            refresh={loadPartnerMarketplace}
+            redeem={redeemPartnerOffer}
+          />
+        )}
         {tab === "guide" && <GuideTab t={t} program={program} />}
         {tab === "settings" && (
           <SettingsTab
@@ -931,6 +983,11 @@ function getHabitsSectionMeta(t: ReturnType<typeof useSiteText>["habits"]["app"]
       eyebrow: t.nav.archive,
       title: t.archive.title,
       copy: t.archive.copy
+    },
+    rewards: {
+      eyebrow: t.nav.rewards,
+      title: t.rewards.title,
+      copy: t.rewards.copy
     },
     guide: {
       eyebrow: t.nav.guide,
@@ -1600,6 +1657,84 @@ function ArchiveTab(props: {
           </div>
         </section>
       )}
+    </div>
+  );
+}
+
+function RewardsMarketplaceTab(props: {
+  t: ReturnType<typeof useSiteText>["habits"]["app"];
+  marketplace: PartnerMarketplaceResponse | null;
+  loading: boolean;
+  busyOfferId: string | null;
+  refresh: () => void;
+  redeem: (offerId: string) => void;
+}) {
+  const balance = props.marketplace?.balance ?? 0;
+  const currency = props.marketplace?.currency ?? "orken_points";
+  const offers = props.marketplace?.offers ?? [];
+  const redemptions = props.marketplace?.redemptions ?? [];
+  return (
+    <div className="habits-grid">
+      <section className="habits-panel habits-wide habits-rewards-hero">
+        <div>
+          <div className="habit-week">{props.t.rewards.balance}</div>
+          <h2><Trophy size={20} /> {balance} XP</h2>
+          <p className="habits-muted">{currency} · Partner Core placements</p>
+        </div>
+        <button className="button secondary habits-cta" type="button" onClick={props.refresh} disabled={props.loading}>
+          {props.loading ? props.t.rewards.pending : "Sync"}
+        </button>
+      </section>
+
+      <section className="habits-panel habits-wide">
+        <h2>{props.t.rewards.offersTitle}</h2>
+        <div className="habits-market-grid">
+          {offers.length === 0 ? (
+            <div className="habits-current">{props.t.rewards.emptyOffers}</div>
+          ) : offers.map((offer) => {
+            const notEnough = balance < offer.redemptionCost.amount;
+            const busy = props.busyOfferId === offer.id;
+            return (
+              <article className="habits-card habits-market-card" key={offer.id}>
+                {offer.imageUrl && <img src={offer.imageUrl} alt="" />}
+                <div className="habit-week">{offer.kind ?? "partner"} · {offer.partnerCoreStatus ?? offer.status}</div>
+                <h3>{offer.title}</h3>
+                <p>{offer.description}</p>
+                <div className="habits-market-meta">
+                  <span>{props.t.rewards.cost}</span>
+                  <strong>{offer.redemptionCost.amount} XP</strong>
+                </div>
+                <div className="habits-market-meta">
+                  <span>{props.t.rewards.benefit}</span>
+                  <strong>{offer.userBenefit}</strong>
+                </div>
+                <button className="button habits-cta" type="button" disabled={busy || notEnough} onClick={() => props.redeem(offer.id)}>
+                  {notEnough ? props.t.rewards.notEnough : busy ? props.t.rewards.pending : props.t.rewards.redeem}
+                </button>
+              </article>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="habits-panel habits-wide">
+        <h2>{props.t.rewards.historyTitle}</h2>
+        <div className="habits-reward-list">
+          {redemptions.length === 0 ? (
+            <div className="habits-current">{props.t.rewards.emptyHistory}</div>
+          ) : redemptions.map((item) => (
+            <div className="habits-mini-reward" key={item.id}>
+              <span className="habits-reward-emoji">★</span>
+              <span>
+                {item.offerTitle ?? item.offerId}
+                <small>{formatDate(item.createdAt)} · {item.status}</small>
+              </span>
+              <strong>{item.costAmount} XP</strong>
+              {item.entitlementValue && <small>{props.t.rewards.entitlement}: {item.entitlementValue}</small>}
+            </div>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }

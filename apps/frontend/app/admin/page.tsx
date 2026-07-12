@@ -1,7 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { AdminStats, AdminUserSummary, AppSetting, FeatureFlag, PromoCode, PromptTemplate, PromptTemplateInput } from "@levelup/contracts";
+import type {
+  AdminStats,
+  AdminUserSummary,
+  AppSetting,
+  FeatureFlag,
+  PartnerAffiliateProgramSummary,
+  PartnerOfferStatus,
+  PartnerOfferSummary,
+  PartnerRedemptionSummary,
+  PromoCode,
+  PromptTemplate,
+  PromptTemplateInput
+} from "@levelup/contracts";
 import {
   adminApi,
   contentSettingKey,
@@ -34,6 +46,44 @@ const emptyPromptForm: PromptTemplateInput = {
   content: ""
 };
 
+const emptyPartnerProgramForm = {
+  id: "",
+  partnerCoreProgramId: "",
+  name: "Orken Life partner program",
+  referralDestination: "https://orken.life/?ref=ORKEN-LIFE",
+  customerBonusType: "FREE_DAYS",
+  customerBonusValue: "14",
+  customerBonusEntitlement: "",
+  commissionModel: "PERCENT",
+  commissionRateBps: "1000",
+  fixedPayoutCents: "",
+  commissionWindowType: "LIFETIME",
+  commissionWindowMonths: "",
+  lockDays: "365",
+  status: "PAUSED",
+  termsVersion: "v1"
+};
+
+const emptyPartnerOfferForm = {
+  id: "",
+  programConfigId: "",
+  partnerId: "",
+  partnerCorePlacementId: "",
+  kind: "manual_deal",
+  surface: "rewards_tab",
+  title: "",
+  description: "",
+  imageUrl: "",
+  redemptionCurrency: "orken_points",
+  redemptionAmount: "500",
+  userBenefit: "",
+  partnerPayoutCents: "0",
+  capPerMonth: "",
+  status: "DRAFT",
+  entitlementType: "manual",
+  entitlementValue: ""
+};
+
 export default function AdminPage() {
   const adminText = defaultSiteText.ru.admin;
   const [password, setPassword] = useState("");
@@ -47,6 +97,12 @@ export default function AdminPage() {
   const [promptDefaults, setPromptDefaults] = useState<PromptTemplateInput[]>([]);
   const [promptForm, setPromptForm] = useState<PromptTemplateInput>(emptyPromptForm);
   const [promoCodes, setPromoCodes] = useState<PromoCode[]>([]);
+  const [partnerPrograms, setPartnerPrograms] = useState<PartnerAffiliateProgramSummary[]>([]);
+  const [partnerOffers, setPartnerOffers] = useState<PartnerOfferSummary[]>([]);
+  const [partnerRedemptions, setPartnerRedemptions] = useState<PartnerRedemptionSummary[]>([]);
+  const [partnerProgramForm, setPartnerProgramForm] = useState(emptyPartnerProgramForm);
+  const [partnerOfferForm, setPartnerOfferForm] = useState(emptyPartnerOfferForm);
+  const [referralChannelByProgram, setReferralChannelByProgram] = useState<Record<string, string>>({});
   const [userQuery, setUserQuery] = useState("");
   const [giftDaysByProgram, setGiftDaysByProgram] = useState<Record<string, string>>({});
   const [giftNoteByProgram, setGiftNoteByProgram] = useState<Record<string, string>>({});
@@ -139,7 +195,19 @@ export default function AdminPage() {
   async function refresh() {
     setMessage("");
     try {
-      const [nextStats, nextAnalyses, nextUsers, nextSettings, nextFlags, nextPrompts, nextPromptDefaults, nextPromoCodes] = await Promise.all([
+      const [
+        nextStats,
+        nextAnalyses,
+        nextUsers,
+        nextSettings,
+        nextFlags,
+        nextPrompts,
+        nextPromptDefaults,
+        nextPromoCodes,
+        nextPartnerPrograms,
+        nextPartnerOffers,
+        nextPartnerRedemptions
+      ] = await Promise.all([
         adminApi.stats(),
         adminApi.analyses(),
         adminApi.users({ q: userQuery, limit: 30 }),
@@ -147,7 +215,10 @@ export default function AdminPage() {
         adminApi.flags(),
         adminApi.prompts(),
         adminApi.promptDefaults(),
-        adminApi.promoCodes()
+        adminApi.promoCodes(),
+        adminApi.partnerPrograms(),
+        adminApi.partnerOffers(),
+        adminApi.partnerRedemptions()
       ]);
       setStats(nextStats);
       setAnalyses(nextAnalyses);
@@ -157,6 +228,9 @@ export default function AdminPage() {
       setPrompts(nextPrompts);
       setPromptDefaults(nextPromptDefaults);
       setPromoCodes(nextPromoCodes);
+      setPartnerPrograms(nextPartnerPrograms);
+      setPartnerOffers(nextPartnerOffers);
+      setPartnerRedemptions(nextPartnerRedemptions);
       hydrateTextDrafts(nextSettings);
       hydrateLocaleForm(nextSettings);
       hydratePriceForm(nextSettings);
@@ -545,6 +619,150 @@ export default function AdminPage() {
   async function togglePromoCode(promoCode: PromoCode) {
     await adminApi.setPromoCodeActive(promoCode.id, !promoCode.active);
     await refresh();
+  }
+
+  function selectPartnerProgram(program: PartnerAffiliateProgramSummary) {
+    setPartnerProgramForm({
+      id: program.id,
+      partnerCoreProgramId: program.partnerCoreProgramId ?? "",
+      name: program.name,
+      referralDestination: program.referralDestination,
+      customerBonusType: program.customerBonusType,
+      customerBonusValue: program.customerBonusValue === null || program.customerBonusValue === undefined ? "" : String(program.customerBonusValue),
+      customerBonusEntitlement: program.customerBonusEntitlement ?? "",
+      commissionModel: program.commissionModel,
+      commissionRateBps: program.commissionRateBps === null || program.commissionRateBps === undefined ? "" : String(program.commissionRateBps),
+      fixedPayoutCents: program.fixedPayoutCents === null || program.fixedPayoutCents === undefined ? "" : String(program.fixedPayoutCents),
+      commissionWindowType: program.commissionWindowType,
+      commissionWindowMonths: program.commissionWindowMonths === null || program.commissionWindowMonths === undefined ? "" : String(program.commissionWindowMonths),
+      lockDays: String(program.lockDays),
+      status: program.status,
+      termsVersion: program.termsVersion
+    });
+  }
+
+  async function savePartnerProgram() {
+    setMessage("");
+    try {
+      await adminApi.upsertPartnerProgram({
+        id: partnerProgramForm.id || undefined,
+        partnerCoreProgramId: partnerProgramForm.partnerCoreProgramId.trim() || null,
+        name: partnerProgramForm.name.trim(),
+        referralDestination: partnerProgramForm.referralDestination.trim(),
+        customerBonusType: partnerProgramForm.customerBonusType as any,
+        customerBonusValue: partnerProgramForm.customerBonusValue ? Number(partnerProgramForm.customerBonusValue) : null,
+        customerBonusEntitlement: partnerProgramForm.customerBonusEntitlement.trim() || null,
+        commissionModel: partnerProgramForm.commissionModel as any,
+        commissionRateBps: partnerProgramForm.commissionRateBps ? Number(partnerProgramForm.commissionRateBps) : null,
+        fixedPayoutCents: partnerProgramForm.fixedPayoutCents ? Number(partnerProgramForm.fixedPayoutCents) : null,
+        commissionWindowType: partnerProgramForm.commissionWindowType as any,
+        commissionWindowMonths: partnerProgramForm.commissionWindowMonths ? Number(partnerProgramForm.commissionWindowMonths) : null,
+        lockDays: Number(partnerProgramForm.lockDays),
+        status: partnerProgramForm.status as any,
+        termsVersion: partnerProgramForm.termsVersion.trim() || "v1"
+      });
+      setMessage("Partner program saved");
+      setPartnerProgramForm(emptyPartnerProgramForm);
+      await refresh();
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "Failed to save partner program");
+    }
+  }
+
+  async function createReferralLink(programId: string) {
+    setMessage("");
+    const channel = (referralChannelByProgram[programId] ?? "default").trim();
+    try {
+      await adminApi.createPartnerReferralLink(programId, channel || "default");
+      setMessage("Referral link requested from Partner Core");
+      await refresh();
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "Failed to create referral link");
+    }
+  }
+
+  function selectPartnerOffer(offer: PartnerOfferSummary) {
+    setPartnerOfferForm({
+      id: offer.id,
+      programConfigId: offer.programConfigId ?? "",
+      partnerId: offer.partnerId ?? "",
+      partnerCorePlacementId: offer.partnerCorePlacementId ?? "",
+      kind: offer.kind ?? "manual_deal",
+      surface: offer.surface ?? "rewards_tab",
+      title: offer.title,
+      description: offer.description,
+      imageUrl: offer.imageUrl ?? "",
+      redemptionCurrency: offer.redemptionCost.currency,
+      redemptionAmount: String(offer.redemptionCost.amount),
+      userBenefit: offer.userBenefit,
+      partnerPayoutCents: String(offer.partnerPayoutCents),
+      capPerMonth: offer.capPerMonth === null || offer.capPerMonth === undefined ? "" : String(offer.capPerMonth),
+      status: offer.status,
+      entitlementType: offer.entitlementType,
+      entitlementValue: offer.entitlementValue ?? ""
+    });
+  }
+
+  async function savePartnerOffer() {
+    setMessage("");
+    try {
+      await adminApi.upsertPartnerOffer({
+        id: partnerOfferForm.id || undefined,
+        programConfigId: partnerOfferForm.programConfigId || null,
+        partnerId: partnerOfferForm.partnerId.trim() || null,
+        partnerCorePlacementId: partnerOfferForm.partnerCorePlacementId.trim() || null,
+        kind: partnerOfferForm.kind,
+        surface: partnerOfferForm.surface,
+        title: partnerOfferForm.title.trim(),
+        description: partnerOfferForm.description.trim(),
+        imageUrl: partnerOfferForm.imageUrl.trim() || null,
+        redemptionCurrency: partnerOfferForm.redemptionCurrency.trim() || "orken_points",
+        redemptionAmount: Number(partnerOfferForm.redemptionAmount),
+        userBenefit: partnerOfferForm.userBenefit.trim(),
+        partnerPayoutCents: Number(partnerOfferForm.partnerPayoutCents),
+        capPerMonth: partnerOfferForm.capPerMonth ? Number(partnerOfferForm.capPerMonth) : null,
+        status: partnerOfferForm.status as PartnerOfferStatus,
+        entitlementType: partnerOfferForm.entitlementType.trim() || "manual",
+        entitlementValue: partnerOfferForm.entitlementValue.trim() || null
+      });
+      setMessage("Partner offer saved");
+      setPartnerOfferForm(emptyPartnerOfferForm);
+      await refresh();
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "Failed to save partner offer");
+    }
+  }
+
+  async function setPartnerOfferStatus(id: string, status: PartnerOfferStatus) {
+    setMessage("");
+    try {
+      await adminApi.setPartnerOfferStatus(id, status);
+      setMessage(`Partner offer status: ${status}`);
+      await refresh();
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "Failed to update partner offer");
+    }
+  }
+
+  async function syncPartnerOffers() {
+    setMessage("");
+    try {
+      const result = await adminApi.syncPartnerOffers();
+      setMessage(`Partner Core sync complete: ${result.count} placements`);
+      await refresh();
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "Partner Core sync failed");
+    }
+  }
+
+  async function openEmbeddedPartnerCore() {
+    setMessage("");
+    try {
+      const session = await adminApi.partnerCoreEmbeddedSession();
+      setMessage(`Embedded Partner Core session created for ${session.projectId}. Token expires at ${new Date(session.expiresAt * 1000).toISOString()}`);
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "Partner Core embedded session failed");
+    }
   }
 
   async function loadUsers() {
@@ -1023,6 +1241,146 @@ export default function AdminPage() {
                   <button className="button secondary" onClick={() => togglePromoCode(promoCode)}>
                     {promoCode.active ? "Deactivate" : "Activate"}
                   </button>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="card stack">
+            <div className="row">
+              <div>
+                <h2>Partner Core</h2>
+                <p className="muted">Orken is a project slice. Partner accounts, approval, referral links, payout ledger and cross-project history stay in Partner Core.</p>
+              </div>
+              <div className="row" style={{ justifyContent: "flex-end" }}>
+                <button className="button secondary" onClick={syncPartnerOffers}>Sync from Partner Core</button>
+                <button className="button secondary" onClick={openEmbeddedPartnerCore}>Embedded session</button>
+              </div>
+            </div>
+
+            <div className="grid grid-2">
+              <div className="stack">
+                <h3>Affiliate Program</h3>
+                <div className="grid grid-2">
+                  <input className="input" value={partnerProgramForm.name} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, name: event.target.value })} placeholder="Program name" />
+                  <input className="input" value={partnerProgramForm.partnerCoreProgramId} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, partnerCoreProgramId: event.target.value })} placeholder="Partner Core program id" />
+                  <input className="input" value={partnerProgramForm.referralDestination} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, referralDestination: event.target.value })} placeholder="Referral destination" />
+                  <select className="input" value={partnerProgramForm.status} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, status: event.target.value })}>
+                    <option value="PAUSED">PAUSED</option>
+                    <option value="ACTIVE">ACTIVE</option>
+                  </select>
+                  <select className="input" value={partnerProgramForm.customerBonusType} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, customerBonusType: event.target.value })}>
+                    <option value="NONE">No bonus</option>
+                    <option value="FREE_DAYS">Free days</option>
+                    <option value="DISCOUNT">Discount</option>
+                    <option value="CREDITS">Credits</option>
+                    <option value="CUSTOM_ENTITLEMENT">Custom entitlement</option>
+                  </select>
+                  <input className="input" value={partnerProgramForm.customerBonusValue} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, customerBonusValue: event.target.value })} placeholder="Bonus value" />
+                  <input className="input" value={partnerProgramForm.customerBonusEntitlement} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, customerBonusEntitlement: event.target.value })} placeholder="Custom entitlement" />
+                  <select className="input" value={partnerProgramForm.commissionModel} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, commissionModel: event.target.value })}>
+                    <option value="PERCENT">Percent revenue share</option>
+                    <option value="FIXED">Fixed payout</option>
+                    <option value="HYBRID">Hybrid</option>
+                  </select>
+                  <input className="input" value={partnerProgramForm.commissionRateBps} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, commissionRateBps: event.target.value })} placeholder="Commission bps, 1000 = 10%" />
+                  <input className="input" value={partnerProgramForm.fixedPayoutCents} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, fixedPayoutCents: event.target.value })} placeholder="Fixed payout cents" />
+                  <select className="input" value={partnerProgramForm.commissionWindowType} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, commissionWindowType: event.target.value })}>
+                    <option value="FIRST_PAYMENT">First payment</option>
+                    <option value="MONTHS">N months</option>
+                    <option value="LIFETIME">Lifetime</option>
+                  </select>
+                  <input className="input" value={partnerProgramForm.commissionWindowMonths} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, commissionWindowMonths: event.target.value })} placeholder="Window months" />
+                  <input className="input" value={partnerProgramForm.lockDays} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, lockDays: event.target.value })} placeholder="Hold days" />
+                  <input className="input" value={partnerProgramForm.termsVersion} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, termsVersion: event.target.value })} placeholder="Terms version" />
+                </div>
+                <div className="grid grid-2">
+                  <button className="button" onClick={savePartnerProgram}>Save Orken program config</button>
+                  <button className="button secondary" onClick={() => setPartnerProgramForm(emptyPartnerProgramForm)}>Reset</button>
+                </div>
+              </div>
+
+              <div className="stack">
+                <h3>Partner Offer Placement</h3>
+                <p className="muted">This creates/updates Orken's local display and, when configured, creates a Partner Core reward placement. Studio publication happens in Partner Core.</p>
+                <div className="grid grid-2">
+                  <select className="input" value={partnerOfferForm.programConfigId} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, programConfigId: event.target.value })}>
+                    <option value="">No local affiliate program</option>
+                    {partnerPrograms.map((program) => <option value={program.id} key={program.id}>{program.name}</option>)}
+                  </select>
+                  <input className="input" value={partnerOfferForm.partnerId} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, partnerId: event.target.value })} placeholder="Partner Core partner id/cache" />
+                  <input className="input" value={partnerOfferForm.partnerCorePlacementId} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, partnerCorePlacementId: event.target.value })} placeholder="Partner Core placement id" />
+                  <select className="input" value={partnerOfferForm.kind} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, kind: event.target.value })}>
+                    <option value="manual_deal">Manual deal</option>
+                    <option value="reward_trial">Reward trial</option>
+                    <option value="portfolio_credit">Portfolio credit</option>
+                    <option value="qualified_lead">Qualified lead</option>
+                    <option value="paid_service">Paid service</option>
+                  </select>
+                  <input className="input" value={partnerOfferForm.title} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, title: event.target.value })} placeholder="Offer title" />
+                  <input className="input" value={partnerOfferForm.imageUrl} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, imageUrl: event.target.value })} placeholder="Image URL" />
+                  <input className="input" value={partnerOfferForm.redemptionAmount} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, redemptionAmount: event.target.value })} placeholder="XP cost" />
+                  <input className="input" value={partnerOfferForm.capPerMonth} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, capPerMonth: event.target.value })} placeholder="Monthly cap" />
+                  <input className="input" value={partnerOfferForm.partnerPayoutCents} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, partnerPayoutCents: event.target.value })} placeholder="Partner payout cents" />
+                  <input className="input" value={partnerOfferForm.entitlementType} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, entitlementType: event.target.value })} placeholder="Entitlement type" />
+                </div>
+                <textarea className="input text-editor compact" value={partnerOfferForm.description} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, description: event.target.value })} placeholder="Description for users" />
+                <textarea className="input text-editor compact" value={partnerOfferForm.userBenefit} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, userBenefit: event.target.value })} placeholder="User benefit" />
+                <input className="input" value={partnerOfferForm.entitlementValue} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, entitlementValue: event.target.value })} placeholder="Entitlement/coupon/link" />
+                <div className="grid grid-2">
+                  <button className="button" onClick={savePartnerOffer}>Save placement</button>
+                  <button className="button secondary" onClick={() => setPartnerOfferForm(emptyPartnerOfferForm)}>Reset</button>
+                </div>
+              </div>
+            </div>
+
+            <div className="admin-program-list">
+              {partnerPrograms.length === 0 ? <p className="muted">No partner programs configured</p> : partnerPrograms.map((program) => (
+                <div className="admin-program-row" key={program.id}>
+                  <div>
+                    <strong>{program.name} · {program.status}</strong>
+                    <span>bonus {program.customerBonusType} {program.customerBonusValue ?? ""} · commission {program.commissionModel} {program.commissionRateBps ?? program.fixedPayoutCents ?? 0} · hold {program.lockDays}d</span>
+                    <span>Core program: {program.partnerCoreProgramId ?? "not linked"} · terms {program.termsVersion}</span>
+                    {program.referralLinks.map((link) => <span key={link.id}>{link.channel}: {link.url ?? link.referralCode ?? link.status}</span>)}
+                  </div>
+                  <div className="admin-gift-form">
+                    <input className="input" value={referralChannelByProgram[program.id] ?? "default"} onChange={(event) => setReferralChannelByProgram({ ...referralChannelByProgram, [program.id]: event.target.value })} placeholder="channel" />
+                    <button className="button secondary" onClick={() => createReferralLink(program.id)}>Referral link</button>
+                    <button className="button secondary" onClick={() => selectPartnerProgram(program)}>Edit</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="admin-program-list">
+              {partnerOffers.length === 0 ? <p className="muted">No partner offers synced</p> : partnerOffers.map((offer) => (
+                <div className="admin-program-row" key={offer.id}>
+                  <div>
+                    <strong>{offer.title} · {offer.status}</strong>
+                    <span>Core status: {offer.partnerCoreStatus ?? "local"} · placement: {offer.partnerCorePlacementId ?? "not created"}</span>
+                    <span>{offer.redemptionCost.amount} {offer.redemptionCost.currency} · payout {offer.partnerPayoutCents} cents · used {offer.redemptionsCount ?? 0}</span>
+                    <span>{offer.userBenefit}</span>
+                  </div>
+                  <div className="row" style={{ justifyContent: "flex-end" }}>
+                    <button className="button secondary" onClick={() => selectPartnerOffer(offer)}>Edit</button>
+                    <button className="button secondary" onClick={() => setPartnerOfferStatus(offer.id, "PENDING_REVIEW")}>Submit review</button>
+                    <button className="button secondary" onClick={() => setPartnerOfferStatus(offer.id, "PAUSED")}>Pause</button>
+                    <button className="button secondary" onClick={() => setPartnerOfferStatus(offer.id, "DRAFT")}>Draft</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="admin-program-list">
+              <h3>Partner Leads / Redemptions</h3>
+              {partnerRedemptions.length === 0 ? <p className="muted">No redemptions yet</p> : partnerRedemptions.map((item) => (
+                <div className="admin-program-row" key={item.id}>
+                  <div>
+                    <strong>{item.offerTitle ?? item.offerId} · {item.status}</strong>
+                    <span>{item.userEmail ?? item.userId ?? item.sessionId ?? "anonymous"} · {item.costAmount} {item.costCurrency}</span>
+                    <span>Core redemption: {item.partnerCoreRedemptionId ?? "not linked"} · {formatAdminDate(item.createdAt)}</span>
+                    {item.deliveryError && <span>{item.deliveryError}</span>}
+                  </div>
                 </div>
               ))}
             </div>

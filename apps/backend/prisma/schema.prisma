@@ -28,6 +28,10 @@ model User {
   habitPrograms HabitProgram[]
   habitThreads  HabitNavigatorThread[]
   telegramAccounts TelegramAccount[]
+  partnerAttribution PartnerAttribution?
+  partnerEvents PartnerEvent[]
+  partnerOfferRedemptions PartnerOfferRedemption[]
+  walletTransactions InternalWalletTransaction[]
 }
 
 model LoginToken {
@@ -57,6 +61,8 @@ model Session {
   habitPrograms HabitProgram[]
   habitThreads  HabitNavigatorThread[]
   telegramAccounts TelegramAccount[]
+  partnerOfferRedemptions PartnerOfferRedemption[]
+  walletTransactions InternalWalletTransaction[]
 }
 
 model Analysis {
@@ -328,11 +334,181 @@ model HabitProgram {
   rankHistory HabitRankHistory[]
   navigatorThreads HabitNavigatorThread[]
   notificationPreference HabitNotificationPreference?
+  partnerBonusAttributions PartnerAttribution[] @relation("PartnerBonusProgram")
+  walletTransactions InternalWalletTransaction[]
 
   @@index([userId, status, createdAt])
   @@index([sessionId, status, createdAt])
   @@index([analysisId])
   @@index([status, currentCycle, currentWeek])
+}
+
+model PartnerAffiliateProgram {
+  id                        String                  @id @default(cuid())
+  partnerCoreProgramId      String?
+  name                      String
+  referralDestination       String
+  customerBonusType         PartnerCustomerBonusType @default(NONE)
+  customerBonusValue        Int?
+  customerBonusEntitlement  String?
+  commissionModel           PartnerCommissionModel  @default(PERCENT)
+  commissionRateBps         Int?
+  fixedPayoutCents          Int?
+  commissionWindowType      PartnerCommissionWindow @default(FIRST_PAYMENT)
+  commissionWindowMonths    Int?
+  lockDays                  Int                     @default(0)
+  status                    PartnerProgramStatus    @default(PAUSED)
+  termsVersion              String                  @default("v1")
+  createdAt                 DateTime                @default(now())
+  updatedAt                 DateTime                @updatedAt
+  attributions              PartnerAttribution[]
+  events                    PartnerEvent[]
+  referralLinks             PartnerReferralLink[]
+  offers                    PartnerOffer[]
+
+  @@index([status, updatedAt])
+  @@index([partnerCoreProgramId])
+}
+
+model PartnerReferralLink {
+  id                   String                  @id @default(cuid())
+  programConfigId      String
+  programConfig        PartnerAffiliateProgram @relation(fields: [programConfigId], references: [id], onDelete: Cascade)
+  channel              String
+  referralCode         String?
+  url                  String?
+  partnerCoreLinkId    String?
+  status               String                  @default("CREATED")
+  idempotencyKey       String                  @unique
+  rawResponse          Json?
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+
+  @@index([programConfigId, channel])
+}
+
+model PartnerAttribution {
+  id                    String                  @id @default(cuid())
+  userId                String                  @unique
+  user                  User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  programConfigId       String?
+  programConfig         PartnerAffiliateProgram? @relation(fields: [programConfigId], references: [id], onDelete: SetNull)
+  partnerCoreProgramId  String?
+  referralCode          String
+  customerBonusType     PartnerCustomerBonusType @default(NONE)
+  customerBonusValue    Int?
+  customerBonusEntitlement String?
+  bonusStatus           PartnerBonusStatus      @default(PENDING)
+  bonusAppliedAt        DateTime?
+  bonusAppliedProgramId String?
+  bonusAppliedProgram   HabitProgram?           @relation("PartnerBonusProgram", fields: [bonusAppliedProgramId], references: [id], onDelete: SetNull)
+  signupEventStatus     PartnerEventStatus      @default(PENDING)
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+
+  @@index([referralCode, createdAt])
+  @@index([partnerCoreProgramId])
+  @@index([bonusStatus, createdAt])
+}
+
+model PartnerEvent {
+  id               String                  @id @default(cuid())
+  type             PartnerEventType
+  idempotencyKey   String                  @unique
+  programConfigId  String?
+  programConfig    PartnerAffiliateProgram? @relation(fields: [programConfigId], references: [id], onDelete: SetNull)
+  userId           String?
+  user             User?                   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  paymentId        String?
+  externalId       String
+  status           PartnerEventStatus      @default(PENDING)
+  request          Json
+  response         Json?
+  error            String?
+  attempts         Int                     @default(0)
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+
+  @@index([type, status, createdAt])
+  @@index([userId, createdAt])
+  @@index([paymentId])
+}
+
+model PartnerOffer {
+  id                   String                  @id @default(cuid())
+  programConfigId      String?
+  programConfig        PartnerAffiliateProgram? @relation(fields: [programConfigId], references: [id], onDelete: SetNull)
+  partnerId            String?
+  partnerCorePlacementId String?                @unique
+  partnerCoreStatus    String?
+  partnerCoreSyncedAt  DateTime?
+  kind                 String                  @default("manual_deal")
+  surface              String                  @default("rewards_tab")
+  title                String
+  description          String
+  imageUrl             String?
+  redemptionCurrency   String                  @default("orken_points")
+  redemptionAmount     Int
+  userBenefit          String
+  partnerPayoutCents   Int                     @default(0)
+  capPerMonth          Int?
+  status               PartnerOfferStatus      @default(DRAFT)
+  entitlementType      String                  @default("manual")
+  entitlementValue     String?
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+  redemptions          PartnerOfferRedemption[]
+
+  @@index([status, updatedAt])
+  @@index([programConfigId])
+  @@index([partnerId])
+}
+
+model PartnerOfferRedemption {
+  id                      String                  @id @default(cuid())
+  offerId                 String
+  offer                   PartnerOffer            @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  userId                  String?
+  user                    User?                   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  sessionId               String?
+  session                 Session?                @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  costCurrency            String                  @default("orken_points")
+  costAmount              Int
+  status                  PartnerRedemptionStatus @default(PENDING)
+  entitlementType         String?
+  entitlementValue        String?
+  partnerCoreRedemptionId String?
+  partnerCoreResponse     Json?
+  deliveryError           String?
+  idempotencyKey          String                  @unique
+  createdAt               DateTime                @default(now())
+  updatedAt               DateTime                @updatedAt
+
+  @@index([offerId, createdAt])
+  @@index([userId, createdAt])
+  @@index([sessionId, createdAt])
+  @@index([status, createdAt])
+}
+
+model InternalWalletTransaction {
+  id             String    @id @default(cuid())
+  userId         String?
+  user           User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  sessionId      String?
+  session        Session?  @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  programId      String?
+  program        HabitProgram? @relation(fields: [programId], references: [id], onDelete: SetNull)
+  currency       String    @default("orken_points")
+  amountDelta    Int
+  reason         String
+  sourceType     String
+  sourceId       String?
+  idempotencyKey String    @unique
+  createdAt      DateTime  @default(now())
+
+  @@index([userId, currency, createdAt])
+  @@index([sessionId, currency, createdAt])
+  @@index([programId, createdAt])
 }
 
 model HabitRankHistory {
@@ -677,4 +853,64 @@ enum HabitEnrollmentStatus {
   COMPLETED
   SKIPPED
   ARCHIVED
+}
+
+enum PartnerCustomerBonusType {
+  NONE
+  FREE_DAYS
+  DISCOUNT
+  CREDITS
+  CUSTOM_ENTITLEMENT
+}
+
+enum PartnerCommissionModel {
+  FIXED
+  PERCENT
+  HYBRID
+}
+
+enum PartnerCommissionWindow {
+  FIRST_PAYMENT
+  MONTHS
+  LIFETIME
+}
+
+enum PartnerProgramStatus {
+  ACTIVE
+  PAUSED
+}
+
+enum PartnerBonusStatus {
+  PENDING
+  APPLIED
+  NOT_APPLICABLE
+  FAILED
+}
+
+enum PartnerEventStatus {
+  PENDING
+  SUCCEEDED
+  SKIPPED
+  FAILED
+}
+
+enum PartnerEventType {
+  SIGNUP
+  PAYMENT
+  REDEMPTION
+}
+
+enum PartnerOfferStatus {
+  DRAFT
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  PAUSED
+}
+
+enum PartnerRedemptionStatus {
+  PENDING
+  FULFILLED
+  PARTNER_FAILED
+  REFUNDED
 }

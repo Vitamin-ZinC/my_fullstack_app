@@ -21,6 +21,16 @@ import type {
   MeResponse,
   PaymentConfigResponse,
   PaymentIntentResponse,
+  PartnerAffiliateProgramInput,
+  PartnerAffiliateProgramSummary,
+  PartnerCoreEmbeddedSessionResponse,
+  PartnerMarketplaceResponse,
+  PartnerOfferInput,
+  PartnerOfferRedemptionResponse,
+  PartnerOfferStatus,
+  PartnerOfferSummary,
+  PartnerRedemptionSummary,
+  PartnerReferralLinkSummary,
   PromoCode,
   ReportContactResponse,
   TelegramLinkTokenResponse,
@@ -34,6 +44,7 @@ export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001
 const SESSION_ID_KEY = "levelup_session_id";
 const GUEST_TOKEN_KEY = "levelup_guest_token";
 const LOCALE_KEY = "levelup_locale";
+const REFERRAL_CODE_KEY = "orken_referral_code";
 
 export type TextLocale = "ru" | "en";
 export type AnalysisClientMetrics = {
@@ -128,6 +139,27 @@ export function setStoredLocale(locale: TextLocale) {
   window.localStorage.setItem(LOCALE_KEY, locale);
 }
 
+export function captureReferralFromUrl() {
+  if (!hasWindow()) return null;
+  const url = new URL(window.location.href);
+  const raw = url.searchParams.get("ref") ?? url.searchParams.get("referralCode");
+  const code = raw?.trim();
+  if (!code || code.length > 120 || !/^[A-Za-z0-9._-]+$/.test(code)) return null;
+  const normalized = code.toUpperCase();
+  window.localStorage.setItem(REFERRAL_CODE_KEY, normalized);
+  url.searchParams.delete("ref");
+  url.searchParams.delete("referralCode");
+  window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  return normalized;
+}
+
+function readStoredReferralCode() {
+  if (!hasWindow()) return undefined;
+  captureReferralFromUrl();
+  const code = window.localStorage.getItem(REFERRAL_CODE_KEY)?.trim();
+  return code || undefined;
+}
+
 function storeSession(session: { sessionId: string; guestToken: string }) {
   if (!hasWindow()) return;
   window.sessionStorage.setItem(SESSION_ID_KEY, session.sessionId);
@@ -157,6 +189,7 @@ function sessionHeaders() {
 
 export async function ensureGuestSession() {
   if (!hasWindow()) throw new Error("Browser session is required");
+  captureReferralFromUrl();
   const existingSessionId = window.sessionStorage.getItem(SESSION_ID_KEY) ?? window.localStorage.getItem(SESSION_ID_KEY);
   const existingGuestToken = window.sessionStorage.getItem(GUEST_TOKEN_KEY) ?? window.localStorage.getItem(GUEST_TOKEN_KEY);
   if (existingSessionId && existingGuestToken) {
@@ -202,7 +235,7 @@ export const api = {
     await ensureGuestSession();
     const result = await request<AuthResult>("/api/auth/register", {
       method: "POST",
-      body: JSON.stringify({ email, password, name: name?.trim() || undefined })
+      body: JSON.stringify({ email, password, name: name?.trim() || undefined, referralCode: readStoredReferralCode() })
     });
     storeSession(result);
     return result;
@@ -227,7 +260,7 @@ export const api = {
     await ensureGuestSession();
     const result = await request<AuthResult>("/api/auth/magic-link/verify", {
       method: "POST",
-      body: JSON.stringify({ token })
+      body: JSON.stringify({ token, referralCode: readStoredReferralCode() })
     });
     storeSession(result);
     return result;
@@ -359,6 +392,17 @@ export const api = {
     method: "POST",
     body: JSON.stringify(payload)
   }),
+  partnerMarketplace: async () => {
+    await ensureGuestSession();
+    return request<PartnerMarketplaceResponse>("/api/partners/marketplace");
+  },
+  redeemPartnerOffer: async (offerId: string, idempotencyKey?: string) => {
+    await ensureGuestSession();
+    return request<PartnerOfferRedemptionResponse>(`/api/partners/offers/${encodeURIComponent(offerId)}/redeem`, {
+      method: "POST",
+      body: JSON.stringify({ idempotencyKey })
+    });
+  },
   handoffDocs: (password: string) => request<HandoffDocsResponse>("/api/docs/handoff", {
     method: "POST",
     body: JSON.stringify({ password })
@@ -607,6 +651,33 @@ export const adminApi = {
   setPromoCodeActive: (id: string, active: boolean) => adminRequest<PromoCode>(`/api/admin/promo-codes/${encodeURIComponent(id)}/active`, {
     method: "PUT",
     body: JSON.stringify({ active })
+  }),
+  partnerPrograms: () => adminRequest<PartnerAffiliateProgramSummary[]>("/api/admin/partner-programs"),
+  upsertPartnerProgram: (program: PartnerAffiliateProgramInput) => adminRequest<PartnerAffiliateProgramSummary>("/api/admin/partner-programs", {
+    method: "POST",
+    body: JSON.stringify(program)
+  }),
+  createPartnerReferralLink: (programId: string, channel: string) => adminRequest<PartnerReferralLinkSummary>(`/api/admin/partner-programs/${encodeURIComponent(programId)}/referral-links`, {
+    method: "POST",
+    body: JSON.stringify({ channel })
+  }),
+  partnerOffers: () => adminRequest<PartnerOfferSummary[]>("/api/admin/partner-offers"),
+  upsertPartnerOffer: (offer: PartnerOfferInput) => adminRequest<PartnerOfferSummary>("/api/admin/partner-offers", {
+    method: "POST",
+    body: JSON.stringify(offer)
+  }),
+  syncPartnerOffers: () => adminRequest<{ synced: boolean; count: number }>("/api/admin/partner-offers/sync", {
+    method: "POST",
+    body: JSON.stringify({})
+  }),
+  setPartnerOfferStatus: (id: string, status: PartnerOfferStatus) => adminRequest<PartnerOfferSummary>(`/api/admin/partner-offers/${encodeURIComponent(id)}/status`, {
+    method: "PATCH",
+    body: JSON.stringify({ status })
+  }),
+  partnerRedemptions: () => adminRequest<PartnerRedemptionSummary[]>("/api/admin/partner-redemptions"),
+  partnerCoreEmbeddedSession: () => adminRequest<PartnerCoreEmbeddedSessionResponse>("/api/admin/partner-core/embedded-session", {
+    method: "POST",
+    body: JSON.stringify({})
   }),
   saveContent: (locale: string, value: unknown) => adminApi.upsertSetting(contentSettingKey(locale), value)
 };

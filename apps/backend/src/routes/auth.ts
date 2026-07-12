@@ -13,13 +13,15 @@ import {
 } from "../lib/auth.js";
 import { prisma } from "../lib/prisma.js";
 import { sendMagicLinkEmail } from "../services/email.js";
+import { handleReferralSignup, normalizeReferralCode } from "../services/partnerCore.js";
 
 const emailSchema = z.string().trim().email().max(254).transform((value) => value.toLowerCase());
 const passwordSchema = z.string().min(8).max(128);
 const registerSchema = z.object({
   email: emailSchema,
   password: passwordSchema,
-  name: z.string().trim().min(1).max(120).optional()
+  name: z.string().trim().min(1).max(120).optional(),
+  referralCode: z.string().trim().max(120).optional()
 });
 const loginSchema = z.object({
   email: emailSchema,
@@ -29,7 +31,8 @@ const magicLinkRequestSchema = z.object({
   email: emailSchema
 });
 const magicLinkVerifySchema = z.object({
-  token: z.string().trim().min(24).max(512)
+  token: z.string().trim().min(24).max(512),
+  referralCode: z.string().trim().max(120).optional()
 });
 
 export async function authRoutes(app: FastifyInstance) {
@@ -98,6 +101,12 @@ export async function authRoutes(app: FastifyInstance) {
         properties: { method: "password" }
       }
     });
+    await handleReferralSignup({
+      userId: user.id,
+      email: user.email,
+      referralCode: normalizeReferralCode(body.referralCode),
+      request
+    }).catch((error) => app.log.error({ error, userId: user.id }, "partner referral signup failed"));
     return buildAuthResponse(session, user);
   });
 
@@ -217,6 +226,12 @@ export async function authRoutes(app: FastifyInstance) {
         properties: { method: "magic_link" }
       }
     });
+    await handleReferralSignup({
+      userId: user.id,
+      email: user.email,
+      referralCode: normalizeReferralCode(body.referralCode),
+      request
+    }).catch((error) => app.log.error({ error, userId: user.id }, "partner referral signup failed"));
     return buildAuthResponse(session, user);
   });
 

@@ -1,6 +1,6 @@
 # ORKEN.LIFE Technical Project Map
 
-Last updated: 2026-07-04
+Last updated: 2026-07-12
 
 This document describes the current implemented architecture. It is intended to prevent future agents from inventing nonexistent tables, endpoints, or flows.
 
@@ -109,6 +109,51 @@ Bot commands currently handled by backend:
 
 Not implemented yet: full Telegram Mini App UI inside Telegram WebView. Telegram voice transcription, short-lived Telegram-to-web login links, and admin UI for Telegram policy/rate limits are implemented.
 
+### Partner Core / Rewards
+
+ORKEN is a project slice inside Partner Core, not an independent affiliate system.
+
+Partner Core is the backend of record for:
+
+- partner accounts and profiles;
+- partner approval status;
+- affiliate programs and referral links;
+- partner offer ownership and moderation;
+- reward placements;
+- leads/redemptions;
+- payout ledger, KYC, contracts, and cross-project history.
+
+ORKEN stores only local product state:
+
+- attribution from an ORKEN user/session to `referralCode` and `partnerCorePartnerId`;
+- fact of issuing a customer bonus;
+- internal wallet transactions and redemption spend;
+- user entitlements/coupons/access issued inside ORKEN;
+- a local read model/cache of Partner Core reward placements.
+
+Implemented backend files:
+
+- `apps/backend/src/services/partnerCore.ts`
+- `apps/backend/src/routes/partners.ts`
+
+Implemented frontend surfaces:
+
+- Admin Partner Core section: `apps/frontend/app/admin/page.tsx`
+- User rewards marketplace tab: `apps/frontend/app/habits/page.tsx`
+
+Shared contracts are in `packages/contracts/src/index.ts`.
+
+Environment variables:
+
+- `PARTNER_CORE_URL`
+- `PARTNER_CORE_KEY_ID`
+- `PARTNER_CORE_SERVICE_SECRET`
+- `PARTNER_CORE_PROJECT_ID`
+- `PARTNER_CORE_EMBED_ORIGIN`
+- `PARTNER_CORE_PRIVACY_SECRET`
+
+Partner Core secrets are backend-only. Do not expose `PARTNER_CORE_KEY_ID`, `PARTNER_CORE_SERVICE_SECRET`, or `PARTNER_CORE_PRIVACY_SECRET` through frontend code, public env vars, docs pages, or client-side JSON.
+
 ## LLM Configuration
 
 Environment variables:
@@ -158,7 +203,7 @@ The admin UI currently manages:
 - Telegram rate limit window and max messages;
 - Telegram short-lived web-login toggle.
 
-Telegram bot token, bot username, webhook secret, provider keys, and private network URLs remain environment variables, not admin-editable settings.
+Telegram bot token, bot username, webhook secret, Partner Core credentials, provider keys, and private network URLs remain environment variables, not admin-editable settings.
 
 Do not create new settings tables for these; use `AppSetting` unless the value needs relational history or per-user state.
 

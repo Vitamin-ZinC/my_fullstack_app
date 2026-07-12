@@ -14,6 +14,7 @@ import { getHabitSubscriptionConfig } from "../services/pricing.js";
 import { createDailyHabitRewardIfNeeded } from "../services/habitRewards.js";
 import { createImageUploadKey, readMediaAssetBuffer, writeUploadBuffer } from "../services/media.js";
 import { validatePhotoBuffer } from "../services/imageValidation.js";
+import { applyPendingReferralBonus } from "../services/partnerCore.js";
 
 const stripe = env.STRIPE_SECRET_KEY ? new Stripe(env.STRIPE_SECRET_KEY) : null;
 
@@ -139,7 +140,11 @@ export async function habitsRoutes(app: FastifyInstance) {
       getHabitSubscriptionConfig()
     ]);
     const syncedProgram = program ? await ensureProgramEnrollments(program.id, program.weakZone) : null;
-    const preparedProgram = syncedProgram ? await ensureProgramRuntimeArtifacts(syncedProgram.id) : null;
+    let preparedProgram = syncedProgram ? await ensureProgramRuntimeArtifacts(syncedProgram.id) : null;
+    if (preparedProgram && session.userId) {
+      await applyPendingReferralBonus(session.userId, preparedProgram.id);
+      preparedProgram = await loadProgram(preparedProgram.id);
+    }
     const rankedProgram = preparedProgram ? await syncHabitRankState(preparedProgram) : null;
 
     return {
@@ -219,6 +224,9 @@ export async function habitsRoutes(app: FastifyInstance) {
         }
       });
 
+      if (access.session.userId) {
+        await applyPendingReferralBonus(access.session.userId, merged.id);
+      }
       return buildProgramResponse(await ensureProgramEnrollments(merged.id, merged.weakZone));
     }
 
@@ -280,7 +288,10 @@ export async function habitsRoutes(app: FastifyInstance) {
       }
     });
 
-    return buildProgramResponse(program);
+    if (access.session.userId) {
+      await applyPendingReferralBonus(access.session.userId, program.id);
+    }
+    return buildProgramResponse(await loadProgram(program.id));
   });
 
   app.post("/api/habits/start", async (request, reply) => {
@@ -363,7 +374,10 @@ export async function habitsRoutes(app: FastifyInstance) {
       }
     });
 
-    return buildProgramResponse(program);
+    if (session.userId) {
+      await applyPendingReferralBonus(session.userId, program.id);
+    }
+    return buildProgramResponse(await loadProgram(program.id));
   });
 
   app.post("/api/habits/metrics", async (request, reply) => {

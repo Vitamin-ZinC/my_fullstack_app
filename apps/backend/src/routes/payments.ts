@@ -6,6 +6,7 @@ import { requireAnalysisAccess } from "../lib/auth.js";
 import { prisma } from "../lib/prisma.js";
 import { calculatePromoDiscount, normalizePromoCode, validatePromoCode } from "../services/promoCodes.js";
 import { getReportPriceConfig } from "../services/pricing.js";
+import { recordPaymentConversionForPayment, recordSubscriptionInvoiceConversion } from "../services/partnerCore.js";
 
 const stripe = env.STRIPE_SECRET_KEY ? new Stripe(env.STRIPE_SECRET_KEY) : null;
 
@@ -114,6 +115,8 @@ export async function paymentRoutes(app: FastifyInstance) {
           }
         }
       });
+      await recordPaymentConversionForPayment(payment.id)
+        .catch((error) => app.log.error({ error, paymentId: payment.id }, "partner payment conversion failed"));
       return {
         clientSecret: null,
         paymentIntentId: payment.stripePaymentIntentId,
@@ -154,6 +157,8 @@ export async function paymentRoutes(app: FastifyInstance) {
           paidAt: new Date()
         }
       });
+      await recordPaymentConversionForPayment(payment.id)
+        .catch((error) => app.log.error({ error, paymentId: payment.id }, "partner payment conversion failed"));
       return {
         clientSecret: "dev_client_secret",
         paymentIntentId: payment.stripePaymentIntentId,
@@ -298,6 +303,8 @@ export async function paymentRoutes(app: FastifyInstance) {
         }
         return nextPayment;
       });
+      await recordPaymentConversionForPayment(payment.id)
+        .catch((error) => app.log.error({ error, paymentId: payment.id }, "partner checkout conversion failed"));
       return {
         url: `${env.APP_ORIGIN}/report/${analysis.id}/full`,
         sessionId: payment.stripePaymentIntentId,
@@ -445,6 +452,8 @@ export async function paymentRoutes(app: FastifyInstance) {
           }
         }
       });
+      await recordPaymentConversionForPayment(payment.id)
+        .catch((error) => app.log.error({ error, paymentId: payment.id }, "partner payment conversion failed"));
     }
     if (event.type === "checkout.session.completed") {
       const session = event.data.object as Stripe.Checkout.Session;
@@ -521,6 +530,22 @@ export async function paymentRoutes(app: FastifyInstance) {
           }
         }
       });
+      await recordPaymentConversionForPayment(payment.id)
+        .catch((error) => app.log.error({ error, paymentId: payment.id }, "partner checkout conversion failed"));
+    }
+    if (event.type === "invoice.paid" || event.type === "invoice.payment_succeeded") {
+      const invoice = event.data.object as Stripe.Invoice;
+      const invoiceAny = invoice as any;
+      const subscriptionId = typeof invoiceAny.subscription === "string" ? invoiceAny.subscription : invoiceAny.subscription?.id;
+      const subscription = subscriptionId && stripe ? await stripe.subscriptions.retrieve(subscriptionId).catch(() => null) : null;
+      const userId = invoiceAny.metadata?.userId || subscription?.metadata?.userId || null;
+      const customerId = typeof invoiceAny.customer === "string" ? invoiceAny.customer : invoiceAny.customer?.id ?? null;
+      await recordSubscriptionInvoiceConversion({
+        invoiceId: invoice.id,
+        userId,
+        customerId,
+        amountPaidCents: Number(invoice.amount_paid ?? invoiceAny.amountPaid ?? 0)
+      }).catch((error) => app.log.error({ error, invoiceId: invoice.id }, "partner subscription invoice conversion failed"));
     }
     if (event.type === "payment_intent.payment_failed") {
       const intent = event.data.object as Stripe.PaymentIntent;

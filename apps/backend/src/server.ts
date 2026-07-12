@@ -14,6 +14,7 @@ import { docsRoutes } from "./routes/docs.js";
 import { eventRoutes } from "./routes/events.js";
 import { habitsRoutes } from "./routes/habits.js";
 import { meRoutes } from "./routes/me.js";
+import { partnerRoutes } from "./routes/partners.js";
 import { paymentRoutes } from "./routes/payments.js";
 import { telegramRoutes } from "./routes/telegram.js";
 
@@ -62,6 +63,7 @@ await app.register(paymentRoutes);
 await app.register(eventRoutes);
 await app.register(habitsRoutes);
 await app.register(meRoutes);
+await app.register(partnerRoutes);
 await app.register(adminRoutes);
 await app.register(telegramRoutes);
 

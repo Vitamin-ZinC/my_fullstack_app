@@ -4183,6 +4183,68 @@ svg {
   line-height: 1.6;
 }
 
+.habits-rewards-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background:
+    radial-gradient(circle at 12% 0%, rgba(245, 158, 11, 0.14), transparent 32%),
+    rgba(255, 255, 255, 0.04);
+}
+
+.habits-rewards-hero h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  color: #fbbf24;
+}
+
+.habits-market-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.habits-market-card {
+  display: grid;
+  gap: 12px;
+}
+
+.habits-market-card img {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 1px solid rgba(0, 212, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(2, 11, 24, 0.4);
+  object-fit: cover;
+}
+
+.habits-market-meta {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  padding-top: 10px;
+}
+
+.habits-market-meta span,
+.habits-market-meta strong {
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.habits-market-meta span {
+  color: rgba(148, 163, 184, 0.88);
+}
+
+.habits-market-meta strong {
+  color: rgba(255, 255, 255, 0.86);
+  overflow-wrap: anywhere;
+}
+
 .habits-chat {
   display: grid;
   gap: 16px;
@@ -5719,8 +5781,14 @@ p {
   }
 
   .compare-row,
+  .habits-market-grid,
   .habits-road {
     grid-template-columns: 1fr;
+  }
+
+  .habits-rewards-hero {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .face-hint-row,

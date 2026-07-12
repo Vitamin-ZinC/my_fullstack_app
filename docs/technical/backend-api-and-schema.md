@@ -1,6 +1,6 @@
 # Backend API And Schema Reference
 
-Last updated: 2026-07-04
+Last updated: 2026-07-12
 
 This is the implemented backend reference. Do not invent tables or endpoints beyond this list without implementing them.
 
@@ -37,6 +37,14 @@ Current models in `apps/backend/prisma/schema.prisma`:
 - `TelegramLinkToken`
 - `TelegramWebLoginToken`
 - `HabitNotificationPreference`
+- `FounderIntakeItem`
+- `PartnerAffiliateProgram`
+- `PartnerReferralLink`
+- `PartnerAttribution`
+- `PartnerEvent`
+- `PartnerOffer`
+- `PartnerOfferRedemption`
+- `InternalWalletTransaction`
 
 Current enums:
 
@@ -52,6 +60,15 @@ Current enums:
 - `AuthTokenPurpose`
 - `HabitProgramStatus`
 - `HabitEnrollmentStatus`
+- `PartnerCustomerBonusType`
+- `PartnerCommissionModel`
+- `PartnerCommissionWindow`
+- `PartnerProgramStatus`
+- `PartnerBonusStatus`
+- `PartnerEventStatus`
+- `PartnerEventType`
+- `PartnerOfferStatus`
+- `PartnerRedemptionStatus`
 
 ## Habits Schema Summary
 
@@ -394,6 +411,44 @@ Week summary LLM mode is optional and always falls back to rule-based summaries 
 
 Telegram endpoints use the existing ORKEN session for web calls. The webhook maps Telegram users through `TelegramAccount` and uses the shared habit navigator service for Pingvi answers.
 
+### Partner Core / Rewards
+
+Partner Core is the source of truth for partner accounts, approval status, offer ownership, referral links, redemptions, ledger, payouts, KYC/contracts, and cross-project history.
+
+ORKEN stores only its local project slice:
+
+- user attribution: `userId -> referralCode / partnerCorePartnerId`;
+- fact of customer bonus issuance;
+- internal wallet balance/spend transactions;
+- user entitlements/coupons/access issued by ORKEN;
+- local read model/cache for Partner Core reward placements.
+
+Implemented user routes:
+
+- `GET /api/partners/marketplace`
+- `POST /api/partners/offers/:id/redeem`
+
+Implemented admin routes:
+
+- `GET /api/admin/partner-programs`
+- `POST /api/admin/partner-programs`
+- `POST /api/admin/partner-programs/:id/referral-links`
+- `GET /api/admin/partner-offers`
+- `POST /api/admin/partner-offers`
+- `PATCH /api/admin/partner-offers/:id/status`
+- `POST /api/admin/partner-offers/sync`
+- `GET /api/admin/partner-redemptions`
+- `POST /api/admin/partner-core/embedded-session`
+
+Important implementation files:
+
+- `apps/backend/src/services/partnerCore.ts`
+- `apps/backend/src/routes/partners.ts`
+- `apps/frontend/app/admin/page.tsx`
+- `apps/frontend/app/habits/page.tsx`
+
+Do not create a local `partners` source-of-truth table in ORKEN. A local cache/read model is allowed only for ORKEN-specific display and redemption state.
+
 ### Payments
 
 - `GET /api/payments/config`
@@ -457,6 +512,15 @@ Local watcher for this workstation:
 - `GET /api/admin/promo-codes`
 - `POST /api/admin/promo-codes`
 - `PUT /api/admin/promo-codes/:id/active`
+- `GET /api/admin/partner-programs`
+- `POST /api/admin/partner-programs`
+- `POST /api/admin/partner-programs/:id/referral-links`
+- `GET /api/admin/partner-offers`
+- `POST /api/admin/partner-offers`
+- `PATCH /api/admin/partner-offers/:id/status`
+- `POST /api/admin/partner-offers/sync`
+- `GET /api/admin/partner-redemptions`
+- `POST /api/admin/partner-core/embedded-session`
 - `GET /api/admin/audit-log`
 
 ## Shared Contracts
@@ -488,6 +552,15 @@ Important habit contracts:
 - `TelegramLinkTokenResponse`
 - `TelegramPreferenceResponse`
 - `TelegramWebLoginResponse`
+- `PartnerReferralLinkSummary`
+- `PartnerAffiliateProgramInput`
+- `PartnerAffiliateProgramSummary`
+- `PartnerOfferInput`
+- `PartnerOfferSummary`
+- `PartnerRedemptionSummary`
+- `PartnerMarketplaceResponse`
+- `PartnerOfferRedemptionResponse`
+- `PartnerCoreEmbeddedSessionResponse`
 
 If a frontend feature needs a field not present in these contracts, update contracts and backend serialization first.
 

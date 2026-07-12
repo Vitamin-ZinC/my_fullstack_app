@@ -51,7 +51,13 @@ const schema = z.object({
   TELEGRAM_WEBHOOK_SECRET: z.string().optional(),
   DOCS_ACCESS_PASSWORD: z.string().optional(),
   CODEX_BRIDGE_WEBHOOK_URL: z.string().url().optional(),
-  CODEX_BRIDGE_WEBHOOK_SECRET: z.string().optional()
+  CODEX_BRIDGE_WEBHOOK_SECRET: z.string().optional(),
+  PARTNER_CORE_URL: z.string().url().optional(),
+  PARTNER_CORE_KEY_ID: z.string().optional(),
+  PARTNER_CORE_SERVICE_SECRET: z.string().optional(),
+  PARTNER_CORE_PROJECT_ID: z.string().default("orken-life"),
+  PARTNER_CORE_EMBED_ORIGIN: z.string().url().optional(),
+  PARTNER_CORE_PRIVACY_SECRET: z.string().optional()
 });
 
 export const env = schema.parse(process.env);

@@ -5,6 +5,9 @@ const booleanEnv = z.preprocess((value) => {
   return value;
 }, z.boolean());
 
+const emptyToUndefined = (value: unknown) => value === "" ? undefined : value;
+const optionalUrlEnv = z.preprocess(emptyToUndefined, z.string().url().optional());
+
 const schema = z.object({
   NODE_ENV: z.string().default("development"),
   PORT: z.coerce.number().default(3001),
@@ -50,13 +53,13 @@ const schema = z.object({
   TELEGRAM_BOT_USERNAME: z.string().optional(),
   TELEGRAM_WEBHOOK_SECRET: z.string().optional(),
   DOCS_ACCESS_PASSWORD: z.string().optional(),
-  CODEX_BRIDGE_WEBHOOK_URL: z.string().url().optional(),
+  CODEX_BRIDGE_WEBHOOK_URL: optionalUrlEnv,
   CODEX_BRIDGE_WEBHOOK_SECRET: z.string().optional(),
-  PARTNER_CORE_URL: z.string().url().optional(),
+  PARTNER_CORE_URL: optionalUrlEnv,
   PARTNER_CORE_KEY_ID: z.string().optional(),
   PARTNER_CORE_SERVICE_SECRET: z.string().optional(),
   PARTNER_CORE_PROJECT_ID: z.string().default("orken-life"),
-  PARTNER_CORE_EMBED_ORIGIN: z.string().url().optional(),
+  PARTNER_CORE_EMBED_ORIGIN: optionalUrlEnv,
   PARTNER_CORE_PRIVACY_SECRET: z.string().optional()
 });
 

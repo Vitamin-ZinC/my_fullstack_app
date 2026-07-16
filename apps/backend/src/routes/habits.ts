@@ -12,6 +12,7 @@ import { askHabitNavigator } from "../services/habitNavigator.js";
 import { getOpenAiClient, hasOpenAiClient } from "../services/openaiClient.js";
 import { getHabitSubscriptionConfig } from "../services/pricing.js";
 import { createDailyHabitRewardIfNeeded } from "../services/habitRewards.js";
+import { advanceCompletedHabitWeeks, capHabitWeekCheckins, HABIT_WEEK_TARGET_CHECKINS } from "../services/habitWeekProgress.js";
 import { createImageUploadKey, readMediaAssetBuffer, writeUploadBuffer } from "../services/media.js";
 import { validatePhotoBuffer } from "../services/imageValidation.js";
 import { applyPendingReferralBonus } from "../services/partnerCore.js";
@@ -145,7 +146,13 @@ export async function habitsRoutes(app: FastifyInstance) {
       await applyPendingReferralBonus(session.userId, preparedProgram.id);
       preparedProgram = await loadProgram(preparedProgram.id);
     }
-    const rankedProgram = preparedProgram ? await syncHabitRankState(preparedProgram) : null;
+    const rankedProgram = preparedProgram ? await prepareProgramForResponse(preparedProgram.id, {
+      source: "habits_me",
+      locale: session.locale,
+      sessionId: session.id,
+      userId: session.userId,
+      log: request.log
+    }) : null;
 
     return {
       program: rankedProgram ? serializeProgram(rankedProgram) : null,
@@ -416,7 +423,13 @@ export async function habitsRoutes(app: FastifyInstance) {
       }
     });
 
-    return buildProgramResponse(await loadProgram(body.programId));
+    return buildProgramResponse(await loadProgram(body.programId), {
+      source: "web_checkin",
+      locale: session.locale,
+      sessionId: session.id,
+      userId: session.userId,
+      log: request.log
+    });
   });
 
   app.post("/api/habits/checkins", async (request, reply) => {
@@ -1195,13 +1208,31 @@ async function ensureProgramEnrollments(programId: string, weakZone: string | nu
   return loadProgram(programId);
 }
 
-async function buildProgramResponse(program: any) {
-  const preparedProgram = await ensureProgramRuntimeArtifacts(program.id);
-  const syncedProgram = await syncHabitRankState(preparedProgram);
+async function buildProgramResponse(program: any, context: {
+  source?: string;
+  locale?: string;
+  sessionId?: string | null;
+  userId?: string | null;
+  log?: { warn: (payload: unknown, message?: string) => void };
+} = {}) {
+  const syncedProgram = await prepareProgramForResponse(program.id, context);
   return {
     program: serializeProgram(syncedProgram),
     config: await getHabitSubscriptionConfig()
   };
+}
+
+async function prepareProgramForResponse(programId: string, context: {
+  source?: string;
+  locale?: string;
+  sessionId?: string | null;
+  userId?: string | null;
+  log?: { warn: (payload: unknown, message?: string) => void };
+} = {}) {
+  const preparedProgram = await ensureProgramRuntimeArtifacts(programId);
+  await advanceCompletedHabitWeeks(preparedProgram.id, context);
+  const currentProgram = await ensureProgramRuntimeArtifacts(preparedProgram.id);
+  return syncHabitRankState(currentProgram);
 }
 
 async function ensureProgramRuntimeArtifacts(programId: string) {
@@ -1370,16 +1401,17 @@ function buildWeekSummaryData(
   reward: WeekReward,
   isProgramComplete: boolean
 ) {
+  const checkinsDone = capHabitWeekCheckins(enrollment.checkinsDone);
   const modeLabels = {
     FULL: "неделя закрыта полностью",
     SOFT: "неделя закрыта без полного ритма",
     FROZEN: "неделя поставлена на паузу"
   };
-  const checkinsText = `${enrollment.checkinsDone}/7 отметок`;
+  const checkinsText = `${checkinsDone}/${HABIT_WEEK_TARGET_CHECKINS} отметок`;
   return {
     cycle: enrollment.cycle ?? Math.ceil(enrollment.week / HABIT_WEEKS_PER_CYCLE),
     week: enrollment.week,
-    checkinsDone: enrollment.checkinsDone,
+    checkinsDone,
     completionMode,
     summary: `${modeLabels[completionMode]}: "${enrollment.title}". Фокус недели: ${enrollment.focus}. Зафиксировано ${checkinsText}, прогресс недели ${reward.percent}%.`,
     pingviFeedback: isProgramComplete
@@ -1495,6 +1527,7 @@ function serializeProgram(program: any) {
       createdAt: checkin.createdAt.toISOString()
     }));
     const doneCheckins = checkins.filter((checkin: any) => checkin.completed);
+    const checkinsDone = capHabitWeekCheckins(doneCheckins.length);
     const dailyTasks = (enrollment.dailyTasks ?? []).map((task: any) => {
       const copy = buildDailyTaskPresentation(enrollment, task.dayIndex);
       return {
@@ -1525,7 +1558,7 @@ function serializeProgram(program: any) {
       zone: enrollment.zone,
       status: enrollment.status,
       sortOrder: enrollment.sortOrder,
-      checkinsDone: doneCheckins.length,
+      checkinsDone,
       lastCheckinAt: doneCheckins[0]?.date ?? null,
       checkins,
       dailyTasks,
@@ -1547,7 +1580,7 @@ function serializeProgram(program: any) {
   const trialDaysLeft = program.trialEndsAt
     ? Math.max(0, Math.ceil((program.trialEndsAt.getTime() - now.getTime()) / 86400000))
     : null;
-  const completedWeekCheckins = activeEnrollment?.checkinsDone ?? 0;
+  const completedWeekCheckins = capHabitWeekCheckins(activeEnrollment?.checkinsDone ?? 0);
   const rankContext = calculateHabitRankContext(program, currentSortOrder, now);
 
   return {
@@ -1657,7 +1690,7 @@ function serializeProgram(program: any) {
       currentSortOrder,
       totalWeeks: Math.max(HABIT_PROGRAM_TOTAL_WEEKS, enrollments.length),
       completedWeekCheckins,
-      weekProgress: Math.min(100, Math.round((completedWeekCheckins / 7) * 100)),
+      weekProgress: Math.min(100, Math.round((completedWeekCheckins / HABIT_WEEK_TARGET_CHECKINS) * 100)),
       wellnessScore,
       rank: rankContext.rank
     }

@@ -5,6 +5,7 @@ import { getTelegramPolicySettings } from "./habitSettings.js";
 import { askHabitNavigator } from "./habitNavigator.js";
 import { getOpenAiApiKey } from "./openaiClient.js";
 import { createDailyHabitRewardIfNeeded } from "./habitRewards.js";
+import { advanceCompletedHabitWeeks, capHabitWeekCheckins } from "./habitWeekProgress.js";
 
 type TelegramUser = {
   id: number;
@@ -314,6 +315,31 @@ async function findProgramForAccount(account: { userId?: string | null; sessionI
     ...(account.sessionId ? [{ sessionId: account.sessionId }] : [])
   ];
   if (ownership.length === 0) return null;
+  const program = await prisma.habitProgram.findFirst({
+    where: {
+      status: "ACTIVE",
+      OR: ownership
+    },
+    orderBy: { createdAt: "desc" },
+    include: {
+      enrollments: {
+        orderBy: { sortOrder: "asc" },
+        include: {
+          checkins: { orderBy: { date: "desc" } },
+          dailyTasks: { orderBy: { dayIndex: "asc" } }
+        }
+      },
+      dailyMetrics: { orderBy: { date: "desc" }, take: 1 }
+    }
+  });
+  if (!program) return null;
+  const result = await advanceCompletedHabitWeeks(program.id, {
+    source: "telegram",
+    locale: "ru",
+    userId: account.userId,
+    sessionId: account.sessionId
+  });
+  if (result.advanced === 0) return program;
   return prisma.habitProgram.findFirst({
     where: {
       status: "ACTIVE",
@@ -393,7 +419,7 @@ async function buildTodayText(account: { userId?: string | null; sessionId?: str
     lowEnergy: plan.lowEnergy,
     why: plan.why,
     time: plan.time,
-    weekProgress: String(enrollment.checkins.filter((item) => item.completed).length)
+    weekProgress: String(capHabitWeekCheckins(enrollment.checkins.filter((item) => item.completed).length))
   });
 }
 
@@ -425,6 +451,14 @@ async function completeTodayFromTelegram(account: { userId?: string | null; sess
       label: "Отметка привычки в Telegram",
       xp: 10,
       date: today
+    });
+  }
+  if (!existing?.completed) {
+    await advanceCompletedHabitWeeks(program.id, {
+      source: "telegram_checkin",
+      locale: "ru",
+      userId: account.userId,
+      sessionId: account.sessionId
     });
   }
   return existing?.completed

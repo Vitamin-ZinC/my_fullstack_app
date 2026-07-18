@@ -32,7 +32,8 @@ npm.cmd run db:postgres:migrate:prod
 Заполнить backend environment по обновленному `.env.example`:
 
 ```dotenv
-PARTNER_CORE_URL=https://partner-core.example.com
+# Текущий production-маршрут внутри приватной сети VM; не используется браузером.
+PARTNER_CORE_URL=http://10.100.50.8:8787
 PARTNER_CORE_SERVICE_KEYS_JSON=[{"keyId":"orken-bff-2026q3","secret":"<same-secret>","scopes":["sessions:write","partners:read","partners:write","events:write"],"projectIds":["orken"],"status":"active"}]
 PARTNER_CORE_PROJECT_ID=orken-life
 PARTNER_CORE_DEFAULT_PROGRAM_ID=prog-orken-life

@@ -683,10 +683,11 @@ export const adminApi = {
   }),
   stats: () => adminRequest<AdminStats>("/api/admin/stats"),
   analyses: () => adminRequest<unknown[]>("/api/admin/analyses"),
-  users: (query?: { q?: string; limit?: number }) => {
+  users: (query?: { q?: string; limit?: number; offset?: number }) => {
     const params = new URLSearchParams();
     if (query?.q?.trim()) params.set("q", query.q.trim());
     if (query?.limit) params.set("limit", String(query.limit));
+    if (query?.offset) params.set("offset", String(query.offset));
     return adminRequest<AdminUserSummary[]>(`/api/admin/users${params.size ? `?${params.toString()}` : ""}`);
   },
   giftUserDays: (userId: string, payload: { days: number; programId?: string; note?: string }) => adminRequest<AdminGiftDaysResponse>(`/api/admin/users/${encodeURIComponent(userId)}/gift-days`, {

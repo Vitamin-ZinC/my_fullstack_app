@@ -1,6 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
+import {
+  BadgeDollarSign,
+  Bot,
+  BrainCircuit,
+  FileText,
+  Handshake,
+  LayoutDashboard,
+  LogOut,
+  RefreshCw,
+  Settings,
+  Users,
+  type LucideIcon
+} from "lucide-react";
 import type {
   AdminStats,
   AdminUserSummary,
@@ -37,6 +51,28 @@ import {
   telegramWebLoginEnabledSettingKey
 } from "@/lib/api";
 import { defaultSiteText } from "@/lib/messages";
+
+export type AdminSection = "overview" | "users" | "commercial" | "ai" | "content" | "integrations" | "partners" | "system";
+
+type AdminSectionDefinition = {
+  id: AdminSection;
+  href: string;
+  label: string;
+  title: string;
+  description: string;
+  icon: LucideIcon;
+};
+
+export const adminSections: AdminSectionDefinition[] = [
+  { id: "overview", href: "/admin", label: "Обзор", title: "Обзор продукта", description: "Ключевые показатели диагностики и Навигатора привычек.", icon: LayoutDashboard },
+  { id: "users", href: "/admin/users", label: "Пользователи", title: "Пользователи", description: "Активность, диагностики, привычки, Telegram и подаренные дни.", icon: Users },
+  { id: "commercial", href: "/admin/commercial", label: "Коммерция", title: "Цены и промокоды", description: "Стоимость отчёта, подписка, trial и промокоды.", icon: BadgeDollarSign },
+  { id: "ai", href: "/admin/ai", label: "AI и промпты", title: "AI и промпты", description: "Режим генерации, модели и версионируемые системные промпты.", icon: BrainCircuit },
+  { id: "content", href: "/admin/content", label: "Контент", title: "Контент и локализация", description: "Доступные языки и тексты пользовательского интерфейса.", icon: FileText },
+  { id: "integrations", href: "/admin/integrations", label: "Интеграции", title: "Интеграции", description: "Telegram, шаблоны сообщений и системные ограничения.", icon: Bot },
+  { id: "partners", href: "/admin/partners", label: "Партнёры", title: "Партнёрская программа", description: "Partner Core, программы, офферы, конверсии и начисления Orken.", icon: Handshake },
+  { id: "system", href: "/admin/system", label: "Система", title: "Система", description: "Feature flags, технические настройки и последние операции.", icon: Settings }
+];
 
 const emptyPromptForm: PromptTemplateInput = {
   key: "ikigai.report.free.user",
@@ -98,6 +134,8 @@ const emptyPartnerCoreSnapshot: PartnerCoreAdminSnapshot = {
   reviewTasks: []
 };
 
+const adminUserPageSize = 8;
+
 const cleanTelegramPolicyDefaults = {
   reminderTemplate: [
     "ORKEN на связи. Сегодняшний мягкий шаг:",
@@ -144,6 +182,10 @@ function cleanTemplateValue(value: unknown, fallback: string) {
 }
 
 export default function AdminPage() {
+  return <AdminConsole section="overview" />;
+}
+
+export function AdminConsole({ section }: { section: AdminSection }) {
   const adminText = defaultSiteText.ru.admin;
   const [password, setPassword] = useState("");
   const [authenticated, setAuthenticated] = useState(false);
@@ -164,6 +206,8 @@ export default function AdminPage() {
   const [partnerOfferForm, setPartnerOfferForm] = useState(emptyPartnerOfferForm);
   const [referralChannelByProgram, setReferralChannelByProgram] = useState<Record<string, string>>({});
   const [userQuery, setUserQuery] = useState("");
+  const [userPage, setUserPage] = useState(0);
+  const [userHasNextPage, setUserHasNextPage] = useState(false);
   const [giftDaysByProgram, setGiftDaysByProgram] = useState<Record<string, string>>({});
   const [giftNoteByProgram, setGiftNoteByProgram] = useState<Record<string, string>>({});
   const [activeTextLocale, setActiveTextLocale] = useState("ru");
@@ -243,6 +287,7 @@ export default function AdminPage() {
     expiresAt: ""
   });
   const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     setTelegramPolicyForm((current) => {
@@ -261,65 +306,91 @@ export default function AdminPage() {
       setAuthenticated(true);
       void refresh();
     }
-  }, []);
+  }, [section]);
 
   async function refresh() {
     setMessage("");
+    setLoading(true);
     try {
-      const [
-        nextStats,
-        nextAnalyses,
-        nextUsers,
-        nextSettings,
-        nextFlags,
-        nextPrompts,
-        nextPromptDefaults,
-        nextPromoCodes,
-        nextPartnerPrograms,
-        nextPartnerOffers,
-        nextPartnerRedemptions,
-        nextPartnerCoreSnapshot
-      ] = await Promise.all([
-        adminApi.stats(),
-        adminApi.analyses(),
-        adminApi.users({ q: userQuery, limit: 30 }),
-        adminApi.settings(),
-        adminApi.flags(),
-        adminApi.prompts(),
-        adminApi.promptDefaults(),
-        adminApi.promoCodes(),
-        adminApi.partnerPrograms(),
-        adminApi.partnerOffers(),
-        adminApi.partnerRedemptions(),
-        adminApi.partnerCore().catch((reason) => ({
-          ...emptyPartnerCoreSnapshot,
-          configured: true,
-          error: reason instanceof Error ? reason.message : "Partner Core недоступен"
-        }))
-      ]);
-      setStats(nextStats);
-      setAnalyses(nextAnalyses);
-      setUsers(nextUsers);
-      setSettings(nextSettings);
-      setFlags(nextFlags);
-      setPrompts(nextPrompts);
-      setPromptDefaults(nextPromptDefaults);
-      setPromoCodes(nextPromoCodes);
-      setPartnerPrograms(nextPartnerPrograms);
-      setPartnerOffers(nextPartnerOffers);
-      setPartnerRedemptions(nextPartnerRedemptions);
-      setPartnerCoreSnapshot(nextPartnerCoreSnapshot);
-      hydrateTextDrafts(nextSettings);
-      hydrateLocaleForm(nextSettings);
-      hydratePriceForm(nextSettings);
-      hydrateHabitPriceForm(nextSettings);
-      hydrateHabitAiForm(nextSettings);
-      hydrateTelegramPolicyForm(nextSettings);
-      hydratePromptForm(nextPrompts, nextPromptDefaults);
+      if (section === "overview") {
+        const [nextStats, nextAnalyses] = await Promise.all([adminApi.stats(), adminApi.analyses()]);
+        setStats(nextStats);
+        setAnalyses(nextAnalyses);
+      }
+
+      if (section === "users") {
+        await loadUsers(userPage);
+      }
+
+      if (section === "commercial") {
+        const [nextSettings, nextPromoCodes] = await Promise.all([adminApi.settings(), adminApi.promoCodes()]);
+        setSettings(nextSettings);
+        setPromoCodes(nextPromoCodes);
+        hydratePriceForm(nextSettings);
+        hydrateHabitPriceForm(nextSettings);
+      }
+
+      if (section === "ai") {
+        const [nextSettings, nextPrompts, nextPromptDefaults] = await Promise.all([
+          adminApi.settings(),
+          adminApi.prompts(),
+          adminApi.promptDefaults()
+        ]);
+        setSettings(nextSettings);
+        setPrompts(nextPrompts);
+        setPromptDefaults(nextPromptDefaults);
+        hydrateHabitAiForm(nextSettings);
+        hydratePromptForm(nextPrompts, nextPromptDefaults);
+      }
+
+      if (section === "content") {
+        const nextSettings = await adminApi.settings();
+        setSettings(nextSettings);
+        hydrateLocaleForm(nextSettings);
+        hydrateTextDrafts(nextSettings);
+      }
+
+      if (section === "integrations") {
+        const nextSettings = await adminApi.settings();
+        setSettings(nextSettings);
+        hydrateTelegramPolicyForm(nextSettings);
+      }
+
+      if (section === "partners") {
+        const [nextPartnerPrograms, nextPartnerOffers, nextPartnerRedemptions, nextPartnerCoreSnapshot] = await Promise.all([
+          adminApi.partnerPrograms(),
+          adminApi.partnerOffers(),
+          adminApi.partnerRedemptions(),
+          adminApi.partnerCore().catch((reason) => ({
+            ...emptyPartnerCoreSnapshot,
+            configured: true,
+            error: reason instanceof Error ? reason.message : "Partner Core недоступен"
+          }))
+        ]);
+        setPartnerPrograms(nextPartnerPrograms);
+        setPartnerOffers(nextPartnerOffers);
+        setPartnerRedemptions(nextPartnerRedemptions);
+        setPartnerCoreSnapshot(nextPartnerCoreSnapshot);
+      }
+
+      if (section === "system") {
+        const [nextSettings, nextFlags, nextPrompts, nextAnalyses] = await Promise.all([
+          adminApi.settings(),
+          adminApi.flags(),
+          adminApi.prompts(),
+          adminApi.analyses()
+        ]);
+        setSettings(nextSettings);
+        setFlags(nextFlags);
+        setPrompts(nextPrompts);
+        setAnalyses(nextAnalyses);
+      }
     } catch (reason) {
       setAuthenticated(false);
       window.sessionStorage.removeItem("levelup_admin_session");
       setMessage(reason instanceof Error ? reason.message : "Admin API failed");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -844,10 +915,17 @@ export default function AdminPage() {
     }
   }
 
-  async function loadUsers() {
+  async function loadUsers(page = 0, query = userQuery) {
     setMessage("");
     try {
-      setUsers(await adminApi.users({ q: userQuery, limit: 50 }));
+      const result = await adminApi.users({
+        q: query,
+        limit: adminUserPageSize + 1,
+        offset: page * adminUserPageSize
+      });
+      setUsers(result.slice(0, adminUserPageSize));
+      setUserHasNextPage(result.length > adminUserPageSize);
+      setUserPage(page);
     } catch (reason) {
       setMessage(reason instanceof Error ? reason.message : "Failed to load users");
     }
@@ -890,67 +968,113 @@ export default function AdminPage() {
     : adminText.habitTrialDisabled;
   const partnerLedgerRevenueCents = partnerCoreSnapshot.ledgerEntries.reduce((total, entry) => total + adminRecordNumber(entry, "amount_cents", "amountCents"), 0);
   const partnerConversions = partnerCoreSnapshot.partners.reduce((total, partner) => total + Number(partner.conversions_count ?? 0), 0);
+  const activeSection = adminSections.find((item) => item.id === section) ?? adminSections[0];
+
+  if (!authenticated) {
+    return (
+      <main className="admin-login-page">
+        <section className="admin-login-panel stack">
+          <div className="admin-login-brand">ORKEN.LIFE <span>ADMIN</span></div>
+          <div>
+            <div className="eyebrow">Защищённый раздел</div>
+            <h1>Вход в админ-панель</h1>
+            <p className="muted">Управление продуктом, пользователями и интеграциями Orken.</p>
+          </div>
+          <input
+            className="input"
+            data-testid="admin-password-input"
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") void login();
+            }}
+            placeholder={adminText.passwordPlaceholder}
+            autoComplete="current-password"
+          />
+          <button className="button" data-testid="admin-login-button" onClick={login} disabled={loading}>
+            {loading ? "Проверяем…" : adminText.login}
+          </button>
+          {message && <div className="admin-notice error">{message}</div>}
+        </section>
+      </main>
+    );
+  }
 
   return (
-    <main className="page stack">
-      <section className="stack">
-        <div>
-          <div className="eyebrow">{adminText.eyebrow}</div>
-          <h1>{adminText.title}</h1>
+    <main className="admin-console-shell">
+      <aside className="admin-console-sidebar">
+        <Link className="admin-console-brand" href="/admin">
+          <span className="admin-console-brand-mark">O</span>
+          <span>ORKEN.LIFE <small>ADMIN</small></span>
+        </Link>
+        <nav className="admin-console-nav" aria-label="Разделы админ-панели">
+          {adminSections.map((item) => {
+            const Icon = item.icon;
+            return (
+              <Link className={item.id === section ? "active" : ""} href={item.href} key={item.id} aria-current={item.id === section ? "page" : undefined}>
+                <Icon size={18} aria-hidden="true" />
+                <span>{item.label}</span>
+              </Link>
+            );
+          })}
+        </nav>
+        <div className="admin-console-sidebar-footer">
+          <span className="admin-session-dot">Сессия активна</span>
+          <button className="admin-sidebar-action" onClick={logout}>
+            <LogOut size={17} aria-hidden="true" />
+            <span>{adminText.logout}</span>
+          </button>
         </div>
-        {!authenticated ? (
-          <div className="grid grid-2">
-            <input className="input" data-testid="admin-password-input" type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder={adminText.passwordPlaceholder} />
-            <button className="button" data-testid="admin-login-button" onClick={login}>{adminText.login}</button>
-          </div>
-        ) : (
-          <div className="row">
-            <p className="muted" style={{ margin: 0 }}>{adminText.activeSession}</p>
-            <button className="button secondary" style={{ width: "auto" }} onClick={logout}>{adminText.logout}</button>
-          </div>
-        )}
-        {message && <div className="card" style={{ borderColor: "var(--danger)" }}>{message}</div>}
-      </section>
+      </aside>
 
-      {authenticated && (
-        <>
-          {stats && (
+      <section className="admin-console-workspace">
+        <header className="admin-console-header">
+          <div>
+            <div className="eyebrow">Управление Orken</div>
+            <h1>{activeSection.title}</h1>
+            <p>{activeSection.description}</p>
+          </div>
+          <button className="admin-icon-button" onClick={() => void refresh()} aria-label="Обновить данные" title="Обновить данные" disabled={loading}>
+            <RefreshCw size={19} className={loading ? "spinning" : ""} aria-hidden="true" />
+          </button>
+        </header>
+
+        {message && <div className="admin-notice error">{message}</div>}
+        {loading && <div className="admin-loading-line" aria-label="Загрузка" />}
+          {section === "overview" && stats && (
             <section className="grid grid-3" data-testid="admin-stats">
-              <Metric label={adminText.stats[0]} value={stats.analysesTotal} />
-              <Metric label={adminText.stats[1]} value={stats.paymentsSucceeded} />
-              <Metric label={adminText.stats[2]} value={stats.revenueSucceeded} />
-              <Metric label={adminText.stats[3]} value={stats.eventsLast24h} />
-              <Metric label={adminText.stats[4]} value={stats.failedAnalyses} />
-              <Metric label={adminText.stats[5]} value={stats.analysesByStatus.map((item) => `${item.status}:${item.count}`).join(" ")} />
-              <Metric label="Habit programs" value={`${stats.habitProgramsActive}/${stats.habitProgramsTotal}`} />
-              <Metric label="Habit XP total" value={stats.habitXpTotal} />
-              <Metric label="Habit checkins" value={stats.habitCheckinsTotal} />
-              <Metric label="Habit insights" value={stats.habitInsightsTotal} />
+              <Metric label="Диагностики" value={stats.analysesTotal} />
+              <Metric label="Оплаченные отчёты" value={stats.paymentsSucceeded} />
+              <Metric label="Выручка, центы" value={stats.revenueSucceeded} />
+              <Metric label="События за 24 часа" value={stats.eventsLast24h} />
+              <Metric label="Ошибки анализа" value={stats.failedAnalyses} />
+              <Metric label="В обработке" value={stats.analysesByStatus.find((item) => item.status === "PROCESSING")?.count ?? 0} />
+              <Metric label="Программы привычек" value={`${stats.habitProgramsActive}/${stats.habitProgramsTotal}`} />
+              <Metric label="Всего XP" value={stats.habitXpTotal} />
+              <Metric label="Отметки привычек" value={stats.habitCheckinsTotal} />
+              <Metric label="Сохранённые инсайты" value={stats.habitInsightsTotal} />
             </section>
           )}
 
-          <section className="grid grid-3">
-            <button className="button secondary" onClick={upsertLocaleSettings}>{adminText.seedLocales}</button>
-            <button className="button secondary" onClick={upsertFeatureFlag}>{adminText.seedFlag}</button>
-            <button className="button secondary" onClick={seedDefaultPrompts}>{adminText.seedPrompt}</button>
-          </section>
+          {section === "overview" && (
+            <section className="admin-overview-links" aria-label="Разделы управления">
+              {adminSections.filter((item) => item.id !== "overview").map((item) => {
+                const Icon = item.icon;
+                return (
+                  <Link className="admin-overview-link" href={item.href} key={item.id}>
+                    <Icon size={20} aria-hidden="true" />
+                    <span><strong>{item.label}</strong><small>{item.description}</small></span>
+                  </Link>
+                );
+              })}
+            </section>
+          )}
 
-          <nav className="admin-section-nav" aria-label="Admin sections">
-            <a href="#admin-users">Пользователи</a>
-            <a href="#admin-pricing">Цены и trial</a>
-            <a href="#admin-habits-ai">Habit AI</a>
-            <a href="#admin-telegram">Telegram</a>
-            <a href="#admin-prompts">Промпты</a>
-            <a href="#admin-texts">Тексты</a>
-            <a href="#admin-promos">Промокоды</a>
-            <a href="#admin-partners">Партнерка</a>
-            <a href="#admin-system">Система</a>
-          </nav>
-
-          <section id="admin-users" className="card stack admin-section-card">
+          {section === "users" && <section id="admin-users" className="card stack admin-section-card">
             <div>
-              <h2>Users and usage</h2>
-              <p className="muted">Search users, inspect diagnostics/habits activity, and grant extra usage days for a selected habits program. Gift actions are written to admin audit and analytics events.</p>
+              <h2>Список пользователей</h2>
+              <p className="muted">Поиск по имени, email или ID. В карточке видны диагностики, активность в Навигаторе и доступные программы.</p>
             </div>
             <div className="grid grid-3">
               <input
@@ -960,49 +1084,50 @@ export default function AdminPage() {
                 onKeyDown={(event) => {
                   if (event.key === "Enter") void loadUsers();
                 }}
-                placeholder="Search by email, name, or user id"
+                placeholder="Имя, email или ID пользователя"
               />
-              <button className="button secondary" onClick={loadUsers}>Search users</button>
+              <button className="button secondary" onClick={() => void loadUsers(0)}>Найти</button>
               <button className="button secondary" onClick={() => {
                 setUserQuery("");
-                void adminApi.users({ limit: 30 }).then(setUsers).catch((reason) => setMessage(reason instanceof Error ? reason.message : "Failed to load users"));
-              }}>Reset</button>
+                void loadUsers(0, "");
+              }}>Сбросить</button>
             </div>
             <div className="admin-users-list">
               {users.length === 0 ? (
-                <p className="muted">No users found</p>
+                <p className="muted">Пользователи не найдены</p>
               ) : users.map((user) => (
-                <article className="admin-user-card" key={user.id}>
-                  <div className="admin-user-head">
+                <details className="admin-user-card" key={user.id}>
+                  <summary className="admin-user-head admin-user-summary">
                     <div>
                       <h3>{user.name || user.email}</h3>
                       <p className="muted">{user.email} · {user.status} · {user.role} · {user.locale}</p>
-                      <p className="muted">Created {formatAdminDate(user.createdAt)} · Last login {user.lastLoginAt ? formatAdminDate(user.lastLoginAt) : "never"}</p>
+                      <p className="muted">Создан {formatAdminDate(user.createdAt)} · Последний вход {user.lastLoginAt ? formatAdminDate(user.lastLoginAt) : "не было"}</p>
                     </div>
                     <code>{user.id}</code>
-                  </div>
+                  </summary>
+                  <div className="admin-user-details">
                   <div className="admin-user-metrics">
-                    <AdminMiniMetric label="Analyses" value={`${user.stats.analysesDone}/${user.stats.analysesTotal}`} />
-                    <AdminMiniMetric label="Payments" value={`${user.stats.paymentsSucceeded} · ${user.stats.revenueSucceeded}`} />
-                    <AdminMiniMetric label="Habits" value={`${user.stats.habitProgramsActive}/${user.stats.habitProgramsTotal}`} />
+                    <AdminMiniMetric label="Диагностики" value={`${user.stats.analysesDone}/${user.stats.analysesTotal}`} />
+                    <AdminMiniMetric label="Платежи" value={`${user.stats.paymentsSucceeded} · ${user.stats.revenueSucceeded}`} />
+                    <AdminMiniMetric label="Программы" value={`${user.stats.habitProgramsActive}/${user.stats.habitProgramsTotal}`} />
                     <AdminMiniMetric label="XP" value={user.stats.habitXp} />
-                    <AdminMiniMetric label="Checkins" value={user.stats.habitCheckins} />
-                    <AdminMiniMetric label="Insights" value={user.stats.habitInsights} />
+                    <AdminMiniMetric label="Отметки" value={user.stats.habitCheckins} />
+                    <AdminMiniMetric label="Инсайты" value={user.stats.habitInsights} />
                     <AdminMiniMetric label="Telegram" value={user.stats.telegramAccounts} />
-                    <AdminMiniMetric label="Last event" value={user.stats.lastEventAt ? formatAdminDate(user.stats.lastEventAt) : "none"} />
+                    <AdminMiniMetric label="Активность" value={user.stats.lastEventAt ? formatAdminDate(user.stats.lastEventAt) : "нет"} />
                   </div>
                   <div className="admin-program-list">
                     {user.habitPrograms.length === 0 ? (
-                      <p className="muted">No habits programs yet</p>
+                      <p className="muted">Программ привычек пока нет</p>
                     ) : user.habitPrograms.map((program) => (
                       <div className="admin-program-row" key={program.id}>
                         <div>
                           <strong>{program.title}</strong>
                           <span>
-                            {program.status} · {program.subscriptionStatus} · cycle {program.currentCycle}, week {program.currentWeek}
+                            {program.status} · {program.subscriptionStatus} · цикл {program.currentCycle}, неделя {program.currentWeek}
                           </span>
                           <span>
-                            Trial left: {program.trialDaysLeft ?? 0} days · ends {program.trialEndsAt ? formatAdminDate(program.trialEndsAt) : "not set"} · XP {program.xp}
+                            Trial: {program.trialDaysLeft ?? 0} дн. · до {program.trialEndsAt ? formatAdminDate(program.trialEndsAt) : "не задано"} · XP {program.xp}
                           </span>
                         </div>
                         <div className="admin-gift-form">
@@ -1010,16 +1135,16 @@ export default function AdminPage() {
                             className="input"
                             value={giftDaysByProgram[program.id] ?? ""}
                             onChange={(event) => setGiftDaysByProgram((current) => ({ ...current, [program.id]: event.target.value }))}
-                            placeholder="Days"
+                            placeholder="Дни"
                             inputMode="numeric"
                           />
                           <input
                             className="input"
                             value={giftNoteByProgram[program.id] ?? ""}
                             onChange={(event) => setGiftNoteByProgram((current) => ({ ...current, [program.id]: event.target.value }))}
-                            placeholder="Note"
+                            placeholder="Комментарий"
                           />
-                          <button className="button secondary" onClick={() => giftProgramDays(user, program.id)}>Gift days</button>
+                          <button className="button secondary" onClick={() => giftProgramDays(user, program.id)}>Подарить дни</button>
                         </div>
                       </div>
                     ))}
@@ -1027,43 +1152,50 @@ export default function AdminPage() {
                   {(user.recentEvents.length > 0 || user.recentAnalyses.length > 0) && (
                     <div className="admin-user-activity">
                       <div>
-                        <strong>Recent events</strong>
-                        {user.recentEvents.length === 0 ? <span className="muted">none</span> : user.recentEvents.slice(0, 5).map((event) => (
+                        <strong>Последние события</strong>
+                        {user.recentEvents.length === 0 ? <span className="muted">нет</span> : user.recentEvents.slice(0, 5).map((event) => (
                           <span key={event.id}>{formatAdminDate(event.createdAt)} · {event.name}</span>
                         ))}
                       </div>
                       <div>
-                        <strong>Recent analyses</strong>
-                        {user.recentAnalyses.length === 0 ? <span className="muted">none</span> : user.recentAnalyses.map((analysis) => (
+                        <strong>Последние диагностики</strong>
+                        {user.recentAnalyses.length === 0 ? <span className="muted">нет</span> : user.recentAnalyses.map((analysis) => (
                           <span key={analysis.id}>{formatAdminDate(analysis.createdAt)} · {analysis.status}</span>
                         ))}
                       </div>
                     </div>
                   )}
-                </article>
+                  </div>
+                </details>
               ))}
             </div>
-          </section>
+            <div className="admin-pagination" aria-label="Навигация по пользователям">
+              <button className="button secondary" disabled={userPage === 0} onClick={() => void loadUsers(userPage - 1)}>Назад</button>
+              <span>Страница {userPage + 1}</span>
+              <button className="button secondary" disabled={!userHasNextPage} onClick={() => void loadUsers(userPage + 1)}>Далее</button>
+            </div>
+          </section>}
 
-          <section id="admin-locales" className="card stack admin-section-card">
+          {section === "content" && <section id="admin-locales" className="card stack admin-section-card">
             <div>
-              <h2>Localization settings</h2>
-              <p className="muted">Controls which locales are enabled and which locale is used by default. Translation JSON is edited below in Texts and translations.</p>
+              <h2>Языки интерфейса</h2>
+              <p className="muted">Выберите доступные языки и язык по умолчанию. Словари редактируются в блоке ниже.</p>
             </div>
             <div className="grid grid-3">
               <label className="stack">
-                <span className="eyebrow">Enabled locales</span>
+                <span className="eyebrow">Доступные языки</span>
                 <input className="input" value={localeForm.enabledLocales} onChange={(event) => setLocaleForm({ ...localeForm, enabledLocales: event.target.value })} placeholder="ru,en" />
               </label>
               <label className="stack">
-                <span className="eyebrow">Default locale</span>
+                <span className="eyebrow">Язык по умолчанию</span>
                 <input className="input" value={localeForm.defaultLocale} onChange={(event) => setLocaleForm({ ...localeForm, defaultLocale: event.target.value.toLowerCase() })} placeholder="ru" />
               </label>
-              <button className="button" onClick={saveLocaleSettings}>Save locale settings</button>
+              <button className="button" onClick={saveLocaleSettings}>Сохранить языки</button>
+              <button className="button secondary" onClick={upsertLocaleSettings}>{adminText.seedLocales}</button>
             </div>
-          </section>
+          </section>}
 
-          <section id="admin-pricing" className="card stack admin-section-card">
+          {section === "commercial" && <section id="admin-pricing" className="card stack admin-section-card">
             <div>
               <h2>{adminText.priceTitle}</h2>
               <p className="muted">{adminText.priceCopy}</p>
@@ -1077,9 +1209,9 @@ export default function AdminPage() {
               <strong>{adminText.habitPricePreview}: {reportPricePreview}</strong>
               <span>{adminText.priceCopy}</span>
             </div>
-          </section>
+          </section>}
 
-          <section className="card stack admin-section-card">
+          {section === "commercial" && <section className="card stack admin-section-card">
             <div>
               <h2>{adminText.habitPriceTitle}</h2>
               <p className="muted">{adminText.habitPriceCopy}</p>
@@ -1105,52 +1237,52 @@ export default function AdminPage() {
             <div className="grid grid-3">
               <button className="button" onClick={saveHabitPrice}>{adminText.saveHabitPrice}</button>
             </div>
-          </section>
+          </section>}
 
-          <section id="admin-habits-ai" className="card stack admin-section-card">
+          {section === "ai" && <section id="admin-habits-ai" className="card stack admin-section-card">
             <div>
-              <h2>Habit AI settings</h2>
-              <p className="muted">Switch week summaries between deterministic rules and LLM generation. LLM mode falls back to rules if the provider is unavailable.</p>
+              <h2>AI Навигатора привычек</h2>
+              <p className="muted">Выберите правила или LLM для итогов недели. При недоступности провайдера система автоматически использует безопасный rule-based fallback.</p>
             </div>
             <div className="grid grid-3">
               <label className="stack">
-                <span className="eyebrow">Week summary mode</span>
+                <span className="eyebrow">Итоги недели</span>
                 <select className="input" value={habitAiForm.weekSummaryMode} onChange={(event) => setHabitAiForm({ ...habitAiForm, weekSummaryMode: event.target.value as "rule" | "llm" })}>
-                  <option value="rule">Rule based</option>
-                  <option value="llm">LLM based</option>
+                  <option value="rule">По правилам</option>
+                  <option value="llm">Через LLM</option>
                 </select>
               </label>
               <label className="stack">
-                <span className="eyebrow">Week summary model</span>
+                <span className="eyebrow">Модель итогов недели</span>
                 <input className="input" value={habitAiForm.weekSummaryModel} onChange={(event) => setHabitAiForm({ ...habitAiForm, weekSummaryModel: event.target.value })} placeholder="gpt-4o-mini" />
               </label>
               <label className="stack">
-                <span className="eyebrow">ORKEN temperature</span>
+                <span className="eyebrow">Температура ORKEN</span>
                 <input className="input" value={habitAiForm.navigatorTemperature} onChange={(event) => setHabitAiForm({ ...habitAiForm, navigatorTemperature: event.target.value })} placeholder="0.45" inputMode="decimal" />
               </label>
-              <button className="button" onClick={saveHabitAiSettings}>Save Habit AI settings</button>
+              <button className="button" onClick={saveHabitAiSettings}>Сохранить AI-настройки</button>
             </div>
-          </section>
+          </section>}
 
-          <section id="admin-telegram" className="card stack admin-section-card">
+          {section === "integrations" && <section id="admin-telegram" className="card stack admin-section-card">
             <div>
-              <h2>Telegram policy</h2>
-              <p className="muted">Controls bot rate limits, reminder copy, and short-lived Telegram-to-web login links. Bot token and provider secrets stay only in backend environment variables.</p>
+              <h2>Telegram-бот</h2>
+              <p className="muted">Лимиты, тексты напоминаний и короткоживущие ссылки входа из Telegram. Токен бота и ключи провайдеров хранятся только на backend.</p>
             </div>
             <div className="grid grid-3">
               <label className="stack">
-                <span className="eyebrow">Rate window, ms</span>
+                <span className="eyebrow">Окно лимита, мс</span>
                 <input className="input" value={telegramPolicyForm.rateLimitWindowMs} onChange={(event) => setTelegramPolicyForm({ ...telegramPolicyForm, rateLimitWindowMs: event.target.value })} inputMode="numeric" />
               </label>
               <label className="stack">
-                <span className="eyebrow">Max messages/window</span>
+                <span className="eyebrow">Сообщений в одном окне</span>
                 <input className="input" value={telegramPolicyForm.rateLimitMax} onChange={(event) => setTelegramPolicyForm({ ...telegramPolicyForm, rateLimitMax: event.target.value })} inputMode="numeric" />
               </label>
               <label className="stack">
-                <span className="eyebrow">Web login links</span>
+                <span className="eyebrow">Ссылки входа в кабинет</span>
                 <select className="input" value={telegramPolicyForm.webLoginEnabled ? "true" : "false"} onChange={(event) => setTelegramPolicyForm({ ...telegramPolicyForm, webLoginEnabled: event.target.value === "true" })}>
-                  <option value="true">Enabled</option>
-                  <option value="false">Disabled</option>
+                  <option value="true">Включены</option>
+                  <option value="false">Отключены</option>
                 </select>
               </label>
             </div>
@@ -1160,10 +1292,10 @@ export default function AdminPage() {
               onChange={(event) => setTelegramPolicyForm({ ...telegramPolicyForm, reminderTemplate: event.target.value })}
               spellCheck={false}
             />
-            <p className="muted">Placeholders: {"{{habitTitle}}"}, {"{{taskText}}"}, {"{{metricText}}"}</p>
+            <p className="muted">Переменные: {"{{habitTitle}}"}, {"{{taskText}}"}, {"{{metricText}}"}</p>
             <div className="grid grid-2">
               <label className="stack">
-                <span className="eyebrow">Welcome template</span>
+                <span className="eyebrow">Приветственное сообщение</span>
                 <textarea
                   className="input text-editor compact"
                   value={telegramPolicyForm.welcomeTemplate}
@@ -1172,7 +1304,7 @@ export default function AdminPage() {
                 />
               </label>
               <label className="stack">
-                <span className="eyebrow">Daily plan template</span>
+                <span className="eyebrow">Сообщение с планом на день</span>
                 <textarea
                   className="input text-editor compact"
                   value={telegramPolicyForm.todayTemplate}
@@ -1181,13 +1313,13 @@ export default function AdminPage() {
                 />
               </label>
             </div>
-            <p className="muted">Daily placeholders: {"{{habitTitle}}"}, {"{{whatToDo}}"}, {"{{lowEnergy}}"}, {"{{why}}"}, {"{{time}}"}, {"{{weekProgress}}"}</p>
+            <p className="muted">Переменные плана: {"{{habitTitle}}"}, {"{{whatToDo}}"}, {"{{lowEnergy}}"}, {"{{why}}"}, {"{{time}}"}, {"{{weekProgress}}"}</p>
             <div className="admin-avatar-control">
               {telegramPolicyForm.assistantAvatarUrl.trim() && (
-                <img src={telegramPolicyForm.assistantAvatarUrl.trim()} alt="Assistant avatar preview" />
+                <img src={telegramPolicyForm.assistantAvatarUrl.trim()} alt="Предпросмотр аватара ассистента" />
               )}
               <label className="stack">
-                <span className="eyebrow">Assistant avatar URL</span>
+                <span className="eyebrow">URL аватара ассистента</span>
                 <input
                   className="input"
                   value={telegramPolicyForm.assistantAvatarUrl}
@@ -1196,14 +1328,14 @@ export default function AdminPage() {
                 />
               </label>
               <label className="button secondary admin-upload-button">
-                Upload avatar
+                Загрузить аватар
                 <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => void uploadAssistantAvatar(event.target.files?.[0] ?? null)} />
               </label>
             </div>
-            <button className="button" onClick={saveTelegramPolicySettings}>Save Telegram policy</button>
-          </section>
+            <button className="button" onClick={saveTelegramPolicySettings}>Сохранить настройки Telegram</button>
+          </section>}
 
-          <section id="admin-prompts" className="card stack admin-section-card">
+          {section === "ai" && <section id="admin-prompts" className="card stack admin-section-card">
             <div>
               <h2>{adminText.promptTitle}</h2>
               <p className="muted">{adminText.promptCopy}</p>
@@ -1250,9 +1382,9 @@ export default function AdminPage() {
               <input className="input" value={promptForm.locale} onChange={(event) => setPromptForm({ ...promptForm, locale: event.target.value.toLowerCase() })} placeholder={adminText.promptLocale} />
               <input className="input" value={promptForm.version} onChange={(event) => setPromptForm({ ...promptForm, version: Number(event.target.value) || 1 })} placeholder={adminText.promptVersion} inputMode="numeric" />
               <select className="input" value={promptForm.status} onChange={(event) => setPromptForm({ ...promptForm, status: event.target.value as PromptTemplateInput["status"] })}>
-                <option value="DRAFT">DRAFT</option>
-                <option value="ACTIVE">ACTIVE</option>
-                <option value="ARCHIVED">ARCHIVED</option>
+                <option value="DRAFT">Черновик</option>
+                <option value="ACTIVE">Активный</option>
+                <option value="ARCHIVED">В архиве</option>
               </select>
               <input className="input" value={promptForm.title} onChange={(event) => setPromptForm({ ...promptForm, title: event.target.value })} placeholder={adminText.promptTitleField} />
             </div>
@@ -1273,9 +1405,9 @@ export default function AdminPage() {
               <button className="button secondary" onClick={createNextPromptVersion}>{adminText.newPromptVersion}</button>
               <button className="button secondary" onClick={seedDefaultPrompts}>{adminText.seedPrompt}</button>
             </div>
-          </section>
+          </section>}
 
-          <section id="admin-texts" className="card stack admin-section-card">
+          {section === "content" && <section id="admin-texts" className="card stack admin-section-card">
             <div>
               <h2>{adminText.textTitle}</h2>
               <p className="muted">{adminText.textCopy}</p>
@@ -1302,61 +1434,67 @@ export default function AdminPage() {
               <button className="button" onClick={() => saveTexts(activeTextLocale)}>{adminText.saveTexts}</button>
               <button className="button secondary" onClick={() => resetTexts(activeTextLocale)}>{adminText.resetTexts}</button>
             </div>
-          </section>
+          </section>}
 
-          <section id="admin-promos" className="card stack admin-section-card">
+          {section === "commercial" && <section id="admin-promos" className="card stack admin-section-card">
             <h2>{adminText.promoTitle}</h2>
             <div className="grid grid-3">
-              <input className="input" value={promoForm.code} onChange={(event) => setPromoForm({ ...promoForm, code: event.target.value })} placeholder="Code" />
-              <input className="input" value={promoForm.description} onChange={(event) => setPromoForm({ ...promoForm, description: event.target.value })} placeholder="Description" />
+              <input className="input" value={promoForm.code} onChange={(event) => setPromoForm({ ...promoForm, code: event.target.value })} placeholder="Промокод" />
+              <input className="input" value={promoForm.description} onChange={(event) => setPromoForm({ ...promoForm, description: event.target.value })} placeholder="Описание" />
               <select className="input" value={promoForm.discountType} onChange={(event) => setPromoForm({ ...promoForm, discountType: event.target.value as "PERCENT" | "FIXED_AMOUNT" })}>
-                <option value="PERCENT">Percent</option>
-                <option value="FIXED_AMOUNT">Fixed amount</option>
+                <option value="PERCENT">Процент</option>
+                <option value="FIXED_AMOUNT">Фиксированная сумма</option>
               </select>
               {promoForm.discountType === "PERCENT" ? (
-                <input className="input" value={promoForm.percentOff} onChange={(event) => setPromoForm({ ...promoForm, percentOff: event.target.value })} placeholder="Percent off" />
+                <input className="input" value={promoForm.percentOff} onChange={(event) => setPromoForm({ ...promoForm, percentOff: event.target.value })} placeholder="Размер скидки, %" />
               ) : (
-                <input className="input" value={promoForm.amountOff} onChange={(event) => setPromoForm({ ...promoForm, amountOff: event.target.value })} placeholder="Amount off, cents" />
+                <input className="input" value={promoForm.amountOff} onChange={(event) => setPromoForm({ ...promoForm, amountOff: event.target.value })} placeholder="Размер скидки, центы" />
               )}
-              <input className="input" value={promoForm.currency} onChange={(event) => setPromoForm({ ...promoForm, currency: event.target.value })} placeholder="Currency" />
-              <input className="input" value={promoForm.maxRedemptions} onChange={(event) => setPromoForm({ ...promoForm, maxRedemptions: event.target.value })} placeholder="Max redemptions" />
+              <input className="input" value={promoForm.currency} onChange={(event) => setPromoForm({ ...promoForm, currency: event.target.value })} placeholder="Валюта" />
+              <input className="input" value={promoForm.maxRedemptions} onChange={(event) => setPromoForm({ ...promoForm, maxRedemptions: event.target.value })} placeholder="Лимит применений" />
               <input className="input" type="datetime-local" value={promoForm.expiresAt} onChange={(event) => setPromoForm({ ...promoForm, expiresAt: event.target.value })} />
-              <button className="button" onClick={upsertPromoCode}>Save promo</button>
+              <button className="button" onClick={upsertPromoCode}>Сохранить промокод</button>
             </div>
             <div className="stack">
-              {promoCodes.length === 0 ? <p className="muted">No promo codes</p> : promoCodes.map((promoCode) => (
+              {promoCodes.length === 0 ? <p className="muted">Промокоды не созданы</p> : promoCodes.map((promoCode) => (
                 <div className="row" key={promoCode.id}>
                   <span>
                     <strong>{promoCode.code}</strong>{" "}
                     {promoCode.discountType === "PERCENT" ? `${promoCode.percentOff}%` : `${promoCode.amountOff} ${promoCode.currency}`}
-                    {" "}used {promoCode.redemptions}{promoCode.maxRedemptions ? `/${promoCode.maxRedemptions}` : ""}
+                    {" "}использован {promoCode.redemptions}{promoCode.maxRedemptions ? `/${promoCode.maxRedemptions}` : ""} раз
                   </span>
                   <button className="button secondary" onClick={() => togglePromoCode(promoCode)}>
-                    {promoCode.active ? "Deactivate" : "Activate"}
+                    {promoCode.active ? "Отключить" : "Включить"}
                   </button>
                 </div>
               ))}
             </div>
-          </section>
+          </section>}
 
-          <section id="admin-partners" className="card stack admin-section-card">
+          {section === "partners" && <section id="admin-partners" className="card stack admin-section-card">
             <div className="row">
               <div>
                 <h2>Партнёрская программа Orken</h2>
                 <p className="muted">Управление партнёрами, программой, офферами, валютой наград и revenue встроено в текущую админку. Partner Core работает как центральный backend.</p>
               </div>
               <div className="row" style={{ justifyContent: "flex-end" }}>
-                <button className="button secondary" onClick={syncPartnerOffers}>Sync from Partner Core</button>
+                <button className="button secondary" onClick={syncPartnerOffers}>Синхронизировать</button>
               </div>
             </div>
 
             {partnerCoreSnapshot.error && <div className="admin-partner-warning">Partner Core недоступен: {partnerCoreSnapshot.error}</div>}
             {!partnerCoreSnapshot.configured && <div className="admin-partner-warning">Partner Core не настроен на backend Orken. Локальные формы доступны, синхронизация отключена.</div>}
+            {partnerCoreSnapshot.configured && !partnerCoreSnapshot.error && (
+              <div className="admin-core-connected">
+                <span>Partner Core подключён</span>
+                <small>Проект: {adminRecordText(partnerCoreSnapshot.project ?? {}, "name") || "Orken"} · синхронизация server-to-server активна</small>
+              </div>
+            )}
 
             <div className="grid grid-3">
               <AdminMiniMetric label="Партнеры" value={partnerCoreSnapshot.partners.length} />
               <AdminMiniMetric label="Конверсии" value={partnerConversions} />
-              <AdminMiniMetric label="Revenue ledger" value={formatPartnerMoney(partnerLedgerRevenueCents)} />
+              <AdminMiniMetric label="Начисления" value={formatPartnerMoney(partnerLedgerRevenueCents)} />
               <AdminMiniMetric label="Программы" value={partnerCoreSnapshot.programs.length} />
               <AdminMiniMetric label="Офферы" value={partnerCoreSnapshot.placements.length} />
               <AdminMiniMetric label="На модерации" value={partnerCoreSnapshot.reviewTasks.filter((task) => adminRecordText(task, "status") === "open").length} />
@@ -1389,125 +1527,125 @@ export default function AdminPage() {
 
             <div className="grid grid-2">
               <div className="stack">
-                <h3>Affiliate Program</h3>
+                <h3>Партнёрская программа</h3>
                 <div className="grid grid-2">
-                  <input className="input" value={partnerProgramForm.name} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, name: event.target.value })} placeholder="Program name" />
-                  <input className="input" value={partnerProgramForm.partnerCoreProgramId} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, partnerCoreProgramId: event.target.value })} placeholder="Partner Core program id" />
-                  <input className="input" value={partnerProgramForm.referralDestination} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, referralDestination: event.target.value })} placeholder="Referral destination" />
+                  <input className="input" value={partnerProgramForm.name} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, name: event.target.value })} placeholder="Название программы" />
+                  <input className="input" value={partnerProgramForm.partnerCoreProgramId} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, partnerCoreProgramId: event.target.value })} placeholder="ID программы в Partner Core" />
+                  <input className="input" value={partnerProgramForm.referralDestination} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, referralDestination: event.target.value })} placeholder="Страница перехода по ссылке" />
                   <select className="input" value={partnerProgramForm.status} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, status: event.target.value })}>
-                    <option value="PAUSED">PAUSED</option>
-                    <option value="ACTIVE">ACTIVE</option>
+                    <option value="PAUSED">Приостановлена</option>
+                    <option value="ACTIVE">Активна</option>
                   </select>
                   <select className="input" value={partnerProgramForm.customerBonusType} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, customerBonusType: event.target.value })}>
-                    <option value="NONE">No bonus</option>
-                    <option value="FREE_DAYS">Free days</option>
-                    <option value="DISCOUNT">Discount</option>
-                    <option value="CREDITS">Credits</option>
-                    <option value="CUSTOM_ENTITLEMENT">Custom entitlement</option>
+                    <option value="NONE">Без бонуса</option>
+                    <option value="FREE_DAYS">Бесплатные дни</option>
+                    <option value="DISCOUNT">Скидка</option>
+                    <option value="CREDITS">Баллы</option>
+                    <option value="CUSTOM_ENTITLEMENT">Особое право доступа</option>
                   </select>
-                  <input className="input" value={partnerProgramForm.customerBonusValue} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, customerBonusValue: event.target.value })} placeholder="Bonus value" />
-                  <input className="input" value={partnerProgramForm.customerBonusEntitlement} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, customerBonusEntitlement: event.target.value })} placeholder="Custom entitlement" />
+                  <input className="input" value={partnerProgramForm.customerBonusValue} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, customerBonusValue: event.target.value })} placeholder="Размер бонуса" />
+                  <input className="input" value={partnerProgramForm.customerBonusEntitlement} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, customerBonusEntitlement: event.target.value })} placeholder="Код права доступа" />
                   <select className="input" value={partnerProgramForm.commissionModel} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, commissionModel: event.target.value })}>
-                    <option value="PERCENT">Percent revenue share</option>
-                    <option value="FIXED">Fixed payout</option>
-                    <option value="HYBRID">Hybrid</option>
+                    <option value="PERCENT">Процент от выручки</option>
+                    <option value="FIXED">Фиксированная выплата</option>
+                    <option value="HYBRID">Гибридная модель</option>
                   </select>
-                  <input className="input" value={partnerProgramForm.commissionRateBps} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, commissionRateBps: event.target.value })} placeholder="Commission bps, 1000 = 10%" />
-                  <input className="input" value={partnerProgramForm.fixedPayoutCents} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, fixedPayoutCents: event.target.value })} placeholder="Fixed payout cents" />
+                  <input className="input" value={partnerProgramForm.commissionRateBps} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, commissionRateBps: event.target.value })} placeholder="Комиссия: 1000 = 10%" />
+                  <input className="input" value={partnerProgramForm.fixedPayoutCents} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, fixedPayoutCents: event.target.value })} placeholder="Фиксированная выплата, центы" />
                   <select className="input" value={partnerProgramForm.commissionWindowType} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, commissionWindowType: event.target.value })}>
-                    <option value="FIRST_PAYMENT">First payment</option>
-                    <option value="MONTHS">N months</option>
-                    <option value="LIFETIME">Lifetime</option>
+                    <option value="FIRST_PAYMENT">Первый платёж</option>
+                    <option value="MONTHS">Несколько месяцев</option>
+                    <option value="LIFETIME">Весь срок</option>
                   </select>
-                  <input className="input" value={partnerProgramForm.commissionWindowMonths} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, commissionWindowMonths: event.target.value })} placeholder="Window months" />
-                  <input className="input" value={partnerProgramForm.lockDays} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, lockDays: event.target.value })} placeholder="Hold days" />
-                  <input className="input" value={partnerProgramForm.termsVersion} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, termsVersion: event.target.value })} placeholder="Terms version" />
+                  <input className="input" value={partnerProgramForm.commissionWindowMonths} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, commissionWindowMonths: event.target.value })} placeholder="Период комиссии, месяцев" />
+                  <input className="input" value={partnerProgramForm.lockDays} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, lockDays: event.target.value })} placeholder="Срок удержания, дней" />
+                  <input className="input" value={partnerProgramForm.termsVersion} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, termsVersion: event.target.value })} placeholder="Версия условий" />
                 </div>
                 <div className="grid grid-2">
-                  <button className="button" onClick={savePartnerProgram}>Save Orken program config</button>
-                  <button className="button secondary" onClick={() => setPartnerProgramForm(emptyPartnerProgramForm)}>Reset</button>
+                  <button className="button" onClick={savePartnerProgram}>Сохранить программу</button>
+                  <button className="button secondary" onClick={() => setPartnerProgramForm(emptyPartnerProgramForm)}>Очистить</button>
                 </div>
               </div>
 
               <div className="stack">
-                <h3>Partner Offer Placement</h3>
-                <p className="muted">This creates/updates Orken's local display and, when configured, creates a Partner Core reward placement. Studio publication happens in Partner Core.</p>
+                <h3>Размещение партнёрского оффера</h3>
+                <p className="muted">Форма обновляет карточку в Orken и создаёт размещение награды в Partner Core. Публикация для проектов студии управляется в Partner Core.</p>
                 <div className="grid grid-2">
                   <select className="input" value={partnerOfferForm.programConfigId} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, programConfigId: event.target.value })}>
-                    <option value="">No local affiliate program</option>
+                    <option value="">Без локальной программы</option>
                     {partnerPrograms.map((program) => <option value={program.id} key={program.id}>{program.name}</option>)}
                   </select>
-                  <input className="input" value={partnerOfferForm.partnerId} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, partnerId: event.target.value })} placeholder="Partner Core partner id/cache" />
-                  <input className="input" value={partnerOfferForm.partnerCorePlacementId} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, partnerCorePlacementId: event.target.value })} placeholder="Partner Core placement id" />
+                  <input className="input" value={partnerOfferForm.partnerId} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, partnerId: event.target.value })} placeholder="ID партнёра в Partner Core" />
+                  <input className="input" value={partnerOfferForm.partnerCorePlacementId} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, partnerCorePlacementId: event.target.value })} placeholder="ID размещения в Partner Core" />
                   <select className="input" value={partnerOfferForm.kind} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, kind: event.target.value })}>
-                    <option value="manual_deal">Manual deal</option>
-                    <option value="reward_trial">Reward trial</option>
-                    <option value="portfolio_credit">Portfolio credit</option>
-                    <option value="qualified_lead">Qualified lead</option>
-                    <option value="paid_service">Paid service</option>
+                    <option value="manual_deal">Ручная сделка</option>
+                    <option value="reward_trial">Пробный доступ</option>
+                    <option value="portfolio_credit">Баллы портфолио</option>
+                    <option value="qualified_lead">Квалифицированный лид</option>
+                    <option value="paid_service">Платная услуга</option>
                   </select>
-                  <input className="input" value={partnerOfferForm.title} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, title: event.target.value })} placeholder="Offer title" />
-                  <input className="input" value={partnerOfferForm.imageUrl} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, imageUrl: event.target.value })} placeholder="Image URL" />
-                  <input className="input" value={partnerOfferForm.redemptionAmount} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, redemptionAmount: event.target.value })} placeholder="XP cost" />
-                  <input className="input" value={partnerOfferForm.capPerMonth} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, capPerMonth: event.target.value })} placeholder="Monthly cap" />
-                  <input className="input" value={partnerOfferForm.partnerPayoutCents} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, partnerPayoutCents: event.target.value })} placeholder="Partner payout cents" />
-                  <input className="input" value={partnerOfferForm.entitlementType} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, entitlementType: event.target.value })} placeholder="Entitlement type" />
+                  <input className="input" value={partnerOfferForm.title} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, title: event.target.value })} placeholder="Название оффера" />
+                  <input className="input" value={partnerOfferForm.imageUrl} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, imageUrl: event.target.value })} placeholder="URL изображения" />
+                  <input className="input" value={partnerOfferForm.redemptionAmount} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, redemptionAmount: event.target.value })} placeholder="Стоимость в XP" />
+                  <input className="input" value={partnerOfferForm.capPerMonth} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, capPerMonth: event.target.value })} placeholder="Лимит в месяц" />
+                  <input className="input" value={partnerOfferForm.partnerPayoutCents} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, partnerPayoutCents: event.target.value })} placeholder="Выплата партнёру, центы" />
+                  <input className="input" value={partnerOfferForm.entitlementType} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, entitlementType: event.target.value })} placeholder="Тип выдаваемого доступа" />
                 </div>
-                <textarea className="input text-editor compact" value={partnerOfferForm.description} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, description: event.target.value })} placeholder="Description for users" />
-                <textarea className="input text-editor compact" value={partnerOfferForm.userBenefit} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, userBenefit: event.target.value })} placeholder="User benefit" />
-                <input className="input" value={partnerOfferForm.entitlementValue} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, entitlementValue: event.target.value })} placeholder="Entitlement/coupon/link" />
+                <textarea className="input text-editor compact" value={partnerOfferForm.description} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, description: event.target.value })} placeholder="Описание для пользователей" />
+                <textarea className="input text-editor compact" value={partnerOfferForm.userBenefit} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, userBenefit: event.target.value })} placeholder="Польза для пользователя" />
+                <input className="input" value={partnerOfferForm.entitlementValue} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, entitlementValue: event.target.value })} placeholder="Право доступа, купон или ссылка" />
                 <div className="grid grid-2">
-                  <button className="button" onClick={savePartnerOffer}>Save placement</button>
-                  <button className="button secondary" onClick={() => setPartnerOfferForm(emptyPartnerOfferForm)}>Reset</button>
+                  <button className="button" onClick={savePartnerOffer}>Сохранить оффер</button>
+                  <button className="button secondary" onClick={() => setPartnerOfferForm(emptyPartnerOfferForm)}>Очистить</button>
                 </div>
               </div>
             </div>
 
             <div className="admin-program-list">
-              {partnerPrograms.length === 0 ? <p className="muted">No partner programs configured</p> : partnerPrograms.map((program) => (
+              {partnerPrograms.length === 0 ? <p className="muted">Локальные партнёрские программы не созданы</p> : partnerPrograms.map((program) => (
                 <div className="admin-program-row" key={program.id}>
                   <div>
                     <strong>{program.name} · {program.status}</strong>
-                    <span>bonus {program.customerBonusType} {program.customerBonusValue ?? ""} · commission {program.commissionModel} {program.commissionRateBps ?? program.fixedPayoutCents ?? 0} · hold {program.lockDays}d</span>
-                    <span>Core program: {program.partnerCoreProgramId ?? "not linked"} · terms {program.termsVersion}</span>
+                    <span>Бонус: {program.customerBonusType} {program.customerBonusValue ?? ""} · комиссия: {program.commissionModel} {program.commissionRateBps ?? program.fixedPayoutCents ?? 0} · удержание: {program.lockDays} дн.</span>
+                    <span>Программа Core: {program.partnerCoreProgramId ?? "не связана"} · версия условий: {program.termsVersion}</span>
                     {program.referralLinks.map((link) => <span key={link.id}>{link.channel}: {link.url ?? link.referralCode ?? link.status}</span>)}
                   </div>
                   <div className="admin-gift-form">
-                    <input className="input" value={referralChannelByProgram[program.id] ?? "default"} onChange={(event) => setReferralChannelByProgram({ ...referralChannelByProgram, [program.id]: event.target.value })} placeholder="channel" />
-                    <button className="button secondary" onClick={() => createReferralLink(program.id)}>Referral link</button>
-                    <button className="button secondary" onClick={() => selectPartnerProgram(program)}>Edit</button>
+                    <input className="input" value={referralChannelByProgram[program.id] ?? "default"} onChange={(event) => setReferralChannelByProgram({ ...referralChannelByProgram, [program.id]: event.target.value })} placeholder="Канал" />
+                    <button className="button secondary" onClick={() => createReferralLink(program.id)}>Создать ссылку</button>
+                    <button className="button secondary" onClick={() => selectPartnerProgram(program)}>Изменить</button>
                   </div>
                 </div>
               ))}
             </div>
 
             <div className="admin-program-list">
-              {partnerOffers.length === 0 ? <p className="muted">No partner offers synced</p> : partnerOffers.map((offer) => (
+              {partnerOffers.length === 0 ? <p className="muted">Синхронизированных офферов пока нет</p> : partnerOffers.map((offer) => (
                 <div className="admin-program-row" key={offer.id}>
                   <div>
                     <strong>{offer.title} · {offer.status}</strong>
-                    <span>Core status: {offer.partnerCoreStatus ?? "local"} · placement: {offer.partnerCorePlacementId ?? "not created"}</span>
-                    <span>{offer.redemptionCost.amount} {offer.redemptionCost.currency} · payout {offer.partnerPayoutCents} cents · used {offer.redemptionsCount ?? 0}</span>
+                    <span>Статус Core: {offer.partnerCoreStatus ?? "локальный"} · размещение: {offer.partnerCorePlacementId ?? "не создано"}</span>
+                    <span>{offer.redemptionCost.amount} {offer.redemptionCost.currency} · выплата {offer.partnerPayoutCents} центов · активаций {offer.redemptionsCount ?? 0}</span>
                     <span>{offer.userBenefit}</span>
                   </div>
                   <div className="row" style={{ justifyContent: "flex-end" }}>
-                    <button className="button secondary" onClick={() => selectPartnerOffer(offer)}>Edit</button>
-                    <button className="button secondary" onClick={() => setPartnerOfferStatus(offer.id, "PENDING_REVIEW")}>Submit review</button>
-                    <button className="button secondary" onClick={() => setPartnerOfferStatus(offer.id, "PAUSED")}>Pause</button>
-                    <button className="button secondary" onClick={() => setPartnerOfferStatus(offer.id, "DRAFT")}>Draft</button>
+                    <button className="button secondary" onClick={() => selectPartnerOffer(offer)}>Изменить</button>
+                    <button className="button secondary" onClick={() => setPartnerOfferStatus(offer.id, "PENDING_REVIEW")}>На модерацию</button>
+                    <button className="button secondary" onClick={() => setPartnerOfferStatus(offer.id, "PAUSED")}>Приостановить</button>
+                    <button className="button secondary" onClick={() => setPartnerOfferStatus(offer.id, "DRAFT")}>В черновик</button>
                   </div>
                 </div>
               ))}
             </div>
 
             <div className="admin-program-list">
-              <h3>Partner Leads / Redemptions</h3>
-              {partnerRedemptions.length === 0 ? <p className="muted">No redemptions yet</p> : partnerRedemptions.map((item) => (
+              <h3>Лиды и активации</h3>
+              {partnerRedemptions.length === 0 ? <p className="muted">Активаций пока нет</p> : partnerRedemptions.map((item) => (
                 <div className="admin-program-row" key={item.id}>
                   <div>
                     <strong>{item.offerTitle ?? item.offerId} · {item.status}</strong>
                     <span>{item.userEmail ?? item.userId ?? item.sessionId ?? "anonymous"} · {item.costAmount} {item.costCurrency}</span>
-                    <span>Core redemption: {item.partnerCoreRedemptionId ?? "not linked"} · {formatAdminDate(item.createdAt)}</span>
+                    <span>Активация Core: {item.partnerCoreRedemptionId ?? "не связана"} · {formatAdminDate(item.createdAt)}</span>
                     {item.deliveryError && <span>{item.deliveryError}</span>}
                   </div>
                 </div>
@@ -1515,7 +1653,7 @@ export default function AdminPage() {
             </div>
 
             <div className="admin-program-list">
-              <h3>Revenue и начисления</h3>
+              <h3>Выручка и начисления</h3>
               {partnerCoreSnapshot.ledgerEntries.length === 0 ? <p className="muted">Начислений пока нет</p> : partnerCoreSnapshot.ledgerEntries.slice(0, 30).map((entry, index) => (
                 <div className="admin-program-row" key={adminRecordText(entry, "id") || index}>
                   <div>
@@ -1526,16 +1664,22 @@ export default function AdminPage() {
                 </div>
               ))}
             </div>
-          </section>
+          </section>}
 
-          <section id="admin-system" className="grid grid-2 admin-system-grid">
+          {section === "system" && <section id="admin-system" className="grid grid-2 admin-system-grid">
+            <div className="admin-system-actions">
+              <div>
+                <strong>Служебные действия</strong>
+                <span>Создание отсутствующих настроек выполняется идемпотентно.</span>
+              </div>
+              <button className="button secondary" onClick={upsertFeatureFlag}>{adminText.seedFlag}</button>
+            </div>
             <List title={adminText.lists[0]} items={settings.map((item) => `${item.key}: ${JSON.stringify(item.value).slice(0, 180)}`)} />
             <List title={adminText.lists[1]} items={flags.map((item) => `${item.key}: ${item.enabled}`)} />
             <List title={adminText.lists[2]} items={prompts.map((item) => `${item.key}/${item.locale}/v${item.version}: ${item.status}`)} />
             <List title={adminText.lists[3]} items={analyses.map((item) => JSON.stringify(item).slice(0, 220))} />
-          </section>
-        </>
-      )}
+          </section>}
+      </section>
     </main>
   );
 }
@@ -1613,7 +1757,7 @@ function List({ title, items }: { title: string; items: string[] }) {
         <span className="admin-list-count">{items.length}</span>
       </div>
       <div className="admin-compact-list">
-        {items.length === 0 ? <p className="muted">No data</p> : items.map((item) => {
+        {items.length === 0 ? <p className="muted">Нет данных</p> : items.map((item) => {
           const [label, value] = splitAdminListItem(item);
           return (
             <details className="admin-list-row" key={item}>

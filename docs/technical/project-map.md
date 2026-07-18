@@ -140,19 +140,52 @@ Implemented frontend surfaces:
 
 - Admin Partner Core section: `apps/frontend/app/admin/page.tsx`
 - User rewards marketplace tab: `apps/frontend/app/habits/page.tsx`
+- Partner portal: `apps/frontend/app/partners/page.tsx` at `/partners`.
+
+### Partner Portal BFF
+
+The partner portal is an ORKEN-branded BFF surface. Browser traffic goes only to
+the ORKEN frontend/backend; the browser never receives a Partner Core service key
+or Core session token.
+
+Implemented backend files:
+
+- `apps/backend/src/routes/partners.ts`
+- `apps/backend/src/services/partnerPortal.ts`
+- `apps/backend/src/services/partnerCore.ts`
+
+`PartnerPortalSession` is a local session cache, not a partner account. It stores
+only a SHA-256 hash of the opaque ORKEN browser session token, an encrypted Core
+session token, `partnerCorePartnerId`, expiry, approval status, and minimal display
+names. It does not store partner passwords, KYC data, payout details, or ledger rows.
+
+The BFF uses an HttpOnly, Secure-in-production cookie and a separate double-submit
+CSRF cookie for state-changing portal actions. The Core token is encrypted at rest
+with `PARTNER_PORTAL_SESSION_ENCRYPTION_SECRET` (or a derived backend secret for
+backward-compatible development only).
 
 Shared contracts are in `packages/contracts/src/index.ts`.
 
 Environment variables:
 
 - `PARTNER_CORE_URL`
+- `PARTNER_CORE_SERVICE_KEYS_JSON`
 - `PARTNER_CORE_KEY_ID`
 - `PARTNER_CORE_SERVICE_SECRET`
 - `PARTNER_CORE_PROJECT_ID`
+- `PARTNER_CORE_DEFAULT_PROGRAM_ID`
 - `PARTNER_CORE_EMBED_ORIGIN`
 - `PARTNER_CORE_PRIVACY_SECRET`
+- `PARTNER_PORTAL_ORIGIN`
+- `PARTNER_PORTAL_SESSION_ENCRYPTION_SECRET`
+- `PARTNER_PORTAL_COOKIE_DOMAIN`
 
 Partner Core secrets are backend-only. Do not expose `PARTNER_CORE_KEY_ID`, `PARTNER_CORE_SERVICE_SECRET`, or `PARTNER_CORE_PRIVACY_SECRET` through frontend code, public env vars, docs pages, or client-side JSON.
+
+`PARTNER_CORE_SERVICE_KEYS_JSON` is preferred when the Core issues scoped service
+credentials. ORKEN accepts only a key with `sessions:write`, `partners:read`,
+`partners:write`, and `events:write` scopes that is authorized for `orken`/`orken-life`; legacy key id and
+secret variables remain a server-side fallback.
 
 ## LLM Configuration
 
@@ -224,6 +257,19 @@ Current release is symlinked at:
 Docker Compose file:
 
 - `docker-compose.prod.yml`
+
+### Embedded Partner Admin And Portal Release Checklist
+
+Before enabling `/partners` or `partners.orken.life` in production:
+
+1. Apply `20260717090000_partner_portal_bff` with the normal production Prisma migration flow.
+2. Set `PARTNER_CORE_URL`, a scoped `PARTNER_CORE_SERVICE_KEYS_JSON`, and a high-entropy `PARTNER_PORTAL_SESSION_ENCRYPTION_SECRET` in backend-only environment configuration. The key must be permitted for `orken`/`orken-life` and have `sessions:write`, `partners:read`, `partners:write`, and `events:write` scopes.
+3. Set `PARTNER_PORTAL_ORIGIN` to the published portal origin. For a subdomain deployment, set `PARTNER_PORTAL_COOKIE_DOMAIN=.orken.life`; retain the default host-only cookie for the `/partners` deployment.
+4. Build the frontend and run `npm run test:partner-boundary`; it must confirm that Partner Core credentials and session encryption material are absent from client bundles.
+5. Smoke test `/admin`: Partner Core project snapshot loads in the existing admin, the test partner appears, suspend blocks partner login, and approve restores it. Then test `/partners`: registration/login, `GET /me`, a named referral link created twice with the same idempotency key, draft offer submission, and logout followed by `GET /me` returning `401`.
+6. In the Partner Core sandbox, verify referral signup, first payment, subscription invoice, and offer redemption are persisted once for stable Orken event ids. Do not test KYC or payout details through ORKEN.
+
+Do not enable the public portal until Partner Core actually provides its URL and scoped service credentials. At the time this document was written, those values are not committed to this repository.
 
 ## Protected Documentation Link
 

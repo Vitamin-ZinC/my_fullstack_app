@@ -1,7 +1,8 @@
-import { createHmac } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import type { FastifyRequest } from "fastify";
 import type {
   PartnerAffiliateProgram,
+  PartnerAttribution,
   PartnerCustomerBonusType,
   PartnerEventStatus,
   PartnerEventType,
@@ -13,6 +14,7 @@ import { env } from "../env.js";
 import { prisma } from "../lib/prisma.js";
 import type { SessionContext } from "../lib/auth.js";
 import { calculateGiftedTrialEnd } from "./adminUsers.js";
+import type { PartnerCoreAdminSnapshot } from "@levelup/contracts";
 
 type DbClient = typeof prisma | Prisma.TransactionClient;
 
@@ -28,6 +30,37 @@ type PartnerCoreConversionRequest = {
   eventType?: string;
   paymentAmountCents?: number;
   idempotencyKey: string;
+};
+
+export type PartnerCoreConversionReversalRequest = {
+  programId: string;
+  originalExternalId: string;
+  eventType: "refund" | "chargeback" | "cancellation";
+  reason: string;
+  actor?: string;
+  idempotencyKey: string;
+};
+
+export type PartnerCoreCustomerBonusRequest = {
+  programId: string;
+  externalId: string;
+  customerRef: string;
+  bonusType: "points" | "credits" | "entitlement" | "discount" | "trial_extension";
+  bonusValue: number;
+  bonusUnit: string;
+  entitlementId: string;
+  conversionExternalId?: string;
+  actor?: string;
+  idempotencyKey: string;
+};
+
+type PartnerCoreConversionResult = {
+  status: PartnerEventStatus;
+  partnerCorePartnerId?: string | null;
+};
+
+type PartnerCoreEventResult = {
+  status: PartnerEventStatus;
 };
 
 type EmbeddedSessionResponse = {
@@ -56,7 +89,62 @@ type PartnerCorePlacement = {
 };
 
 type PartnerCoreBootstrapResponse = {
+  project?: Record<string, unknown> | null;
+  programs?: Array<Record<string, unknown>>;
+  referralLinks?: Array<Record<string, unknown>>;
   placements?: PartnerCorePlacement[];
+  partners?: PartnerCoreAdminSnapshot["partners"];
+  redemptions?: Array<Record<string, unknown>>;
+  walletOperations?: Array<Record<string, unknown>>;
+  ledgerEntries?: Array<Record<string, unknown>>;
+  reviewTasks?: Array<Record<string, unknown>>;
+};
+
+export type PartnerCorePortalPartner = {
+  id?: string;
+  partnerId?: string;
+  partnerCorePartnerId?: string;
+  displayName?: string;
+  display_name?: string;
+  accountName?: string;
+  account_name?: string;
+  email?: string;
+  status?: string;
+};
+
+export type PartnerCorePortalSessionResponse = {
+  sessionToken: string;
+  expiresAt?: string | number;
+  expiresIn?: number;
+  partnerCorePartnerId?: string;
+  partnerId?: string;
+  displayName?: string;
+  accountName?: string;
+  email?: string;
+  status?: string;
+  partner?: PartnerCorePortalPartner;
+  partnerAccount?: PartnerCorePortalPartner;
+};
+
+export type PartnerCorePortalRegisterInput = {
+  email: string;
+  password: string;
+  displayName: string;
+  accountName: string;
+  accountType: "organization" | "individual";
+  clientRef: string;
+  idempotencyKey: string;
+};
+
+export type PartnerCorePortalLoginInput = {
+  email: string;
+  password: string;
+  clientRef: string;
+};
+
+type PartnerCoreServiceCredentials = {
+  keyId: string;
+  secret: string;
 };
 
 const ORKEN_POINTS = "orken_points";
@@ -66,12 +154,13 @@ function safeJson(value: unknown) {
 }
 
 function signServiceRequest(input: { method: string; path: string; timestamp: string; body: string; secret: string }) {
+  const bodyHash = createHash("sha256").update(input.body).digest("hex");
   return createHmac("sha256", input.secret)
-    .update([input.method.toUpperCase(), input.path, input.timestamp, input.body].join("\n"))
-    .digest("hex");
+    .update([input.method.toUpperCase(), input.path, input.timestamp, bodyHash].join("\n"))
+    .digest("base64url");
 }
 
-class PartnerCoreServiceClient {
+export class PartnerCoreServiceClient {
   private readonly baseUrl: URL;
 
   constructor(
@@ -95,6 +184,16 @@ class PartnerCoreServiceClient {
     return this.request("POST", "/api/events/conversions", body, { "Idempotency-Key": idempotencyKey });
   }
 
+  reverseConversion(input: PartnerCoreConversionReversalRequest) {
+    const { idempotencyKey, ...body } = input;
+    return this.request("POST", "/api/events/conversion-reversals", body, { "Idempotency-Key": idempotencyKey });
+  }
+
+  recordCustomerBonus(input: PartnerCoreCustomerBonusRequest) {
+    const { idempotencyKey, ...body } = input;
+    return this.request("POST", "/api/events/customer-bonuses", body, { "Idempotency-Key": idempotencyKey });
+  }
+
   createReferralLink(input: { channel: string; programId: string; actor?: string; projectId?: string; idempotencyKey: string }) {
     const { idempotencyKey, ...body } = input;
     return this.request("POST", "/api/referral-links", body, { "Idempotency-Key": idempotencyKey });
@@ -111,6 +210,24 @@ class PartnerCoreServiceClient {
       Authorization: `Bearer ${session.token}`,
       "x-embed-origin": partnerCoreEmbedOrigin()
     });
+  }
+
+  async updateEmbeddedPartnerStatus(input: { actor: string; partnerAccountId: string; status: "approved" | "suspended" }) {
+    const session = await this.createEmbeddedSession({
+      projectId: env.PARTNER_CORE_PROJECT_ID,
+      actor: input.actor,
+      origin: partnerCoreEmbedOrigin(),
+      ttlSeconds: 300
+    });
+    return this.publicRequest<{ partner?: PartnerCoreAdminSnapshot["partners"][number]; changed?: boolean }>(
+      "POST",
+      `/api/embedded/partners/${encodeURIComponent(input.partnerAccountId)}/status`,
+      { status: input.status },
+      {
+        Authorization: `Bearer ${session.token}`,
+        "x-embed-origin": partnerCoreEmbedOrigin()
+      }
+    );
   }
 
   async createRewardPlacement(input: {
@@ -222,6 +339,86 @@ class PartnerCoreServiceClient {
     });
   }
 
+  registerPartnerPortal(input: PartnerCorePortalRegisterInput) {
+    const { idempotencyKey, ...body } = input;
+    return this.request<PartnerCorePortalSessionResponse>("POST", partnerPortalPath("register"), body, {
+      "Idempotency-Key": idempotencyKey
+    });
+  }
+
+  loginPartnerPortal(input: PartnerCorePortalLoginInput) {
+    return this.request<PartnerCorePortalSessionResponse>("POST", partnerPortalPath("login"), input);
+  }
+
+  getPartnerPortalMe(sessionToken: string) {
+    return this.request<unknown>("GET", partnerPortalPath("me"), undefined, portalAuthorization(sessionToken));
+  }
+
+  getPartnerPortalDashboard(sessionToken: string) {
+    return this.request<unknown>("GET", partnerPortalPath("dashboard"), undefined, portalAuthorization(sessionToken));
+  }
+
+  getPartnerPortalLedger(sessionToken: string) {
+    return this.request<unknown>("GET", partnerPortalPath("ledger"), undefined, portalAuthorization(sessionToken));
+  }
+
+  getPartnerPortalPayouts(sessionToken: string) {
+    return this.request<unknown>("GET", partnerPortalPath("payouts"), undefined, portalAuthorization(sessionToken));
+  }
+
+  createPartnerPortalReferralLink(input: { sessionToken: string; channel: string; idempotencyKey: string }) {
+    return this.request<unknown>("POST", partnerPortalPath("referral-links"), { channel: input.channel }, {
+      ...portalAuthorization(input.sessionToken),
+      "Idempotency-Key": input.idempotencyKey
+    });
+  }
+
+  createPartnerPortalOffer(input: {
+    sessionToken: string;
+    offer: string;
+    kind: string;
+    surface: string;
+    price: string;
+    cap: string;
+    partnerPayoutCents: number;
+    idempotencyKey: string;
+  }) {
+    const { sessionToken, idempotencyKey, ...body } = input;
+    return this.request<unknown>("POST", partnerPortalPath("offers"), body, {
+      ...portalAuthorization(sessionToken),
+      "Idempotency-Key": idempotencyKey
+    });
+  }
+
+  updatePartnerPortalOffer(input: {
+    sessionToken: string;
+    offerId: string;
+    offer?: string;
+    kind?: string;
+    surface?: string;
+    price?: string;
+    cap?: string;
+    partnerPayoutCents?: number;
+    idempotencyKey: string;
+  }) {
+    const { sessionToken, offerId, idempotencyKey, ...body } = input;
+    return this.request<unknown>("PATCH", partnerPortalPath(`offers/${encodeURIComponent(offerId)}`), body, {
+      ...portalAuthorization(sessionToken),
+      "Idempotency-Key": idempotencyKey
+    });
+  }
+
+  submitPartnerPortalOfferReview(input: { sessionToken: string; offerId: string; idempotencyKey: string }) {
+    return this.request<unknown>("POST", partnerPortalPath(`offers/${encodeURIComponent(input.offerId)}/submit-review`), {}, {
+      ...portalAuthorization(input.sessionToken),
+      "Idempotency-Key": input.idempotencyKey
+    });
+  }
+
+  logoutPartnerPortal(sessionToken: string) {
+    return this.request<unknown>("POST", partnerPortalPath("logout"), {}, portalAuthorization(sessionToken));
+  }
+
   private async publicRequest<T = unknown>(method: "GET" | "POST", path: string, body?: unknown, headers: Record<string, string> = {}) {
     const rawBody = body === undefined ? "" : JSON.stringify(body);
     const url = new URL(path, this.baseUrl);
@@ -240,7 +437,7 @@ class PartnerCoreServiceClient {
     return payload as T;
   }
 
-  private async request<T = unknown>(method: "GET" | "POST", path: string, body?: unknown, headers: Record<string, string> = {}) {
+  private async request<T = unknown>(method: "GET" | "POST" | "PATCH", path: string, body?: unknown, headers: Record<string, string> = {}) {
     const rawBody = body === undefined ? "" : JSON.stringify(body);
     const timestamp = String(Math.floor((this.config.now?.() ?? new Date()).getTime() / 1000));
     const url = new URL(path, this.baseUrl);
@@ -270,7 +467,7 @@ class PartnerCoreServiceClient {
   }
 }
 
-class PartnerCoreServiceError extends Error {
+export class PartnerCoreServiceError extends Error {
   constructor(readonly status: number, readonly payload: unknown) {
     super(`Partner Core request failed with HTTP ${status}`);
     this.name = "PartnerCoreServiceError";
@@ -288,11 +485,12 @@ async function readJsonResponse(response: Response) {
 }
 
 function partnerCoreClient() {
-  if (!env.PARTNER_CORE_URL || !env.PARTNER_CORE_KEY_ID || !env.PARTNER_CORE_SERVICE_SECRET) return null;
+  const credentials = partnerCoreCredentials();
+  if (!env.PARTNER_CORE_URL || !credentials) return null;
   return new PartnerCoreServiceClient({
     baseUrl: env.PARTNER_CORE_URL,
-    keyId: env.PARTNER_CORE_KEY_ID,
-    secret: env.PARTNER_CORE_SERVICE_SECRET
+    keyId: credentials.keyId,
+    secret: credentials.secret
   });
 }
 
@@ -300,12 +498,188 @@ export function isPartnerCoreConfigured() {
   return Boolean(partnerCoreClient());
 }
 
+export async function getPartnerCoreAdminSnapshot(actor = "orken-admin"): Promise<PartnerCoreAdminSnapshot> {
+  const client = partnerCoreClient();
+  if (!client) return emptyPartnerCoreAdminSnapshot(false);
+  const snapshot = await client.embeddedBootstrap(actor);
+  return {
+    configured: true,
+    project: safeJson(snapshot.project ?? null),
+    programs: safeJson(snapshot.programs ?? []),
+    referralLinks: safeJson(snapshot.referralLinks ?? []),
+    placements: safeJson(snapshot.placements ?? []),
+    partners: safeJson(snapshot.partners ?? []),
+    redemptions: safeJson(snapshot.redemptions ?? []),
+    walletOperations: safeJson(snapshot.walletOperations ?? []),
+    ledgerEntries: safeJson(snapshot.ledgerEntries ?? []),
+    reviewTasks: safeJson(snapshot.reviewTasks ?? [])
+  };
+}
+
+export async function updatePartnerCoreAdminPartnerStatus(input: { partnerAccountId: string; status: "approved" | "suspended"; actor?: string }) {
+  return requirePartnerCoreClient().updateEmbeddedPartnerStatus({
+    actor: input.actor ?? "orken-admin",
+    partnerAccountId: input.partnerAccountId,
+    status: input.status
+  });
+}
+
+function emptyPartnerCoreAdminSnapshot(configured: boolean): PartnerCoreAdminSnapshot {
+  return {
+    configured,
+    project: null,
+    programs: [],
+    referralLinks: [],
+    placements: [],
+    partners: [],
+    redemptions: [],
+    walletOperations: [],
+    ledgerEntries: [],
+    reviewTasks: []
+  };
+}
+
+function requirePartnerCoreClient() {
+  const client = partnerCoreClient();
+  if (!client) throw new Error("Partner Core is not configured");
+  return client;
+}
+
+export function reversePartnerCoreConversion(input: PartnerCoreConversionReversalRequest) {
+  return requirePartnerCoreClient().reverseConversion(input);
+}
+
+export function recordPartnerCoreCustomerBonus(input: PartnerCoreCustomerBonusRequest) {
+  return requirePartnerCoreClient().recordCustomerBonus(input);
+}
+
+export function registerPartnerCorePortal(input: PartnerCorePortalRegisterInput) {
+  return requirePartnerCoreClient().registerPartnerPortal(input);
+}
+
+export function loginPartnerCorePortal(input: PartnerCorePortalLoginInput) {
+  return requirePartnerCoreClient().loginPartnerPortal(input);
+}
+
+export function getPartnerCorePortalMe(sessionToken: string) {
+  return requirePartnerCoreClient().getPartnerPortalMe(sessionToken);
+}
+
+export function getPartnerCorePortalDashboard(sessionToken: string) {
+  return requirePartnerCoreClient().getPartnerPortalDashboard(sessionToken);
+}
+
+export function getPartnerCorePortalLedger(sessionToken: string) {
+  return requirePartnerCoreClient().getPartnerPortalLedger(sessionToken);
+}
+
+export function getPartnerCorePortalPayouts(sessionToken: string) {
+  return requirePartnerCoreClient().getPartnerPortalPayouts(sessionToken);
+}
+
+export function createPartnerCorePortalReferralLink(input: { sessionToken: string; channel: string; idempotencyKey: string }) {
+  return requirePartnerCoreClient().createPartnerPortalReferralLink(input);
+}
+
+export function createPartnerCorePortalOffer(input: {
+  sessionToken: string;
+  offer: string;
+  kind: string;
+  surface: string;
+  price: string;
+  cap: string;
+  partnerPayoutCents: number;
+  idempotencyKey: string;
+}) {
+  return requirePartnerCoreClient().createPartnerPortalOffer(input);
+}
+
+export function updatePartnerCorePortalOffer(input: {
+  sessionToken: string;
+  offerId: string;
+  offer?: string;
+  kind?: string;
+  surface?: string;
+  price?: string;
+  cap?: string;
+  partnerPayoutCents?: number;
+  idempotencyKey: string;
+}) {
+  return requirePartnerCoreClient().updatePartnerPortalOffer(input);
+}
+
+export function submitPartnerCorePortalOfferReview(input: { sessionToken: string; offerId: string; idempotencyKey: string }) {
+  return requirePartnerCoreClient().submitPartnerPortalOfferReview(input);
+}
+
+export function logoutPartnerCorePortal(sessionToken: string) {
+  return requirePartnerCoreClient().logoutPartnerPortal(sessionToken);
+}
+
 function partnerCoreEmbedOrigin() {
   return env.PARTNER_CORE_EMBED_ORIGIN ?? env.APP_ORIGIN;
 }
 
+function partnerPortalPath(suffix: string) {
+  return `/api/projects/${encodeURIComponent(env.PARTNER_CORE_PROJECT_ID)}/partner/${suffix}`;
+}
+
+function portalAuthorization(sessionToken: string) {
+  return { Authorization: `Bearer ${sessionToken}` };
+}
+
+function partnerCoreCredentials(): PartnerCoreServiceCredentials | null {
+  const jsonCredentials = parsePartnerCoreServiceKeys(env.PARTNER_CORE_SERVICE_KEYS_JSON);
+  if (jsonCredentials) return jsonCredentials;
+  if (!env.PARTNER_CORE_KEY_ID || !env.PARTNER_CORE_SERVICE_SECRET) return null;
+  return { keyId: env.PARTNER_CORE_KEY_ID, secret: env.PARTNER_CORE_SERVICE_SECRET };
+}
+
+function parsePartnerCoreServiceKeys(raw: string | undefined): PartnerCoreServiceCredentials | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    const entries = Array.isArray(parsed)
+      ? parsed
+      : isRecord(parsed) && Array.isArray(parsed.keys)
+        ? parsed.keys
+        : isRecord(parsed) && (typeof parsed.keyId === "string" || typeof parsed.id === "string")
+          ? [parsed]
+          : isRecord(parsed)
+            ? Object.values(parsed)
+            : [];
+    for (const entry of entries) {
+      if (!isRecord(entry)) continue;
+      const keyId = readString(entry.keyId) ?? readString(entry.id);
+      const secret = readString(entry.secret) ?? readString(entry.serviceSecret);
+      const scopes = Array.isArray(entry.scopes) ? entry.scopes.filter((value): value is string => typeof value === "string") : [];
+      const projectIds = Array.isArray(entry.projectIds) ? entry.projectIds.filter((value): value is string => typeof value === "string") : [];
+      const hasRequiredScopes = scopes.length === 0 || ["sessions:write", "partners:read", "partners:write", "events:write"].every((scope) => scopes.includes(scope));
+      const hasOrkenProject = projectIds.length === 0 || projectIds.includes(env.PARTNER_CORE_PROJECT_ID) || projectIds.includes("orken");
+      if (keyId && secret && hasRequiredScopes && hasOrkenProject) return { keyId, secret };
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function readString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function extractPartnerCorePartnerId(value: unknown) {
+  if (!isRecord(value)) return null;
+  const partner = isRecord(value.partner) ? value.partner : isRecord(value.partnerAccount) ? value.partnerAccount : value;
+  return readString(partner.partnerCorePartnerId) ?? readString(partner.partnerId) ?? readString(partner.partner_account_id) ?? readString(partner.id);
+}
+
 function privacySecret() {
-  return env.PARTNER_CORE_PRIVACY_SECRET ?? env.PARTNER_CORE_SERVICE_SECRET ?? env.JWT_ACCESS_SECRET;
+  return env.PARTNER_CORE_PRIVACY_SECRET ?? partnerCoreCredentials()?.secret ?? env.JWT_ACCESS_SECRET;
 }
 
 export function normalizeReferralCode(value: unknown) {
@@ -459,7 +833,7 @@ export async function handleReferralSignup(input: {
     }).catch(() => undefined);
   });
 
-  const status = await recordSignupConversion({
+  const signup = await recordSignupConversion({
     userId: input.userId,
     email: input.email,
     referralCode,
@@ -467,12 +841,15 @@ export async function handleReferralSignup(input: {
     ip: input.request?.ip
   });
 
-  await prisma.partnerAttribution.update({
+  const updatedAttribution = await prisma.partnerAttribution.update({
     where: { id: attribution.id },
-    data: { signupEventStatus: status }
+    data: {
+      signupEventStatus: signup.status,
+      ...(signup.partnerCorePartnerId ? { partnerCorePartnerId: signup.partnerCorePartnerId } : {})
+    }
   }).catch(() => undefined);
 
-  return attribution;
+  return updatedAttribution ?? attribution;
 }
 
 async function recordSignupConversion(input: {
@@ -483,7 +860,7 @@ async function recordSignupConversion(input: {
   ip?: string;
 }) {
   const payload: PartnerCoreConversionRequest = {
-    programId: input.activeProgram.partnerCoreProgramId ?? input.activeProgram.id,
+    programId: input.activeProgram.partnerCoreProgramId ?? env.PARTNER_CORE_DEFAULT_PROGRAM_ID,
     eventType: "signup",
     externalId: `signup:${input.userId}`,
     referralCode: input.referralCode,
@@ -508,9 +885,14 @@ async function recordPartnerConversionEvent(input: {
   paymentId?: string | null;
   externalId: string;
   payload: PartnerCoreConversionRequest;
-}) {
+}): Promise<PartnerCoreConversionResult> {
   const existing = await prisma.partnerEvent.findUnique({ where: { idempotencyKey: input.payload.idempotencyKey } });
-  if (existing?.status === "SUCCEEDED" || existing?.status === "SKIPPED") return existing.status;
+  if (existing?.status === "SUCCEEDED" || existing?.status === "SKIPPED") {
+    return {
+      status: existing.status as PartnerEventStatus,
+      partnerCorePartnerId: extractPartnerCorePartnerId(existing.response)
+    };
+  }
 
   await prisma.partnerEvent.upsert({
     where: { idempotencyKey: input.payload.idempotencyKey },
@@ -540,7 +922,7 @@ async function recordPartnerConversionEvent(input: {
         error: client ? "Partner Core program id is missing" : "Partner Core is not configured"
       }
     });
-    return "SKIPPED" satisfies PartnerEventStatus;
+    return { status: "SKIPPED" satisfies PartnerEventStatus };
   }
 
   try {
@@ -554,7 +936,10 @@ async function recordPartnerConversionEvent(input: {
         attempts: { increment: 1 }
       }
     });
-    return "SUCCEEDED" satisfies PartnerEventStatus;
+    return {
+      status: "SUCCEEDED" satisfies PartnerEventStatus,
+      partnerCorePartnerId: extractPartnerCorePartnerId(response)
+    };
   } catch (error) {
     await prisma.partnerEvent.update({
       where: { idempotencyKey: input.payload.idempotencyKey },
@@ -565,7 +950,159 @@ async function recordPartnerConversionEvent(input: {
         attempts: { increment: 1 }
       }
     });
-    return "FAILED" satisfies PartnerEventStatus;
+    return { status: "FAILED" satisfies PartnerEventStatus };
+  }
+}
+
+async function recordPartnerCustomerBonusEvent(input: {
+  attribution: Pick<PartnerAttribution, "id" | "userId" | "programConfigId" | "partnerCoreProgramId">;
+  program?: Pick<PartnerAffiliateProgram, "id" | "partnerCoreProgramId"> | null;
+  bonusType: PartnerCoreCustomerBonusRequest["bonusType"];
+  bonusValue: number;
+  bonusUnit: string;
+  entitlementId: string;
+  conversionExternalId?: string;
+}): Promise<PartnerCoreEventResult> {
+  const programId = input.attribution.partnerCoreProgramId ?? input.program?.partnerCoreProgramId ?? env.PARTNER_CORE_DEFAULT_PROGRAM_ID;
+  const payload: PartnerCoreCustomerBonusRequest = {
+    programId,
+    externalId: `bonus:${input.attribution.id}`,
+    customerRef: hashSubject(input.attribution.userId),
+    bonusType: input.bonusType,
+    bonusValue: input.bonusValue,
+    bonusUnit: input.bonusUnit,
+    entitlementId: input.entitlementId,
+    conversionExternalId: input.conversionExternalId ?? `signup:${input.attribution.userId}`,
+    actor: "Orken bonus worker",
+    idempotencyKey: `orken:bonus:${input.attribution.id}`
+  };
+
+  const existing = await prisma.partnerEvent.findUnique({ where: { idempotencyKey: payload.idempotencyKey } });
+  if (existing?.status === "SUCCEEDED" || existing?.status === "SKIPPED") {
+    return { status: existing.status as PartnerEventStatus };
+  }
+
+  await prisma.partnerEvent.upsert({
+    where: { idempotencyKey: payload.idempotencyKey },
+    update: {
+      request: safeJson(payload) as Prisma.InputJsonValue,
+      externalId: payload.externalId,
+      status: "PENDING",
+      error: null
+    },
+    create: {
+      type: "CUSTOMER_BONUS",
+      idempotencyKey: payload.idempotencyKey,
+      programConfigId: input.program?.id ?? input.attribution.programConfigId ?? null,
+      userId: input.attribution.userId,
+      externalId: payload.externalId,
+      request: safeJson(payload) as Prisma.InputJsonValue
+    }
+  });
+
+  const client = partnerCoreClient();
+  if (!client || !payload.programId) {
+    await prisma.partnerEvent.update({
+      where: { idempotencyKey: payload.idempotencyKey },
+      data: {
+        status: "SKIPPED",
+        error: client ? "Partner Core program id is missing" : "Partner Core is not configured"
+      }
+    });
+    return { status: "SKIPPED" };
+  }
+
+  try {
+    const response = await client.recordCustomerBonus(payload);
+    await prisma.partnerEvent.update({
+      where: { idempotencyKey: payload.idempotencyKey },
+      data: {
+        status: "SUCCEEDED",
+        response: safeJson(response) as Prisma.InputJsonValue,
+        error: null,
+        attempts: { increment: 1 }
+      }
+    });
+    return { status: "SUCCEEDED" };
+  } catch (error) {
+    await prisma.partnerEvent.update({
+      where: { idempotencyKey: payload.idempotencyKey },
+      data: {
+        status: "FAILED",
+        error: error instanceof Error ? error.message : String(error),
+        response: error instanceof PartnerCoreServiceError ? safeJson(error.payload) as Prisma.InputJsonValue : undefined,
+        attempts: { increment: 1 }
+      }
+    });
+    return { status: "FAILED" };
+  }
+}
+
+async function recordPartnerConversionReversalEvent(input: {
+  programConfigId?: string | null;
+  userId?: string | null;
+  paymentId?: string | null;
+  payload: PartnerCoreConversionReversalRequest;
+}): Promise<PartnerCoreEventResult> {
+  const existing = await prisma.partnerEvent.findUnique({ where: { idempotencyKey: input.payload.idempotencyKey } });
+  if (existing?.status === "SUCCEEDED" || existing?.status === "SKIPPED") {
+    return { status: existing.status as PartnerEventStatus };
+  }
+
+  await prisma.partnerEvent.upsert({
+    where: { idempotencyKey: input.payload.idempotencyKey },
+    update: {
+      request: safeJson(input.payload) as Prisma.InputJsonValue,
+      externalId: input.payload.originalExternalId,
+      status: "PENDING",
+      error: null
+    },
+    create: {
+      type: "REFUND",
+      idempotencyKey: input.payload.idempotencyKey,
+      programConfigId: input.programConfigId ?? null,
+      userId: input.userId ?? null,
+      paymentId: input.paymentId ?? null,
+      externalId: input.payload.originalExternalId,
+      request: safeJson(input.payload) as Prisma.InputJsonValue
+    }
+  });
+
+  const client = partnerCoreClient();
+  if (!client || !input.payload.programId) {
+    await prisma.partnerEvent.update({
+      where: { idempotencyKey: input.payload.idempotencyKey },
+      data: {
+        status: "SKIPPED",
+        error: client ? "Partner Core program id is missing" : "Partner Core is not configured"
+      }
+    });
+    return { status: "SKIPPED" };
+  }
+
+  try {
+    const response = await client.reverseConversion(input.payload);
+    await prisma.partnerEvent.update({
+      where: { idempotencyKey: input.payload.idempotencyKey },
+      data: {
+        status: "SUCCEEDED",
+        response: safeJson(response) as Prisma.InputJsonValue,
+        error: null,
+        attempts: { increment: 1 }
+      }
+    });
+    return { status: "SUCCEEDED" };
+  } catch (error) {
+    await prisma.partnerEvent.update({
+      where: { idempotencyKey: input.payload.idempotencyKey },
+      data: {
+        status: "FAILED",
+        error: error instanceof Error ? error.message : String(error),
+        response: error instanceof PartnerCoreServiceError ? safeJson(error.payload) as Prisma.InputJsonValue : undefined,
+        attempts: { increment: 1 }
+      }
+    });
+    return { status: "FAILED" };
   }
 }
 
@@ -606,7 +1143,7 @@ export async function applyPendingReferralBonus(userId: string, programId?: stri
         subscriptionStatus: program.subscriptionStatus === "ACTIVE" ? "ACTIVE" : "TRIAL"
       }
     });
-    return prisma.partnerAttribution.update({
+    const applied = await prisma.partnerAttribution.update({
       where: { id: attribution.id },
       data: {
         bonusStatus: "APPLIED",
@@ -614,6 +1151,18 @@ export async function applyPendingReferralBonus(userId: string, programId?: stri
         bonusAppliedProgramId: program.id
       }
     });
+    const activeProgram = attribution.programConfigId
+      ? await prisma.partnerAffiliateProgram.findUnique({ where: { id: attribution.programConfigId } })
+      : await getActivePartnerProgram();
+    await recordPartnerCustomerBonusEvent({
+      attribution,
+      program: activeProgram,
+      bonusType: "trial_extension",
+      bonusValue: days,
+      bonusUnit: "days",
+      entitlementId: `trial:${attribution.id}:${program.id}`
+    });
+    return applied;
   }
 
   if (attribution.customerBonusType === "CREDITS") {
@@ -624,7 +1173,7 @@ export async function applyPendingReferralBonus(userId: string, programId?: stri
         data: { bonusStatus: "NOT_APPLICABLE" }
       });
     }
-    await prisma.internalWalletTransaction.upsert({
+    const walletTransaction = await prisma.internalWalletTransaction.upsert({
       where: { idempotencyKey: `partner-bonus:${attribution.id}` },
       update: {},
       create: {
@@ -637,10 +1186,22 @@ export async function applyPendingReferralBonus(userId: string, programId?: stri
         idempotencyKey: `partner-bonus:${attribution.id}`
       }
     });
-    return prisma.partnerAttribution.update({
+    const applied = await prisma.partnerAttribution.update({
       where: { id: attribution.id },
       data: { bonusStatus: "APPLIED", bonusAppliedAt: now }
     });
+    const activeProgram = attribution.programConfigId
+      ? await prisma.partnerAffiliateProgram.findUnique({ where: { id: attribution.programConfigId } })
+      : await getActivePartnerProgram();
+    await recordPartnerCustomerBonusEvent({
+      attribution,
+      program: activeProgram,
+      bonusType: "points",
+      bonusValue: amount,
+      bonusUnit: ORKEN_POINTS,
+      entitlementId: walletTransaction.id
+    });
+    return applied;
   }
 
   return prisma.partnerAttribution.update({
@@ -659,7 +1220,7 @@ export async function recordPaymentConversionForPayment(paymentId: string) {
   const activeProgram = attribution.programConfigId
     ? await prisma.partnerAffiliateProgram.findUnique({ where: { id: attribution.programConfigId } })
     : await getActivePartnerProgram();
-  const programId = attribution.partnerCoreProgramId ?? activeProgram?.partnerCoreProgramId ?? activeProgram?.id;
+  const programId = attribution.partnerCoreProgramId ?? activeProgram?.partnerCoreProgramId ?? env.PARTNER_CORE_DEFAULT_PROGRAM_ID;
   if (!programId) return "SKIPPED";
 
   const externalInvoiceId = payment.stripeCheckoutSessionId ?? payment.stripePaymentIntentId ?? payment.id;
@@ -673,14 +1234,14 @@ export async function recordPaymentConversionForPayment(paymentId: string) {
     idempotencyKey: `orken:invoice:${externalInvoiceId}:affiliate`
   };
 
-  return recordPartnerConversionEvent({
+  return (await recordPartnerConversionEvent({
     type: "PAYMENT",
     programConfigId: activeProgram?.id ?? attribution.programConfigId,
     userId: payment.userId,
     paymentId: payment.id,
     externalId: payload.externalId,
     payload
-  });
+  })).status;
 }
 
 export async function recordSubscriptionInvoiceConversion(input: {
@@ -696,7 +1257,7 @@ export async function recordSubscriptionInvoiceConversion(input: {
   const activeProgram = attribution.programConfigId
     ? await prisma.partnerAffiliateProgram.findUnique({ where: { id: attribution.programConfigId } })
     : await getActivePartnerProgram();
-  const programId = attribution.partnerCoreProgramId ?? activeProgram?.partnerCoreProgramId ?? activeProgram?.id;
+  const programId = attribution.partnerCoreProgramId ?? activeProgram?.partnerCoreProgramId ?? env.PARTNER_CORE_DEFAULT_PROGRAM_ID;
   if (!programId) return "SKIPPED";
 
   const payload: PartnerCoreConversionRequest = {
@@ -708,13 +1269,162 @@ export async function recordSubscriptionInvoiceConversion(input: {
     paymentAmountCents: input.amountPaidCents,
     idempotencyKey: `orken:invoice:${input.invoiceId}:affiliate`
   };
-  return recordPartnerConversionEvent({
+  return (await recordPartnerConversionEvent({
     type: "PAYMENT",
     programConfigId: activeProgram?.id ?? attribution.programConfigId,
     userId: input.userId,
     externalId: payload.externalId,
     payload
+  })).status;
+}
+
+export async function recordPaymentConversionReversalForPayment(input: {
+  paymentId: string;
+  refundId: string;
+  reason: string;
+  eventType?: PartnerCoreConversionReversalRequest["eventType"];
+}) {
+  const payment = await prisma.payment.findUnique({ where: { id: input.paymentId } });
+  if (!payment || !payment.userId) return "SKIPPED";
+
+  const attribution = await prisma.partnerAttribution.findUnique({ where: { userId: payment.userId } });
+  if (!attribution?.referralCode) return "SKIPPED";
+
+  const activeProgram = attribution.programConfigId
+    ? await prisma.partnerAffiliateProgram.findUnique({ where: { id: attribution.programConfigId } })
+    : await getActivePartnerProgram();
+  const programId = attribution.partnerCoreProgramId ?? activeProgram?.partnerCoreProgramId ?? env.PARTNER_CORE_DEFAULT_PROGRAM_ID;
+  if (!programId) return "SKIPPED";
+
+  const externalInvoiceId = payment.stripeCheckoutSessionId ?? payment.stripePaymentIntentId ?? payment.id;
+  const payload: PartnerCoreConversionReversalRequest = {
+    programId,
+    originalExternalId: `invoice:${externalInvoiceId}`,
+    eventType: input.eventType ?? "refund",
+    reason: input.reason,
+    actor: "Orken Stripe webhook",
+    idempotencyKey: `orken:refund:${input.refundId}`
+  };
+
+  return (await recordPartnerConversionReversalEvent({
+    programConfigId: activeProgram?.id ?? attribution.programConfigId,
+    userId: payment.userId,
+    paymentId: payment.id,
+    payload
+  })).status;
+}
+
+export async function recordSubscriptionInvoiceConversionReversal(input: {
+  invoiceId: string;
+  refundId: string;
+  reason: string;
+  userId?: string | null;
+  customerId?: string | null;
+  eventType?: PartnerCoreConversionReversalRequest["eventType"];
+}) {
+  if (!input.userId) return "SKIPPED";
+  const attribution = await prisma.partnerAttribution.findUnique({ where: { userId: input.userId } });
+  if (!attribution?.referralCode) return "SKIPPED";
+
+  const activeProgram = attribution.programConfigId
+    ? await prisma.partnerAffiliateProgram.findUnique({ where: { id: attribution.programConfigId } })
+    : await getActivePartnerProgram();
+  const programId = attribution.partnerCoreProgramId ?? activeProgram?.partnerCoreProgramId ?? env.PARTNER_CORE_DEFAULT_PROGRAM_ID;
+  if (!programId) return "SKIPPED";
+
+  const payload: PartnerCoreConversionReversalRequest = {
+    programId,
+    originalExternalId: `invoice:${input.invoiceId}`,
+    eventType: input.eventType ?? "refund",
+    reason: input.reason,
+    actor: "Orken Stripe webhook",
+    idempotencyKey: `orken:refund:${input.refundId}`
+  };
+
+  return (await recordPartnerConversionReversalEvent({
+    programConfigId: activeProgram?.id ?? attribution.programConfigId,
+    userId: input.userId,
+    payload
+  })).status;
+}
+
+export async function retryPartnerCoreEvents(limit = 25) {
+  const client = partnerCoreClient();
+  if (!client) return { attempted: 0, succeeded: 0, failed: 0, skipped: 0 };
+
+  const stalePendingCutoff = new Date(Date.now() - 5 * 60 * 1000);
+  const events = await prisma.partnerEvent.findMany({
+    where: {
+      type: { in: ["SIGNUP", "PAYMENT", "REFUND", "CUSTOMER_BONUS"] },
+      attempts: { lt: 8 },
+      OR: [
+        { status: "FAILED" },
+        { status: "PENDING", updatedAt: { lt: stalePendingCutoff } }
+      ]
+    },
+    orderBy: { updatedAt: "asc" },
+    take: limit
   });
+
+  let succeeded = 0;
+  let failed = 0;
+  let skipped = 0;
+  for (const event of events) {
+    const payload = event.request;
+    if (!isRecord(payload) || !readString(payload.idempotencyKey)) {
+      skipped += 1;
+      await prisma.partnerEvent.update({
+        where: { id: event.id },
+        data: { status: "FAILED", error: "Stored Partner Core event payload is invalid" }
+      }).catch(() => undefined);
+      continue;
+    }
+
+    await prisma.partnerEvent.update({
+      where: { id: event.id },
+      data: { status: "PENDING", error: null }
+    });
+
+    try {
+      const response = await dispatchStoredPartnerCoreEvent(client, event.type, payload);
+      await prisma.partnerEvent.update({
+        where: { id: event.id },
+        data: {
+          status: "SUCCEEDED",
+          response: safeJson(response) as Prisma.InputJsonValue,
+          error: null,
+          attempts: { increment: 1 }
+        }
+      });
+      succeeded += 1;
+    } catch (error) {
+      await prisma.partnerEvent.update({
+        where: { id: event.id },
+        data: {
+          status: "FAILED",
+          error: error instanceof Error ? error.message : String(error),
+          response: error instanceof PartnerCoreServiceError ? safeJson(error.payload) as Prisma.InputJsonValue : undefined,
+          attempts: { increment: 1 }
+        }
+      });
+      failed += 1;
+    }
+  }
+
+  return { attempted: events.length, succeeded, failed, skipped };
+}
+
+function dispatchStoredPartnerCoreEvent(client: PartnerCoreServiceClient, type: PartnerEventType, payload: Record<string, unknown>) {
+  if (type === "SIGNUP" || type === "PAYMENT") {
+    return client.recordConversion(payload as PartnerCoreConversionRequest);
+  }
+  if (type === "REFUND") {
+    return client.reverseConversion(payload as PartnerCoreConversionReversalRequest);
+  }
+  if (type === "CUSTOMER_BONUS") {
+    return client.recordCustomerBonus(payload as PartnerCoreCustomerBonusRequest);
+  }
+  throw new Error(`Partner Core event type is not retryable: ${type}`);
 }
 
 async function walletBalance(client: DbClient, session: Pick<SessionContext, "id" | "userId">, currency = ORKEN_POINTS) {

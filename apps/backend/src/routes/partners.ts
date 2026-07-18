@@ -1,19 +1,46 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { env } from "../env.js";
 import { requireAdmin, requireSession, writeAdminAudit } from "../lib/auth.js";
 import { prisma } from "../lib/prisma.js";
 import {
-  createEmbeddedPartnerCoreSession,
+  PartnerCoreServiceError,
+  createPartnerCorePortalOffer,
+  createPartnerCorePortalReferralLink,
   createPartnerReferralLink,
   createPartnerCoreRewardPlacement,
   ensurePartnerCoreAffiliateProgram,
+  getPartnerCorePortalDashboard,
+  getPartnerCorePortalLedger,
+  getPartnerCorePortalMe,
+  getPartnerCorePortalPayouts,
+  getPartnerCoreAdminSnapshot,
   getPartnerMarketplace,
   isPartnerCoreConfigured,
+  loginPartnerCorePortal,
+  logoutPartnerCorePortal,
   redeemPartnerOffer,
+  registerPartnerCorePortal,
+  submitPartnerCorePortalOfferReview,
   syncPartnerCoreOffers,
-  transitionPartnerCoreOfferStatus
+  transitionPartnerCoreOfferStatus,
+  updatePartnerCoreAdminPartnerStatus,
+  updatePartnerCorePortalOffer
 } from "../services/partnerCore.js";
+import {
+  clearPartnerPortalCookies,
+  createPartnerPortalSession,
+  getPartnerPortalSession,
+  isPartnerPortalCsrfValid,
+  partnerPortalClientRef,
+  partnerPortalDashboard,
+  partnerPortalIdentity,
+  refreshPartnerPortalIdentity,
+  revokePartnerPortalSession,
+  sanitizePartnerCorePayload,
+  sessionIdentity,
+  setPartnerPortalCookies
+} from "../services/partnerPortal.js";
 
 const partnerProgramSchema = z.object({
   id: z.string().optional(),
@@ -57,6 +84,10 @@ const statusSchema = z.object({
   status: z.enum(["DRAFT", "PENDING_REVIEW", "APPROVED", "REJECTED", "PAUSED"])
 });
 
+const partnerProjectStatusSchema = z.object({
+  status: z.enum(["approved", "suspended"])
+});
+
 const referralLinkSchema = z.object({
   channel: z.string().trim().min(2).max(120)
 });
@@ -65,7 +96,252 @@ const redemptionSchema = z.object({
   idempotencyKey: z.string().trim().min(12).max(220).optional()
 });
 
+const partnerPortalRegisterSchema = z.object({
+  email: z.string().trim().email().max(320),
+  password: z.string().min(12).max(256),
+  displayName: z.string().trim().min(2).max(160),
+  accountName: z.string().trim().min(2).max(180),
+  accountType: z.enum(["organization", "individual"]),
+  idempotencyKey: z.string().trim().min(12).max(220)
+});
+
+const partnerPortalLoginSchema = z.object({
+  email: z.string().trim().email().max(320),
+  password: z.string().min(1).max(256)
+});
+
+const partnerPortalReferralSchema = z.object({
+  channel: z.string().trim().min(2).max(120),
+  idempotencyKey: z.string().trim().min(12).max(220)
+});
+
+const partnerPortalOfferSchema = z.object({
+  offer: z.string().trim().min(2).max(240),
+  kind: z.enum(["paid_service", "qualified_lead", "portfolio_credit", "reward_trial", "manual_deal"]),
+  surface: z.enum(["rewards_tab", "milestone_modal", "home_module", "admin_recommendation"]),
+  price: z.string().trim().min(2).max(120),
+  cap: z.string().trim().min(2).max(120),
+  partnerPayoutCents: z.coerce.number().int().min(0).max(100000000),
+  idempotencyKey: z.string().trim().min(12).max(220)
+});
+
+const partnerPortalOfferUpdateSchema = partnerPortalOfferSchema
+  .omit({ idempotencyKey: true })
+  .partial()
+  .extend({ idempotencyKey: z.string().trim().min(12).max(220) })
+  .refine((value) => Object.keys(value).some((key) => key !== "idempotencyKey"), {
+    message: "At least one offer field is required"
+  });
+
+const partnerPortalOfferIdSchema = z.object({
+  offerId: z.string().trim().min(1).max(180)
+});
+
+const partnerPortalReviewSchema = z.object({
+  idempotencyKey: z.string().trim().min(12).max(220)
+});
+
 export async function partnerRoutes(app: FastifyInstance) {
+  app.post("/api/partners/portal/register", async (request, reply) => {
+    if (!isPartnerCoreConfigured()) return reply.code(503).send({ error: "Partner portal is temporarily unavailable" });
+    const body = partnerPortalRegisterSchema.parse(request.body ?? {});
+    try {
+      const coreSession = await registerPartnerCorePortal({
+        ...body,
+        idempotencyKey: `partner-register:${body.idempotencyKey}`,
+        clientRef: partnerPortalClientRef(request)
+      });
+      const portalSession = await createPartnerPortalSession(coreSession);
+      setPartnerPortalCookies(reply, portalSession.rawSessionToken, portalSession.expiresAt);
+      return { partner: portalSession.identity, expiresAt: portalSession.expiresAt.toISOString() };
+    } catch (error) {
+      request.log.warn({ err: error instanceof Error ? error.name : "unknown" }, "Partner portal registration failed");
+      return reply.code(error instanceof PartnerCoreServiceError && error.status === 429 ? 429 : 401).send({
+        error: "Не удалось создать партнёрский кабинет. Проверьте данные или повторите позже."
+      });
+    }
+  });
+
+  app.post("/api/partners/portal/login", async (request, reply) => {
+    if (!isPartnerCoreConfigured()) return reply.code(503).send({ error: "Partner portal is temporarily unavailable" });
+    const body = partnerPortalLoginSchema.parse(request.body ?? {});
+    try {
+      const coreSession = await loginPartnerCorePortal({ ...body, clientRef: partnerPortalClientRef(request) });
+      const portalSession = await createPartnerPortalSession(coreSession);
+      setPartnerPortalCookies(reply, portalSession.rawSessionToken, portalSession.expiresAt);
+      return { partner: portalSession.identity, expiresAt: portalSession.expiresAt.toISOString() };
+    } catch (error) {
+      request.log.warn({ err: error instanceof Error ? error.name : "unknown" }, "Partner portal login failed");
+      return reply.code(error instanceof PartnerCoreServiceError && error.status === 429 ? 429 : 401).send({
+        error: "Не удалось войти. Проверьте данные или повторите позже."
+      });
+    }
+  });
+
+  app.post("/api/partners/portal/logout", async (request, reply) => {
+    const session = await requirePartnerPortalSession(request, reply);
+    if (!session) return;
+    if (!isPartnerPortalCsrfValid(request)) return reply.code(403).send({ error: "Invalid partner portal request" });
+    await logoutPartnerCorePortal(session.coreSessionToken).catch((error) => {
+      request.log.warn({ err: error instanceof Error ? error.name : "unknown" }, "Partner Core logout failed");
+    });
+    await revokePartnerPortalSession(session.id);
+    clearPartnerPortalCookies(reply);
+    return { ok: true };
+  });
+
+  app.get("/api/partners/portal/me", async (request, reply) => {
+    const session = await requirePartnerPortalSession(request, reply);
+    if (!session) return;
+    try {
+      const coreMe = await getPartnerCorePortalMe(session.coreSessionToken);
+      const identity = partnerPortalIdentity(coreMe, sessionIdentity(session)) ?? sessionIdentity(session);
+      await refreshPartnerPortalIdentity(session.id, identity);
+      return { partner: identity, expiresAt: session.expiresAt.toISOString() };
+    } catch (error) {
+      return handlePartnerPortalCoreError(request, reply, session.id, error);
+    }
+  });
+
+  app.get("/api/partners/portal/dashboard", async (request, reply) => {
+    const session = await requirePartnerPortalSession(request, reply);
+    if (!session) return;
+    try {
+      const dashboard = await getPartnerCorePortalDashboard(session.coreSessionToken);
+      const result = partnerPortalDashboard(dashboard, sessionIdentity(session));
+      await refreshPartnerPortalIdentity(session.id, result.partner);
+      return result;
+    } catch (error) {
+      return handlePartnerPortalCoreError(request, reply, session.id, error);
+    }
+  });
+
+  app.get("/api/partners/portal/referral-links", async (request, reply) => {
+    const session = await requirePartnerPortalSession(request, reply);
+    if (!session) return;
+    try {
+      const dashboard = await getPartnerCorePortalDashboard(session.coreSessionToken);
+      const result = partnerPortalDashboard(dashboard, sessionIdentity(session));
+      await refreshPartnerPortalIdentity(session.id, result.partner);
+      return { links: result.referralLinks };
+    } catch (error) {
+      return handlePartnerPortalCoreError(request, reply, session.id, error);
+    }
+  });
+
+  app.post("/api/partners/portal/referral-links", async (request, reply) => {
+    const session = await requirePartnerPortalSession(request, reply);
+    if (!session) return;
+    if (!isPartnerPortalCsrfValid(request)) return reply.code(403).send({ error: "Invalid partner portal request" });
+    const body = partnerPortalReferralSchema.parse(request.body ?? {});
+    try {
+      const link = await createPartnerCorePortalReferralLink({
+        sessionToken: session.coreSessionToken,
+        channel: body.channel,
+        idempotencyKey: `partner-ref:${body.idempotencyKey}`
+      });
+      return { link: sanitizePartnerCorePayload(link) };
+    } catch (error) {
+      return handlePartnerPortalCoreError(request, reply, session.id, error);
+    }
+  });
+
+  app.get("/api/partners/portal/offers", async (request, reply) => {
+    const session = await requirePartnerPortalSession(request, reply);
+    if (!session) return;
+    try {
+      const dashboard = await getPartnerCorePortalDashboard(session.coreSessionToken);
+      const result = partnerPortalDashboard(dashboard, sessionIdentity(session));
+      return { offers: result.offers };
+    } catch (error) {
+      return handlePartnerPortalCoreError(request, reply, session.id, error);
+    }
+  });
+
+  app.post("/api/partners/portal/offers", async (request, reply) => {
+    const session = await requirePartnerPortalSession(request, reply);
+    if (!session) return;
+    if (!isPartnerPortalCsrfValid(request)) return reply.code(403).send({ error: "Invalid partner portal request" });
+    const body = partnerPortalOfferSchema.parse(request.body ?? {});
+    try {
+      const offer = await createPartnerCorePortalOffer({
+        sessionToken: session.coreSessionToken,
+        offer: body.offer,
+        kind: body.kind,
+        surface: body.surface,
+        price: body.price,
+        cap: body.cap,
+        partnerPayoutCents: body.partnerPayoutCents,
+        idempotencyKey: `partner-offer:${body.idempotencyKey}`
+      });
+      return { offer: sanitizePartnerCorePayload(offer) };
+    } catch (error) {
+      return handlePartnerPortalCoreError(request, reply, session.id, error);
+    }
+  });
+
+  app.patch("/api/partners/portal/offers/:offerId", async (request, reply) => {
+    const session = await requirePartnerPortalSession(request, reply);
+    if (!session) return;
+    if (!isPartnerPortalCsrfValid(request)) return reply.code(403).send({ error: "Invalid partner portal request" });
+    const params = partnerPortalOfferIdSchema.parse(request.params);
+    const body = partnerPortalOfferUpdateSchema.parse(request.body ?? {});
+    try {
+      const offer = await updatePartnerCorePortalOffer({
+        sessionToken: session.coreSessionToken,
+        offerId: params.offerId,
+        offer: body.offer,
+        kind: body.kind,
+        surface: body.surface,
+        price: body.price,
+        cap: body.cap,
+        partnerPayoutCents: body.partnerPayoutCents,
+        idempotencyKey: `partner-offer-update:${body.idempotencyKey}`
+      });
+      return { offer: sanitizePartnerCorePayload(offer) };
+    } catch (error) {
+      return handlePartnerPortalCoreError(request, reply, session.id, error);
+    }
+  });
+
+  app.post("/api/partners/portal/offers/:offerId/submit-review", async (request, reply) => {
+    const session = await requirePartnerPortalSession(request, reply);
+    if (!session) return;
+    if (!isPartnerPortalCsrfValid(request)) return reply.code(403).send({ error: "Invalid partner portal request" });
+    const params = partnerPortalOfferIdSchema.parse(request.params);
+    const body = partnerPortalReviewSchema.parse(request.body ?? {});
+    try {
+      const offer = await submitPartnerCorePortalOfferReview({
+        sessionToken: session.coreSessionToken,
+        offerId: params.offerId,
+        idempotencyKey: `partner-offer-submit:${body.idempotencyKey}`
+      });
+      return { offer: sanitizePartnerCorePayload(offer) };
+    } catch (error) {
+      return handlePartnerPortalCoreError(request, reply, session.id, error);
+    }
+  });
+
+  app.get("/api/partners/portal/ledger", async (request, reply) => {
+    const session = await requirePartnerPortalSession(request, reply);
+    if (!session) return;
+    try {
+      return { ledger: sanitizePartnerCorePayload(await getPartnerCorePortalLedger(session.coreSessionToken)) };
+    } catch (error) {
+      return handlePartnerPortalCoreError(request, reply, session.id, error);
+    }
+  });
+
+  app.get("/api/partners/portal/payouts", async (request, reply) => {
+    const session = await requirePartnerPortalSession(request, reply);
+    if (!session) return;
+    try {
+      return { payouts: sanitizePartnerCorePayload(await getPartnerCorePortalPayouts(session.coreSessionToken)) };
+    } catch (error) {
+      return handlePartnerPortalCoreError(request, reply, session.id, error);
+    }
+  });
+
   app.get("/api/partners/marketplace", async (request, reply) => {
     const session = await requireSession(request, reply);
     if (!session) return;
@@ -103,6 +379,37 @@ export async function partnerRoutes(app: FastifyInstance) {
       include: { referralLinks: { orderBy: { createdAt: "desc" } } }
     });
     return programs.map(serializeProgram);
+  });
+
+  app.get("/api/admin/partner-core", async (request, reply) => {
+    if (!(await requireAdmin(request, reply))) return;
+    try {
+      return await getPartnerCoreAdminSnapshot("orken-admin");
+    } catch (error) {
+      request.log.error({ error }, "Partner Core admin snapshot failed");
+      const message = error instanceof Error ? error.message : "Partner Core admin snapshot failed";
+      return reply.code(502).send({ error: message });
+    }
+  });
+
+  app.patch("/api/admin/partner-core/partners/:id/status", async (request, reply) => {
+    if (!(await requireAdmin(request, reply))) return;
+    const params = z.object({ id: z.string().trim().min(1).max(180) }).parse(request.params);
+    const body = partnerProjectStatusSchema.parse(request.body ?? {});
+    try {
+      const result = await updatePartnerCoreAdminPartnerStatus({
+        partnerAccountId: params.id,
+        status: body.status,
+        actor: "orken-admin"
+      });
+      await writeAdminAudit("partner.project_status", "PartnerCorePartner", params.id, body);
+      return sanitizePartnerCorePayload(result);
+    } catch (error) {
+      request.log.error({ error, partnerAccountId: params.id }, "Partner Core partner status update failed");
+      const status = error instanceof PartnerCoreServiceError ? error.status : 502;
+      const message = error instanceof Error ? error.message : "Partner Core partner status update failed";
+      return reply.code(status).send({ error: message });
+    }
   });
 
   app.post("/api/admin/partner-programs", async (request, reply) => {
@@ -253,18 +560,26 @@ export async function partnerRoutes(app: FastifyInstance) {
     return redemptions.map(serializeRedemption);
   });
 
-  app.post("/api/admin/partner-core/embedded-session", async (request, reply) => {
-    if (!(await requireAdmin(request, reply))) return;
-    if (!isPartnerCoreConfigured()) {
-      return reply.code(501).send({ error: "Partner Core is not configured" });
-    }
-    const session = await createEmbeddedPartnerCoreSession("orken-admin");
-    return {
-      ...session,
-      partnerCoreUrl: env.PARTNER_CORE_URL,
-      projectId: env.PARTNER_CORE_PROJECT_ID
-    };
-  });
+}
+
+async function requirePartnerPortalSession(request: FastifyRequest, reply: FastifyReply) {
+  const session = await getPartnerPortalSession(request);
+  if (session) return session;
+  clearPartnerPortalCookies(reply);
+  reply.code(401).send({ error: "Partner login required" });
+  return null;
+}
+
+async function handlePartnerPortalCoreError(request: FastifyRequest, reply: FastifyReply, sessionId: string, error: unknown) {
+  const status = error instanceof PartnerCoreServiceError ? error.status : 502;
+  request.log.warn({ err: error instanceof Error ? error.name : "unknown", status }, "Partner Core portal request failed");
+  if (status === 401 || status === 403) {
+    await revokePartnerPortalSession(sessionId);
+    clearPartnerPortalCookies(reply);
+    return reply.code(401).send({ error: "Partner session expired. Please sign in again." });
+  }
+  if (status === 429) return reply.code(429).send({ error: "Too many requests. Please try again later." });
+  return reply.code(502).send({ error: "Partner portal is temporarily unavailable" });
 }
 
 function serializeProgram(program: any) {

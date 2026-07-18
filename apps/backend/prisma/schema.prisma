@@ -394,6 +394,7 @@ model PartnerAttribution {
   programConfigId       String?
   programConfig         PartnerAffiliateProgram? @relation(fields: [programConfigId], references: [id], onDelete: SetNull)
   partnerCoreProgramId  String?
+  partnerCorePartnerId  String?
   referralCode          String
   customerBonusType     PartnerCustomerBonusType @default(NONE)
   customerBonusValue    Int?
@@ -408,7 +409,26 @@ model PartnerAttribution {
 
   @@index([referralCode, createdAt])
   @@index([partnerCoreProgramId])
+  @@index([partnerCorePartnerId])
   @@index([bonusStatus, createdAt])
+}
+
+model PartnerPortalSession {
+  id                    String   @id @default(cuid())
+  tokenHash             String   @unique
+  coreSessionCiphertext String
+  partnerCorePartnerId  String
+  partnerStatus         String
+  displayName           String?
+  accountName           String?
+  expiresAt             DateTime
+  revokedAt             DateTime?
+  lastSeenAt            DateTime?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([partnerCorePartnerId, expiresAt])
+  @@index([expiresAt])
 }
 
 model PartnerEvent {
@@ -898,6 +918,8 @@ enum PartnerEventType {
   SIGNUP
   PAYMENT
   REDEMPTION
+  REFUND
+  CUSTOMER_BONUS
 }
 
 enum PartnerOfferStatus {

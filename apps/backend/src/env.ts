@@ -56,11 +56,16 @@ const schema = z.object({
   CODEX_BRIDGE_WEBHOOK_URL: optionalUrlEnv,
   CODEX_BRIDGE_WEBHOOK_SECRET: z.string().optional(),
   PARTNER_CORE_URL: optionalUrlEnv,
+  PARTNER_CORE_SERVICE_KEYS_JSON: z.string().optional(),
   PARTNER_CORE_KEY_ID: z.string().optional(),
   PARTNER_CORE_SERVICE_SECRET: z.string().optional(),
   PARTNER_CORE_PROJECT_ID: z.string().default("orken-life"),
+  PARTNER_CORE_DEFAULT_PROGRAM_ID: z.string().default("prog-orken-life"),
   PARTNER_CORE_EMBED_ORIGIN: optionalUrlEnv,
-  PARTNER_CORE_PRIVACY_SECRET: z.string().optional()
+  PARTNER_CORE_PRIVACY_SECRET: z.string().optional(),
+  PARTNER_PORTAL_ORIGIN: optionalUrlEnv,
+  PARTNER_PORTAL_SESSION_ENCRYPTION_SECRET: z.string().optional(),
+  PARTNER_PORTAL_COOKIE_DOMAIN: z.preprocess(emptyToUndefined, z.string().trim().min(1).optional())
 });
 
 export const env = schema.parse(process.env);

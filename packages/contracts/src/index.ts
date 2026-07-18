@@ -381,12 +381,63 @@ export type PartnerOfferRedemptionResponse = {
   currency: string;
 };
 
-export type PartnerCoreEmbeddedSessionResponse = {
-  token: string;
-  expiresAt: number;
-  projectId: string;
-  scopes: string[];
-  partnerCoreUrl?: string;
+export type PartnerPortalStatus = "DRAFT" | "PENDING_REVIEW" | "APPROVED" | "REJECTED" | "SUSPENDED" | string;
+
+export type PartnerPortalIdentity = {
+  partnerCorePartnerId: string;
+  status: PartnerPortalStatus;
+  displayName?: string | null;
+  accountName?: string | null;
+  email?: string | null;
+};
+
+export type PartnerPortalSessionResponse = {
+  partner: PartnerPortalIdentity;
+  expiresAt: string;
+};
+
+export type PartnerPortalDashboard = {
+  partner: PartnerPortalIdentity;
+  metrics: Record<string, unknown>;
+  referralLinks: Array<Record<string, unknown>>;
+  offers: Array<Record<string, unknown>>;
+  leads: Array<Record<string, unknown>>;
+  conversions: Array<Record<string, unknown>>;
+  payouts: Record<string, unknown>;
+};
+
+export type PartnerPortalReferralLink = Record<string, unknown>;
+export type PartnerPortalOffer = Record<string, unknown>;
+export type PartnerPortalLedgerResponse = Record<string, unknown>;
+export type PartnerPortalPayoutsResponse = Record<string, unknown>;
+
+export type PartnerCoreAdminPartner = {
+  id: string;
+  account_type?: string | null;
+  display_name?: string | null;
+  legal_name?: string | null;
+  email?: string | null;
+  account_status?: string | null;
+  project_status: string;
+  referral_links_count?: number | string | null;
+  conversions_count?: number | string | null;
+  payable_cents?: number | string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export type PartnerCoreAdminSnapshot = {
+  configured: boolean;
+  error?: string | null;
+  project: Record<string, unknown> | null;
+  programs: Array<Record<string, unknown>>;
+  referralLinks: Array<Record<string, unknown>>;
+  placements: Array<Record<string, unknown>>;
+  partners: PartnerCoreAdminPartner[];
+  redemptions: Array<Record<string, unknown>>;
+  walletOperations: Array<Record<string, unknown>>;
+  ledgerEntries: Array<Record<string, unknown>>;
+  reviewTasks: Array<Record<string, unknown>>;
 };
 
 export type AdminUserHabitProgramSummary = {

@@ -7,6 +7,7 @@ import type {
   AppSetting,
   FeatureFlag,
   PartnerAffiliateProgramSummary,
+  PartnerCoreAdminSnapshot,
   PartnerOfferStatus,
   PartnerOfferSummary,
   PartnerRedemptionSummary,
@@ -84,6 +85,64 @@ const emptyPartnerOfferForm = {
   entitlementValue: ""
 };
 
+const emptyPartnerCoreSnapshot: PartnerCoreAdminSnapshot = {
+  configured: false,
+  project: null,
+  programs: [],
+  referralLinks: [],
+  placements: [],
+  partners: [],
+  redemptions: [],
+  walletOperations: [],
+  ledgerEntries: [],
+  reviewTasks: []
+};
+
+const cleanTelegramPolicyDefaults = {
+  reminderTemplate: [
+    "ORKEN на связи. Сегодняшний мягкий шаг:",
+    "{{habitTitle}}",
+    "{{taskText}}",
+    "{{metricText}}",
+    "",
+    "Кнопки ниже помогут отметить шаг, сохранить состояние или открыть кабинет."
+  ].join("\n"),
+  welcomeTemplate: [
+    "Привет! Я твой личный AI-помощник ORKEN от Навигатора привычек ORKEN.LIFE.",
+    "",
+    "Я помогаю оставаться в фокусе, отслеживать прогресс и прокачивать дисциплину прямо в мессенджере. Вот что я умею делать:",
+    "",
+    "1. Подтягивать текущую привычку на сегодня из личного кабинета.",
+    "2. Фиксировать внутреннее состояние: энергию, ясность и устойчивость.",
+    "3. Сохранять важные инсайты и мысли в личный архив.",
+    "4. Начислять XP за ежедневные активности в общий профиль на сайте.",
+    "",
+    "Давай начнем. Синхронизируем твой аккаунт."
+  ].join("\n"),
+  todayTemplate: [
+    "Сегодня: {{habitTitle}}",
+    "",
+    "1. Что нужно сделать",
+    "{{whatToDo}}",
+    "",
+    "2. Если нет сил",
+    "{{lowEnergy}}",
+    "",
+    "3. Зачем",
+    "{{why}}",
+    "",
+    "4. Время",
+    "{{time}}",
+    "",
+    "Прогресс недели: {{weekProgress}}/7."
+  ].join("\n")
+};
+
+function cleanTemplateValue(value: unknown, fallback: string) {
+  if (typeof value !== "string" || !value.trim()) return fallback;
+  return value.includes("Р") || value.includes("В·") || value.includes("вЂ") ? fallback : value;
+}
+
 export default function AdminPage() {
   const adminText = defaultSiteText.ru.admin;
   const [password, setPassword] = useState("");
@@ -100,6 +159,7 @@ export default function AdminPage() {
   const [partnerPrograms, setPartnerPrograms] = useState<PartnerAffiliateProgramSummary[]>([]);
   const [partnerOffers, setPartnerOffers] = useState<PartnerOfferSummary[]>([]);
   const [partnerRedemptions, setPartnerRedemptions] = useState<PartnerRedemptionSummary[]>([]);
+  const [partnerCoreSnapshot, setPartnerCoreSnapshot] = useState<PartnerCoreAdminSnapshot>(emptyPartnerCoreSnapshot);
   const [partnerProgramForm, setPartnerProgramForm] = useState(emptyPartnerProgramForm);
   const [partnerOfferForm, setPartnerOfferForm] = useState(emptyPartnerOfferForm);
   const [referralChannelByProgram, setReferralChannelByProgram] = useState<Record<string, string>>({});
@@ -185,6 +245,17 @@ export default function AdminPage() {
   const [message, setMessage] = useState("");
 
   useEffect(() => {
+    setTelegramPolicyForm((current) => {
+      const hasBrokenText = [current.reminderTemplate, current.welcomeTemplate, current.todayTemplate].some((value) => value.includes("Р") || value.includes("В·"));
+      if (!hasBrokenText) return current;
+      return {
+        ...current,
+        ...cleanTelegramPolicyDefaults
+      };
+    });
+  }, []);
+
+  useEffect(() => {
     const saved = window.sessionStorage.getItem("levelup_admin_session") ?? "";
     if (saved) {
       setAuthenticated(true);
@@ -206,7 +277,8 @@ export default function AdminPage() {
         nextPromoCodes,
         nextPartnerPrograms,
         nextPartnerOffers,
-        nextPartnerRedemptions
+        nextPartnerRedemptions,
+        nextPartnerCoreSnapshot
       ] = await Promise.all([
         adminApi.stats(),
         adminApi.analyses(),
@@ -218,7 +290,12 @@ export default function AdminPage() {
         adminApi.promoCodes(),
         adminApi.partnerPrograms(),
         adminApi.partnerOffers(),
-        adminApi.partnerRedemptions()
+        adminApi.partnerRedemptions(),
+        adminApi.partnerCore().catch((reason) => ({
+          ...emptyPartnerCoreSnapshot,
+          configured: true,
+          error: reason instanceof Error ? reason.message : "Partner Core недоступен"
+        }))
       ]);
       setStats(nextStats);
       setAnalyses(nextAnalyses);
@@ -231,6 +308,7 @@ export default function AdminPage() {
       setPartnerPrograms(nextPartnerPrograms);
       setPartnerOffers(nextPartnerOffers);
       setPartnerRedemptions(nextPartnerRedemptions);
+      setPartnerCoreSnapshot(nextPartnerCoreSnapshot);
       hydrateTextDrafts(nextSettings);
       hydrateLocaleForm(nextSettings);
       hydratePriceForm(nextSettings);
@@ -322,9 +400,9 @@ export default function AdminPage() {
     setTelegramPolicyForm((current) => ({
       rateLimitWindowMs: typeof rateLimitWindowMs === "number" || typeof rateLimitWindowMs === "string" ? String(rateLimitWindowMs) : current.rateLimitWindowMs,
       rateLimitMax: typeof rateLimitMax === "number" || typeof rateLimitMax === "string" ? String(rateLimitMax) : current.rateLimitMax,
-      reminderTemplate: typeof reminderTemplate === "string" && reminderTemplate.trim() ? reminderTemplate : current.reminderTemplate,
-      welcomeTemplate: typeof welcomeTemplate === "string" && welcomeTemplate.trim() ? welcomeTemplate : current.welcomeTemplate,
-      todayTemplate: typeof todayTemplate === "string" && todayTemplate.trim() ? todayTemplate : current.todayTemplate,
+      reminderTemplate: cleanTemplateValue(reminderTemplate, cleanTelegramPolicyDefaults.reminderTemplate),
+      welcomeTemplate: cleanTemplateValue(welcomeTemplate, cleanTelegramPolicyDefaults.welcomeTemplate),
+      todayTemplate: cleanTemplateValue(todayTemplate, cleanTelegramPolicyDefaults.todayTemplate),
       assistantAvatarUrl: typeof assistantAvatarUrl === "string" ? assistantAvatarUrl : current.assistantAvatarUrl,
       webLoginEnabled: typeof webLoginEnabled === "boolean" ? webLoginEnabled : current.webLoginEnabled
     }));
@@ -755,13 +833,14 @@ export default function AdminPage() {
     }
   }
 
-  async function openEmbeddedPartnerCore() {
+  async function setPartnerAccess(partnerId: string, status: "approved" | "suspended") {
     setMessage("");
     try {
-      const session = await adminApi.partnerCoreEmbeddedSession();
-      setMessage(`Embedded Partner Core session created for ${session.projectId}. Token expires at ${new Date(session.expiresAt * 1000).toISOString()}`);
+      await adminApi.setPartnerCorePartnerStatus(partnerId, status);
+      setPartnerCoreSnapshot(await adminApi.partnerCore());
+      setMessage(status === "approved" ? "Доступ партнёра восстановлен" : "Доступ партнёра приостановлен");
     } catch (reason) {
-      setMessage(reason instanceof Error ? reason.message : "Partner Core embedded session failed");
+      setMessage(reason instanceof Error ? reason.message : "Не удалось изменить доступ партнёра");
     }
   }
 
@@ -809,6 +888,8 @@ export default function AdminPage() {
   const habitTrialPreview = Number.isInteger(habitTrialDaysNumber) && habitTrialDaysNumber > 0
     ? `${habitTrialDaysNumber} days trial`
     : adminText.habitTrialDisabled;
+  const partnerLedgerRevenueCents = partnerCoreSnapshot.ledgerEntries.reduce((total, entry) => total + adminRecordNumber(entry, "amount_cents", "amountCents"), 0);
+  const partnerConversions = partnerCoreSnapshot.partners.reduce((total, partner) => total + Number(partner.conversions_count ?? 0), 0);
 
   return (
     <main className="page stack">
@@ -854,7 +935,19 @@ export default function AdminPage() {
             <button className="button secondary" onClick={seedDefaultPrompts}>{adminText.seedPrompt}</button>
           </section>
 
-          <section className="card stack">
+          <nav className="admin-section-nav" aria-label="Admin sections">
+            <a href="#admin-users">Пользователи</a>
+            <a href="#admin-pricing">Цены и trial</a>
+            <a href="#admin-habits-ai">Habit AI</a>
+            <a href="#admin-telegram">Telegram</a>
+            <a href="#admin-prompts">Промпты</a>
+            <a href="#admin-texts">Тексты</a>
+            <a href="#admin-promos">Промокоды</a>
+            <a href="#admin-partners">Партнерка</a>
+            <a href="#admin-system">Система</a>
+          </nav>
+
+          <section id="admin-users" className="card stack admin-section-card">
             <div>
               <h2>Users and usage</h2>
               <p className="muted">Search users, inspect diagnostics/habits activity, and grant extra usage days for a selected habits program. Gift actions are written to admin audit and analytics events.</p>
@@ -952,7 +1045,7 @@ export default function AdminPage() {
             </div>
           </section>
 
-          <section className="card stack">
+          <section id="admin-locales" className="card stack admin-section-card">
             <div>
               <h2>Localization settings</h2>
               <p className="muted">Controls which locales are enabled and which locale is used by default. Translation JSON is edited below in Texts and translations.</p>
@@ -970,7 +1063,7 @@ export default function AdminPage() {
             </div>
           </section>
 
-          <section className="card stack">
+          <section id="admin-pricing" className="card stack admin-section-card">
             <div>
               <h2>{adminText.priceTitle}</h2>
               <p className="muted">{adminText.priceCopy}</p>
@@ -986,7 +1079,7 @@ export default function AdminPage() {
             </div>
           </section>
 
-          <section className="card stack">
+          <section className="card stack admin-section-card">
             <div>
               <h2>{adminText.habitPriceTitle}</h2>
               <p className="muted">{adminText.habitPriceCopy}</p>
@@ -1014,7 +1107,7 @@ export default function AdminPage() {
             </div>
           </section>
 
-          <section className="card stack">
+          <section id="admin-habits-ai" className="card stack admin-section-card">
             <div>
               <h2>Habit AI settings</h2>
               <p className="muted">Switch week summaries between deterministic rules and LLM generation. LLM mode falls back to rules if the provider is unavailable.</p>
@@ -1039,7 +1132,7 @@ export default function AdminPage() {
             </div>
           </section>
 
-          <section className="card stack">
+          <section id="admin-telegram" className="card stack admin-section-card">
             <div>
               <h2>Telegram policy</h2>
               <p className="muted">Controls bot rate limits, reminder copy, and short-lived Telegram-to-web login links. Bot token and provider secrets stay only in backend environment variables.</p>
@@ -1110,7 +1203,7 @@ export default function AdminPage() {
             <button className="button" onClick={saveTelegramPolicySettings}>Save Telegram policy</button>
           </section>
 
-          <section className="card stack">
+          <section id="admin-prompts" className="card stack admin-section-card">
             <div>
               <h2>{adminText.promptTitle}</h2>
               <p className="muted">{adminText.promptCopy}</p>
@@ -1182,7 +1275,7 @@ export default function AdminPage() {
             </div>
           </section>
 
-          <section className="card stack">
+          <section id="admin-texts" className="card stack admin-section-card">
             <div>
               <h2>{adminText.textTitle}</h2>
               <p className="muted">{adminText.textCopy}</p>
@@ -1211,7 +1304,7 @@ export default function AdminPage() {
             </div>
           </section>
 
-          <section className="card stack">
+          <section id="admin-promos" className="card stack admin-section-card">
             <h2>{adminText.promoTitle}</h2>
             <div className="grid grid-3">
               <input className="input" value={promoForm.code} onChange={(event) => setPromoForm({ ...promoForm, code: event.target.value })} placeholder="Code" />
@@ -1246,15 +1339,51 @@ export default function AdminPage() {
             </div>
           </section>
 
-          <section className="card stack">
+          <section id="admin-partners" className="card stack admin-section-card">
             <div className="row">
               <div>
-                <h2>Partner Core</h2>
-                <p className="muted">Orken is a project slice. Partner accounts, approval, referral links, payout ledger and cross-project history stay in Partner Core.</p>
+                <h2>Партнёрская программа Orken</h2>
+                <p className="muted">Управление партнёрами, программой, офферами, валютой наград и revenue встроено в текущую админку. Partner Core работает как центральный backend.</p>
               </div>
               <div className="row" style={{ justifyContent: "flex-end" }}>
                 <button className="button secondary" onClick={syncPartnerOffers}>Sync from Partner Core</button>
-                <button className="button secondary" onClick={openEmbeddedPartnerCore}>Embedded session</button>
+              </div>
+            </div>
+
+            {partnerCoreSnapshot.error && <div className="admin-partner-warning">Partner Core недоступен: {partnerCoreSnapshot.error}</div>}
+            {!partnerCoreSnapshot.configured && <div className="admin-partner-warning">Partner Core не настроен на backend Orken. Локальные формы доступны, синхронизация отключена.</div>}
+
+            <div className="grid grid-3">
+              <AdminMiniMetric label="Партнеры" value={partnerCoreSnapshot.partners.length} />
+              <AdminMiniMetric label="Конверсии" value={partnerConversions} />
+              <AdminMiniMetric label="Revenue ledger" value={formatPartnerMoney(partnerLedgerRevenueCents)} />
+              <AdminMiniMetric label="Программы" value={partnerCoreSnapshot.programs.length} />
+              <AdminMiniMetric label="Офферы" value={partnerCoreSnapshot.placements.length} />
+              <AdminMiniMetric label="На модерации" value={partnerCoreSnapshot.reviewTasks.filter((task) => adminRecordText(task, "status") === "open").length} />
+            </div>
+
+            <div className="stack">
+              <div>
+                <h3>Партнёры проекта</h3>
+                <p className="muted">Доступ меняется только для Orken и не затрагивает работу партнёра в других проектах студии.</p>
+              </div>
+              <div className="admin-program-list">
+                {partnerCoreSnapshot.partners.length === 0 ? <p className="muted">Партнеры еще не зарегистрированы</p> : partnerCoreSnapshot.partners.map((partner) => {
+                  const suspended = partner.project_status === "suspended";
+                  return (
+                    <div className="admin-program-row" key={partner.id}>
+                      <div>
+                        <strong>{partner.display_name ?? partner.legal_name ?? partner.email ?? partner.id}</strong>
+                        <span>{partner.email ?? "Email не указан"} · {partner.account_type ?? "partner"}</span>
+                        <span>Статус: {partner.project_status} · ссылок {Number(partner.referral_links_count ?? 0)} · конверсий {Number(partner.conversions_count ?? 0)}</span>
+                        <span>Начислено: {formatPartnerMoney(Number(partner.payable_cents ?? 0))}</span>
+                      </div>
+                      <button className={`button ${suspended ? "" : "secondary"}`} onClick={() => void setPartnerAccess(partner.id, suspended ? "approved" : "suspended")}>
+                        {suspended ? "Восстановить доступ" : "Приостановить"}
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 
@@ -1384,9 +1513,22 @@ export default function AdminPage() {
                 </div>
               ))}
             </div>
+
+            <div className="admin-program-list">
+              <h3>Revenue и начисления</h3>
+              {partnerCoreSnapshot.ledgerEntries.length === 0 ? <p className="muted">Начислений пока нет</p> : partnerCoreSnapshot.ledgerEntries.slice(0, 30).map((entry, index) => (
+                <div className="admin-program-row" key={adminRecordText(entry, "id") || index}>
+                  <div>
+                    <strong>{adminRecordText(entry, "account") || "Ledger entry"} · {adminRecordText(entry, "status") || "unknown"}</strong>
+                    <span>{adminRecordText(entry, "counterparty") || "Orken"} · {adminRecordText(entry, "source") || "event"}</span>
+                    <span>{adminRecordText(entry, "amount_text", "amountText") || formatPartnerMoney(adminRecordNumber(entry, "amount_cents", "amountCents"))}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </section>
 
-          <section className="grid grid-2">
+          <section id="admin-system" className="grid grid-2 admin-system-grid">
             <List title={adminText.lists[0]} items={settings.map((item) => `${item.key}: ${JSON.stringify(item.value).slice(0, 180)}`)} />
             <List title={adminText.lists[1]} items={flags.map((item) => `${item.key}: ${item.enabled}`)} />
             <List title={adminText.lists[2]} items={prompts.map((item) => `${item.key}/${item.locale}/v${item.version}: ${item.status}`)} />
@@ -1443,11 +1585,53 @@ function formatAdminPriceLabel(amountValue: string, currencyValue: string) {
   }
 }
 
+function adminRecordText(record: Record<string, unknown>, ...keys: string[]) {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
+}
+
+function adminRecordNumber(record: Record<string, unknown>, ...keys: string[]) {
+  for (const key of keys) {
+    const value = Number(record[key]);
+    if (Number.isFinite(value)) return value;
+  }
+  return 0;
+}
+
+function formatPartnerMoney(cents: number) {
+  return new Intl.NumberFormat("ru-RU", { style: "currency", currency: "EUR" }).format(cents / 100);
+}
+
 function List({ title, items }: { title: string; items: string[] }) {
   return (
-    <div className="card stack">
-      <h2>{title}</h2>
-      {items.length === 0 ? <p className="muted">No data</p> : items.map((item) => <p className="muted" key={item}>{item}</p>)}
+    <div className="card stack admin-list-card">
+      <div className="row">
+        <h2>{title}</h2>
+        <span className="admin-list-count">{items.length}</span>
+      </div>
+      <div className="admin-compact-list">
+        {items.length === 0 ? <p className="muted">No data</p> : items.map((item) => {
+          const [label, value] = splitAdminListItem(item);
+          return (
+            <details className="admin-list-row" key={item}>
+              <summary>
+                <strong>{label}</strong>
+                <span>{value}</span>
+              </summary>
+              <pre>{item}</pre>
+            </details>
+          );
+        })}
+      </div>
     </div>
   );
+}
+
+function splitAdminListItem(item: string) {
+  const index = item.indexOf(":");
+  if (index <= 0) return [item.slice(0, 80), item.slice(80)] as const;
+  return [item.slice(0, index), item.slice(index + 1).trim()] as const;
 }

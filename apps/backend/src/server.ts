@@ -24,7 +24,7 @@ const app = Fastify({
 });
 
 await app.register(cors, {
-  origin: env.APP_ORIGIN,
+  origin: [env.APP_ORIGIN, ...(env.PARTNER_PORTAL_ORIGIN ? [env.PARTNER_PORTAL_ORIGIN] : [])],
   credentials: true
 });
 await app.register(helmet);

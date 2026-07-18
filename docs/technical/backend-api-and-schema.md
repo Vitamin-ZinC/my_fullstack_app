@@ -45,6 +45,7 @@ Current models in `apps/backend/prisma/schema.prisma`:
 - `PartnerOffer`
 - `PartnerOfferRedemption`
 - `InternalWalletTransaction`
+- `PartnerPortalSession`
 
 Current enums:
 
@@ -438,7 +439,8 @@ Implemented admin routes:
 - `PATCH /api/admin/partner-offers/:id/status`
 - `POST /api/admin/partner-offers/sync`
 - `GET /api/admin/partner-redemptions`
-- `POST /api/admin/partner-core/embedded-session`
+- `GET /api/admin/partner-core`
+- `PATCH /api/admin/partner-core/partners/:id/status`
 
 Important implementation files:
 
@@ -448,6 +450,32 @@ Important implementation files:
 - `apps/frontend/app/habits/page.tsx`
 
 Do not create a local `partners` source-of-truth table in ORKEN. A local cache/read model is allowed only for ORKEN-specific display and redemption state.
+
+#### Partner portal BFF routes
+
+These routes are served by ORKEN and call Partner Core only server-to-server. They
+are not a replacement for Partner Core account APIs.
+
+- `POST /api/partners/portal/register`
+- `POST /api/partners/portal/login`
+- `POST /api/partners/portal/logout`
+- `GET /api/partners/portal/me`
+- `GET /api/partners/portal/dashboard`
+- `GET /api/partners/portal/referral-links`
+- `POST /api/partners/portal/referral-links`
+- `GET /api/partners/portal/offers`
+- `POST /api/partners/portal/offers`
+- `POST /api/partners/portal/offers/:offerId/submit-review`
+- `GET /api/partners/portal/ledger`
+- `GET /api/partners/portal/payouts`
+
+Portal writes require a valid ORKEN portal session plus `x-partner-csrf` matching
+the non-HttpOnly CSRF cookie. The session cookie itself is HttpOnly. Core opaque
+session tokens are encrypted server-side and are never returned in API responses.
+
+`PartnerAttribution` may cache `partnerCorePartnerId` returned by Partner Core for
+an ORKEN referral signup. It remains a local attribution pointer, not a partner
+record.
 
 ### Payments
 
@@ -520,7 +548,8 @@ Local watcher for this workstation:
 - `PATCH /api/admin/partner-offers/:id/status`
 - `POST /api/admin/partner-offers/sync`
 - `GET /api/admin/partner-redemptions`
-- `POST /api/admin/partner-core/embedded-session`
+- `GET /api/admin/partner-core`
+- `PATCH /api/admin/partner-core/partners/:id/status`
 - `GET /api/admin/audit-log`
 
 ## Shared Contracts

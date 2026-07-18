@@ -6,7 +6,12 @@ import { requireAnalysisAccess } from "../lib/auth.js";
 import { prisma } from "../lib/prisma.js";
 import { calculatePromoDiscount, normalizePromoCode, validatePromoCode } from "../services/promoCodes.js";
 import { getReportPriceConfig } from "../services/pricing.js";
-import { recordPaymentConversionForPayment, recordSubscriptionInvoiceConversion } from "../services/partnerCore.js";
+import {
+  recordPaymentConversionForPayment,
+  recordPaymentConversionReversalForPayment,
+  recordSubscriptionInvoiceConversion,
+  recordSubscriptionInvoiceConversionReversal
+} from "../services/partnerCore.js";
 
 const stripe = env.STRIPE_SECRET_KEY ? new Stripe(env.STRIPE_SECRET_KEY) : null;
 
@@ -546,6 +551,46 @@ export async function paymentRoutes(app: FastifyInstance) {
         customerId,
         amountPaidCents: Number(invoice.amount_paid ?? invoiceAny.amountPaid ?? 0)
       }).catch((error) => app.log.error({ error, invoiceId: invoice.id }, "partner subscription invoice conversion failed"));
+    }
+    if (event.type === "charge.refunded") {
+      const charge = event.data.object as Stripe.Charge;
+      const chargeAny = charge as any;
+      const amount = Number(charge.amount ?? chargeAny.amount ?? 0);
+      const refunded = Number(charge.amount_refunded ?? chargeAny.amount_refunded ?? 0);
+      if (amount > 0 && refunded >= amount) {
+        const refundId = chargeAny.refunds?.data?.[0]?.id ?? event.id;
+        const reason = `Stripe refund ${refundId}`;
+        const invoiceId = typeof chargeAny.invoice === "string" ? chargeAny.invoice : chargeAny.invoice?.id;
+        const paymentIntentId = typeof chargeAny.payment_intent === "string" ? chargeAny.payment_intent : chargeAny.payment_intent?.id;
+
+        if (invoiceId) {
+          const invoice = stripe ? await stripe.invoices.retrieve(invoiceId).catch(() => null) : null;
+          const invoiceAny = invoice as any;
+          const subscriptionId = typeof invoiceAny?.subscription === "string" ? invoiceAny.subscription : invoiceAny?.subscription?.id;
+          const subscription = subscriptionId && stripe ? await stripe.subscriptions.retrieve(subscriptionId).catch(() => null) : null;
+          const userId = invoiceAny?.metadata?.userId || subscription?.metadata?.userId || null;
+          const customerId = typeof invoiceAny?.customer === "string" ? invoiceAny.customer : invoiceAny?.customer?.id ?? null;
+          await recordSubscriptionInvoiceConversionReversal({
+            invoiceId,
+            refundId,
+            reason,
+            userId,
+            customerId
+          }).catch((error) => app.log.error({ error, invoiceId, refundId }, "partner subscription invoice reversal failed"));
+        }
+
+        if (paymentIntentId) {
+          const payment = await prisma.payment.findFirst({ where: { stripePaymentIntentId: paymentIntentId } });
+          if (payment) {
+            await prisma.payment.update({ where: { id: payment.id }, data: { status: "REFUNDED" } }).catch(() => undefined);
+            await recordPaymentConversionReversalForPayment({
+              paymentId: payment.id,
+              refundId,
+              reason
+            }).catch((error) => app.log.error({ error, paymentId: payment.id, refundId }, "partner payment conversion reversal failed"));
+          }
+        }
+      }
     }
     if (event.type === "payment_intent.payment_failed") {
       const intent = event.data.object as Stripe.PaymentIntent;

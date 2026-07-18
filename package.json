@@ -13,6 +13,7 @@
     "build": "npm run build --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
+    "test:partner-boundary": "node scripts/test-partner-portal-client-boundary.mjs",
     "test:e2e": "playwright test \"tests/frontend-flow.spec.js\" --workers=1",
     "smoke:prod": "node scripts/smoke-prod.mjs",
     "prisma:generate": "npm --workspace apps/backend run prisma:generate",

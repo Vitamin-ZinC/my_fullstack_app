@@ -6,6 +6,7 @@ import { env } from "../env.js";
 import { buildFallbackFreeReport, buildFallbackReport } from "../services/report.js";
 import { generateOpenAiReport } from "../services/aiReport.js";
 import { sendDueTelegramReminders } from "../services/telegramBot.js";
+import { retryPartnerCoreEvents } from "../services/partnerCore.js";
 
 const logs = [
   [15, "Analyzing facial micro-signals..."],
@@ -167,3 +168,10 @@ const telegramReminderTimer = setInterval(() => {
   });
 }, 60 * 1000);
 telegramReminderTimer.unref?.();
+
+const partnerCoreRetryTimer = setInterval(() => {
+  retryPartnerCoreEvents().catch((error) => {
+    console.error("Partner Core event retry failed", error);
+  });
+}, 2 * 60 * 1000);
+partnerCoreRetryTimer.unref?.();

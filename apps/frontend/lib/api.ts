@@ -23,12 +23,18 @@ import type {
   PaymentIntentResponse,
   PartnerAffiliateProgramInput,
   PartnerAffiliateProgramSummary,
-  PartnerCoreEmbeddedSessionResponse,
+  PartnerCoreAdminSnapshot,
   PartnerMarketplaceResponse,
   PartnerOfferInput,
   PartnerOfferRedemptionResponse,
   PartnerOfferStatus,
   PartnerOfferSummary,
+  PartnerPortalDashboard,
+  PartnerPortalLedgerResponse,
+  PartnerPortalOffer,
+  PartnerPortalPayoutsResponse,
+  PartnerPortalReferralLink,
+  PartnerPortalSessionResponse,
   PartnerRedemptionSummary,
   PartnerReferralLinkSummary,
   PromoCode,
@@ -158,6 +164,17 @@ function readStoredReferralCode() {
   captureReferralFromUrl();
   const code = window.localStorage.getItem(REFERRAL_CODE_KEY)?.trim();
   return code || undefined;
+}
+
+function readCookie(name: string) {
+  if (!hasWindow()) return undefined;
+  const entry = document.cookie.split("; ").find((item) => item.startsWith(`${name}=`));
+  return entry ? decodeURIComponent(entry.slice(name.length + 1)) : undefined;
+}
+
+function partnerPortalWriteHeaders(): Record<string, string> {
+  const csrf = readCookie("orken_partner_csrf");
+  return csrf ? { "x-partner-csrf": csrf } : {};
 }
 
 function storeSession(session: { sessionId: string; guestToken: string }) {
@@ -530,6 +547,71 @@ export const api = {
   getContent: contentApi.get
 };
 
+export const partnerPortalApi = {
+  register: (payload: {
+    email: string;
+    password: string;
+    displayName: string;
+    accountName: string;
+    accountType: "organization" | "individual";
+    idempotencyKey: string;
+  }) => request<PartnerPortalSessionResponse>("/api/partners/portal/register", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  }),
+  login: (payload: { email: string; password: string }) => request<PartnerPortalSessionResponse>("/api/partners/portal/login", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  }),
+  logout: () => request<{ ok: true }>("/api/partners/portal/logout", {
+    method: "POST",
+    headers: partnerPortalWriteHeaders(),
+    body: JSON.stringify({})
+  }),
+  me: () => request<PartnerPortalSessionResponse>("/api/partners/portal/me"),
+  dashboard: () => request<PartnerPortalDashboard>("/api/partners/portal/dashboard"),
+  referralLinks: () => request<{ links: PartnerPortalReferralLink[] }>("/api/partners/portal/referral-links"),
+  createReferralLink: (payload: { channel: string; idempotencyKey: string }) => request<{ link: PartnerPortalReferralLink }>("/api/partners/portal/referral-links", {
+    method: "POST",
+    headers: partnerPortalWriteHeaders(),
+    body: JSON.stringify(payload)
+  }),
+  offers: () => request<{ offers: PartnerPortalOffer[] }>("/api/partners/portal/offers"),
+  createOffer: (payload: {
+    offer: string;
+    kind: "paid_service" | "qualified_lead" | "portfolio_credit" | "reward_trial" | "manual_deal";
+    surface: "rewards_tab" | "milestone_modal" | "home_module" | "admin_recommendation";
+    price: string;
+    cap: string;
+    partnerPayoutCents: number;
+    idempotencyKey: string;
+  }) => request<{ offer: PartnerPortalOffer }>("/api/partners/portal/offers", {
+    method: "POST",
+    headers: partnerPortalWriteHeaders(),
+    body: JSON.stringify(payload)
+  }),
+  updateOffer: (offerId: string, payload: {
+    offer?: string;
+    kind?: "paid_service" | "qualified_lead" | "portfolio_credit" | "reward_trial" | "manual_deal";
+    surface?: "rewards_tab" | "milestone_modal" | "home_module" | "admin_recommendation";
+    price?: string;
+    cap?: string;
+    partnerPayoutCents?: number;
+    idempotencyKey: string;
+  }) => request<{ offer: PartnerPortalOffer }>(`/api/partners/portal/offers/${encodeURIComponent(offerId)}`, {
+    method: "PATCH",
+    headers: partnerPortalWriteHeaders(),
+    body: JSON.stringify(payload)
+  }),
+  submitOfferReview: (offerId: string, idempotencyKey: string) => request<{ offer: PartnerPortalOffer }>(`/api/partners/portal/offers/${encodeURIComponent(offerId)}/submit-review`, {
+    method: "POST",
+    headers: partnerPortalWriteHeaders(),
+    body: JSON.stringify({ idempotencyKey })
+  }),
+  ledger: () => request<{ ledger: PartnerPortalLedgerResponse }>("/api/partners/portal/ledger"),
+  payouts: () => request<{ payouts: PartnerPortalPayoutsResponse }>("/api/partners/portal/payouts")
+};
+
 export async function uploadMedia(uploadUrl: string, blob: Blob) {
   const res = await fetch(uploadUrl, {
     method: "PUT",
@@ -653,6 +735,11 @@ export const adminApi = {
     body: JSON.stringify({ active })
   }),
   partnerPrograms: () => adminRequest<PartnerAffiliateProgramSummary[]>("/api/admin/partner-programs"),
+  partnerCore: () => adminRequest<PartnerCoreAdminSnapshot>("/api/admin/partner-core"),
+  setPartnerCorePartnerStatus: (id: string, status: "approved" | "suspended") => adminRequest<{ changed?: boolean }>(`/api/admin/partner-core/partners/${encodeURIComponent(id)}/status`, {
+    method: "PATCH",
+    body: JSON.stringify({ status })
+  }),
   upsertPartnerProgram: (program: PartnerAffiliateProgramInput) => adminRequest<PartnerAffiliateProgramSummary>("/api/admin/partner-programs", {
     method: "POST",
     body: JSON.stringify(program)
@@ -675,9 +762,5 @@ export const adminApi = {
     body: JSON.stringify({ status })
   }),
   partnerRedemptions: () => adminRequest<PartnerRedemptionSummary[]>("/api/admin/partner-redemptions"),
-  partnerCoreEmbeddedSession: () => adminRequest<PartnerCoreEmbeddedSessionResponse>("/api/admin/partner-core/embedded-session", {
-    method: "POST",
-    body: JSON.stringify({})
-  }),
   saveContent: (locale: string, value: unknown) => adminApi.upsertSetting(contentSettingKey(locale), value)
 };

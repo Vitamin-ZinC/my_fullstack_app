@@ -53,6 +53,7 @@ import {
 import { defaultSiteText } from "@/lib/messages";
 
 export type AdminSection = "overview" | "users" | "commercial" | "ai" | "content" | "integrations" | "partners" | "system";
+type PartnerAdminView = "overview" | "partners" | "program" | "offers" | "operations";
 
 type AdminSectionDefinition = {
   id: AdminSection;
@@ -70,7 +71,7 @@ export const adminSections: AdminSectionDefinition[] = [
   { id: "ai", href: "/admin/ai", label: "AI и промпты", title: "AI и промпты", description: "Режим генерации, модели и версионируемые системные промпты.", icon: BrainCircuit },
   { id: "content", href: "/admin/content", label: "Контент", title: "Контент и локализация", description: "Доступные языки и тексты пользовательского интерфейса.", icon: FileText },
   { id: "integrations", href: "/admin/integrations", label: "Интеграции", title: "Интеграции", description: "Telegram, шаблоны сообщений и системные ограничения.", icon: Bot },
-  { id: "partners", href: "/admin/partners", label: "Партнёры", title: "Партнёрская программа", description: "Partner Core, программы, офферы, конверсии и начисления Orken.", icon: Handshake },
+  { id: "partners", href: "/admin/partners", label: "Партнёры", title: "Партнёрская программа", description: "Условия программы, партнёры, предложения и начисления Orken.", icon: Handshake },
   { id: "system", href: "/admin/system", label: "Система", title: "Система", description: "Feature flags, технические настройки и последние операции.", icon: Settings }
 ];
 
@@ -86,7 +87,7 @@ const emptyPromptForm: PromptTemplateInput = {
 const emptyPartnerProgramForm = {
   id: "",
   partnerCoreProgramId: "",
-  name: "Orken Life partner program",
+  name: "Партнёрская программа Orken",
   referralDestination: "https://orken.life/?ref=ORKEN-LIFE",
   customerBonusType: "FREE_DAYS",
   customerBonusValue: "14",
@@ -204,6 +205,7 @@ export function AdminConsole({ section }: { section: AdminSection }) {
   const [partnerCoreSnapshot, setPartnerCoreSnapshot] = useState<PartnerCoreAdminSnapshot>(emptyPartnerCoreSnapshot);
   const [partnerProgramForm, setPartnerProgramForm] = useState(emptyPartnerProgramForm);
   const [partnerOfferForm, setPartnerOfferForm] = useState(emptyPartnerOfferForm);
+  const [partnerAdminView, setPartnerAdminView] = useState<PartnerAdminView>("overview");
   const [referralChannelByProgram, setReferralChannelByProgram] = useState<Record<string, string>>({});
   const [userQuery, setUserQuery] = useState("");
   const [userPage, setUserPage] = useState(0);
@@ -1472,12 +1474,13 @@ export function AdminConsole({ section }: { section: AdminSection }) {
           </section>}
 
           {section === "partners" && <section id="admin-partners" className="card stack admin-section-card">
-            <div className="row">
+            <div className="row admin-partner-toolbar">
               <div>
                 <h2>Партнёрская программа Orken</h2>
-                <p className="muted">Управление партнёрами, программой, офферами, валютой наград и revenue встроено в текущую админку. Partner Core работает как центральный backend.</p>
+                <p className="muted">Настройте условия программы, управляйте партнёрами и проверяйте предложения. Данные общей партнёрской системы синхронизируются автоматически.</p>
               </div>
-              <div className="row" style={{ justifyContent: "flex-end" }}>
+              <div className="row admin-partner-toolbar-actions">
+                <Link className="button secondary" href="/partners" target="_blank">Открыть кабинет партнёра</Link>
                 <button className="button secondary" onClick={syncPartnerOffers}>Синхронизировать</button>
               </div>
             </div>
@@ -1486,24 +1489,50 @@ export function AdminConsole({ section }: { section: AdminSection }) {
             {!partnerCoreSnapshot.configured && <div className="admin-partner-warning">Partner Core не настроен на backend Orken. Локальные формы доступны, синхронизация отключена.</div>}
             {partnerCoreSnapshot.configured && !partnerCoreSnapshot.error && (
               <div className="admin-core-connected">
-                <span>Partner Core подключён</span>
-                <small>Проект: {adminRecordText(partnerCoreSnapshot.project ?? {}, "name") || "Orken"} · синхронизация server-to-server активна</small>
+                <span>Синхронизация подключена</span>
+                <small>Проект: {adminRecordText(partnerCoreSnapshot.project ?? {}, "name") || "Orken"} · обновление данных активно</small>
               </div>
             )}
 
-            <div className="grid grid-3">
-              <AdminMiniMetric label="Партнеры" value={partnerCoreSnapshot.partners.length} />
-              <AdminMiniMetric label="Конверсии" value={partnerConversions} />
-              <AdminMiniMetric label="Начисления" value={formatPartnerMoney(partnerLedgerRevenueCents)} />
-              <AdminMiniMetric label="Программы" value={partnerCoreSnapshot.programs.length} />
-              <AdminMiniMetric label="Офферы" value={partnerCoreSnapshot.placements.length} />
-              <AdminMiniMetric label="На модерации" value={partnerCoreSnapshot.reviewTasks.filter((task) => adminRecordText(task, "status") === "open").length} />
-            </div>
+            <nav className="admin-partner-tabs" aria-label="Управление партнёрской программой">
+              {([
+                ["overview", "Обзор"],
+                ["partners", "Партнёры"],
+                ["program", "Условия программы"],
+                ["offers", "Предложения"],
+                ["operations", "Операции"]
+              ] as Array<[PartnerAdminView, string]>).map(([id, label]) => (
+                <button className={partnerAdminView === id ? "active" : ""} key={id} onClick={() => setPartnerAdminView(id)} type="button">{label}</button>
+              ))}
+            </nav>
 
-            <div className="stack">
+            {partnerAdminView === "overview" && <>
+              <div className="grid grid-3">
+                <AdminMiniMetric label="Партнёры" value={partnerCoreSnapshot.partners.length} />
+                <AdminMiniMetric label="Конверсии" value={partnerConversions} />
+                <AdminMiniMetric label="Начисления" value={formatPartnerMoney(partnerLedgerRevenueCents)} />
+                <AdminMiniMetric label="Программы" value={partnerCoreSnapshot.programs.length} />
+                <AdminMiniMetric label="Предложения" value={partnerCoreSnapshot.placements.length} />
+                <AdminMiniMetric label="На проверке" value={partnerCoreSnapshot.reviewTasks.filter((task) => adminRecordText(task, "status") === "open").length} />
+              </div>
+              <div className="admin-partner-next">
+                <div>
+                  <span className="eyebrow">Быстрый старт</span>
+                  <h3>Настройте программу по шагам</h3>
+                  <p className="muted">Основные действия разнесены по разделам. Технические ID скрыты в расширенных настройках.</p>
+                </div>
+                <div className="admin-partner-next-list">
+                  <button onClick={() => setPartnerAdminView("program")} type="button"><strong>1. Условия</strong><span>Бонус пользователю и комиссия партнёру</span></button>
+                  <button onClick={() => setPartnerAdminView("partners")} type="button"><strong>2. Партнёры</strong><span>Доступ и текущие результаты</span></button>
+                  <button onClick={() => setPartnerAdminView("offers")} type="button"><strong>3. Предложения</strong><span>Создание и отправка на проверку</span></button>
+                </div>
+              </div>
+            </>}
+
+            {partnerAdminView === "partners" && <div className="stack admin-partner-view">
               <div>
                 <h3>Партнёры проекта</h3>
-                <p className="muted">Доступ меняется только для Orken и не затрагивает работу партнёра в других проектах студии.</p>
+                <p className="muted">Здесь отображаются только партнёры Orken. Приостановка не затрагивает их работу в других проектах студии.</p>
               </div>
               <div className="admin-program-list">
                 {partnerCoreSnapshot.partners.length === 0 ? <p className="muted">Партнеры еще не зарегистрированы</p> : partnerCoreSnapshot.partners.map((partner) => {
@@ -1513,7 +1542,7 @@ export function AdminConsole({ section }: { section: AdminSection }) {
                       <div>
                         <strong>{partner.display_name ?? partner.legal_name ?? partner.email ?? partner.id}</strong>
                         <span>{partner.email ?? "Email не указан"} · {partner.account_type ?? "partner"}</span>
-                        <span>Статус: {partner.project_status} · ссылок {Number(partner.referral_links_count ?? 0)} · конверсий {Number(partner.conversions_count ?? 0)}</span>
+                        <span>Статус: {partnerAdminStatusLabel(partner.project_status)} · ссылок {Number(partner.referral_links_count ?? 0)} · конверсий {Number(partner.conversions_count ?? 0)}</span>
                         <span>Начислено: {formatPartnerMoney(Number(partner.payable_cents ?? 0))}</span>
                       </div>
                       <button className={`button ${suspended ? "" : "secondary"}`} onClick={() => void setPartnerAccess(partner.id, suspended ? "approved" : "suspended")}>
@@ -1523,91 +1552,78 @@ export function AdminConsole({ section }: { section: AdminSection }) {
                   );
                 })}
               </div>
+            </div>}
+
+            <div className="admin-partner-workspace">
+              {partnerAdminView === "program" && <div className="stack admin-partner-view">
+                <div className="admin-partner-view-heading">
+                  <h3>Условия партнёрской программы</h3>
+                  <p className="muted">Определите, что получит новый пользователь и как рассчитывается вознаграждение партнёра.</p>
+                </div>
+                <div className="grid grid-2 admin-partner-form-grid">
+                  <label className="admin-field"><span>Название программы</span><input className="input" value={partnerProgramForm.name} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, name: event.target.value })} /></label>
+                  <label className="admin-field"><span>Статус</span><select className="input" value={partnerProgramForm.status} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, status: event.target.value })}><option value="PAUSED">Приостановлена</option><option value="ACTIVE">Активна</option></select></label>
+                  <label className="admin-field admin-field-wide"><span>Куда ведёт партнёрская ссылка</span><input className="input" value={partnerProgramForm.referralDestination} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, referralDestination: event.target.value })} /></label>
+                  <label className="admin-field"><span>Бонус новому пользователю</span><select className="input" value={partnerProgramForm.customerBonusType} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, customerBonusType: event.target.value })}><option value="NONE">Без бонуса</option><option value="FREE_DAYS">Бесплатные дни</option><option value="DISCOUNT">Скидка</option><option value="CREDITS">Баллы</option><option value="CUSTOM_ENTITLEMENT">Особое право доступа</option></select></label>
+                  <label className="admin-field"><span>Размер бонуса</span><input className="input" value={partnerProgramForm.customerBonusValue} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, customerBonusValue: event.target.value })} inputMode="numeric" /></label>
+                  <label className="admin-field"><span>Как платим партнёру</span><select className="input" value={partnerProgramForm.commissionModel} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, commissionModel: event.target.value })}><option value="PERCENT">Процент от выручки</option><option value="FIXED">Фиксированная выплата</option><option value="HYBRID">Процент и фиксированная выплата</option></select></label>
+                  <label className="admin-field"><span>Комиссия, %</span><input className="input" value={partnerProgramForm.commissionRateBps ? String(Number(partnerProgramForm.commissionRateBps) / 100) : ""} onChange={(event) => {
+                    const percent = Number(event.target.value.replace(",", "."));
+                    setPartnerProgramForm({ ...partnerProgramForm, commissionRateBps: event.target.value && Number.isFinite(percent) ? String(Math.round(percent * 100)) : "" });
+                  }} inputMode="decimal" /></label>
+                  <label className="admin-field"><span>Как долго начислять комиссию</span><select className="input" value={partnerProgramForm.commissionWindowType} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, commissionWindowType: event.target.value })}><option value="FIRST_PAYMENT">Только за первый платёж</option><option value="MONTHS">Несколько месяцев</option><option value="LIFETIME">За все будущие платежи</option></select></label>
+                  {partnerProgramForm.commissionWindowType === "MONTHS" && <label className="admin-field"><span>Период, месяцев</span><input className="input" value={partnerProgramForm.commissionWindowMonths} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, commissionWindowMonths: event.target.value })} inputMode="numeric" /></label>}
+                </div>
+                <details className="admin-advanced-panel">
+                  <summary>Расширенные настройки</summary>
+                  <p>Эти поля нужны для интеграции и нестандартных условий. Не меняйте их без необходимости.</p>
+                  <div className="grid grid-2">
+                    <label className="admin-field"><span>ID программы в Partner Core</span><input className="input" value={partnerProgramForm.partnerCoreProgramId} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, partnerCoreProgramId: event.target.value })} /></label>
+                    <label className="admin-field"><span>Код особого доступа</span><input className="input" value={partnerProgramForm.customerBonusEntitlement} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, customerBonusEntitlement: event.target.value })} /></label>
+                    <label className="admin-field"><span>Фиксированная выплата, центы</span><input className="input" value={partnerProgramForm.fixedPayoutCents} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, fixedPayoutCents: event.target.value })} inputMode="numeric" /></label>
+                    <label className="admin-field"><span>Срок удержания, дней</span><input className="input" value={partnerProgramForm.lockDays} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, lockDays: event.target.value })} inputMode="numeric" /></label>
+                    <label className="admin-field"><span>Версия условий</span><input className="input" value={partnerProgramForm.termsVersion} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, termsVersion: event.target.value })} /></label>
+                  </div>
+                </details>
+                <div className="admin-partner-actions"><button className="button" onClick={savePartnerProgram}>Сохранить условия</button><button className="button secondary" onClick={() => setPartnerProgramForm(emptyPartnerProgramForm)}>Сбросить форму</button></div>
+              </div>}
+
+              {partnerAdminView === "offers" && <div className="stack admin-partner-view">
+                <div className="admin-partner-view-heading"><h3>Предложение для пользователей Orken</h3><p className="muted">Создайте понятную карточку, задайте стоимость в баллах и отправьте её на проверку.</p></div>
+                <div className="grid grid-2 admin-partner-form-grid">
+                  <label className="admin-field"><span>Партнёрская программа</span><select className="input" value={partnerOfferForm.programConfigId} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, programConfigId: event.target.value })}><option value="">Выберите программу</option>{partnerPrograms.map((program) => <option value={program.id} key={program.id}>{program.name}</option>)}</select></label>
+                  <label className="admin-field"><span>Тип предложения</span><select className="input" value={partnerOfferForm.kind} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, kind: event.target.value })}><option value="manual_deal">Другое предложение</option><option value="reward_trial">Пробный доступ</option><option value="portfolio_credit">Бонус или сертификат</option><option value="qualified_lead">Заявка на консультацию</option><option value="paid_service">Платная услуга</option></select></label>
+                  <label className="admin-field admin-field-wide"><span>Название</span><input className="input" value={partnerOfferForm.title} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, title: event.target.value })} placeholder="Например: стратегическая сессия" /></label>
+                  <label className="admin-field"><span>Стоимость для пользователя, Orken Points</span><input className="input" value={partnerOfferForm.redemptionAmount} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, redemptionAmount: event.target.value })} inputMode="numeric" /></label>
+                  <label className="admin-field"><span>Лимит активаций в месяц</span><input className="input" value={partnerOfferForm.capPerMonth} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, capPerMonth: event.target.value })} inputMode="numeric" /></label>
+                  <label className="admin-field admin-field-wide"><span>Короткое описание</span><textarea className="input text-editor compact" value={partnerOfferForm.description} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, description: event.target.value })} placeholder="Что получит пользователь и как это работает" /></label>
+                  <label className="admin-field admin-field-wide"><span>Польза для пользователя</span><textarea className="input text-editor compact" value={partnerOfferForm.userBenefit} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, userBenefit: event.target.value })} placeholder="Конкретный результат или выгода" /></label>
+                  <label className="admin-field"><span>Выплата партнёру, центы</span><input className="input" value={partnerOfferForm.partnerPayoutCents} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, partnerPayoutCents: event.target.value })} inputMode="numeric" /></label>
+                  <label className="admin-field"><span>Что выдать после активации</span><input className="input" value={partnerOfferForm.entitlementValue} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, entitlementValue: event.target.value })} placeholder="Купон, ссылка или инструкция" /></label>
+                </div>
+                <details className="admin-advanced-panel">
+                  <summary>Расширенные настройки</summary>
+                  <p>Связи с Partner Core и способ технической выдачи.</p>
+                  <div className="grid grid-2">
+                    <label className="admin-field"><span>ID партнёра в Partner Core</span><input className="input" value={partnerOfferForm.partnerId} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, partnerId: event.target.value })} /></label>
+                    <label className="admin-field"><span>ID размещения в Partner Core</span><input className="input" value={partnerOfferForm.partnerCorePlacementId} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, partnerCorePlacementId: event.target.value })} /></label>
+                    <label className="admin-field"><span>URL изображения</span><input className="input" value={partnerOfferForm.imageUrl} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, imageUrl: event.target.value })} /></label>
+                    <label className="admin-field"><span>Тип выдаваемого доступа</span><input className="input" value={partnerOfferForm.entitlementType} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, entitlementType: event.target.value })} /></label>
+                    <label className="admin-field"><span>Поверхность размещения</span><select className="input" value={partnerOfferForm.surface} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, surface: event.target.value })}><option value="rewards_tab">Раздел наград</option><option value="milestone_modal">Окно достижения</option><option value="home_module">Главный экран</option><option value="admin_recommendation">Рекомендация команды</option></select></label>
+                  </div>
+                </details>
+                <div className="admin-partner-actions"><button className="button" onClick={savePartnerOffer}>Сохранить предложение</button><button className="button secondary" onClick={() => setPartnerOfferForm(emptyPartnerOfferForm)}>Сбросить форму</button></div>
+              </div>}
             </div>
 
-            <div className="grid grid-2">
-              <div className="stack">
-                <h3>Партнёрская программа</h3>
-                <div className="grid grid-2">
-                  <input className="input" value={partnerProgramForm.name} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, name: event.target.value })} placeholder="Название программы" />
-                  <input className="input" value={partnerProgramForm.partnerCoreProgramId} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, partnerCoreProgramId: event.target.value })} placeholder="ID программы в Partner Core" />
-                  <input className="input" value={partnerProgramForm.referralDestination} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, referralDestination: event.target.value })} placeholder="Страница перехода по ссылке" />
-                  <select className="input" value={partnerProgramForm.status} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, status: event.target.value })}>
-                    <option value="PAUSED">Приостановлена</option>
-                    <option value="ACTIVE">Активна</option>
-                  </select>
-                  <select className="input" value={partnerProgramForm.customerBonusType} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, customerBonusType: event.target.value })}>
-                    <option value="NONE">Без бонуса</option>
-                    <option value="FREE_DAYS">Бесплатные дни</option>
-                    <option value="DISCOUNT">Скидка</option>
-                    <option value="CREDITS">Баллы</option>
-                    <option value="CUSTOM_ENTITLEMENT">Особое право доступа</option>
-                  </select>
-                  <input className="input" value={partnerProgramForm.customerBonusValue} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, customerBonusValue: event.target.value })} placeholder="Размер бонуса" />
-                  <input className="input" value={partnerProgramForm.customerBonusEntitlement} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, customerBonusEntitlement: event.target.value })} placeholder="Код права доступа" />
-                  <select className="input" value={partnerProgramForm.commissionModel} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, commissionModel: event.target.value })}>
-                    <option value="PERCENT">Процент от выручки</option>
-                    <option value="FIXED">Фиксированная выплата</option>
-                    <option value="HYBRID">Гибридная модель</option>
-                  </select>
-                  <input className="input" value={partnerProgramForm.commissionRateBps} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, commissionRateBps: event.target.value })} placeholder="Комиссия: 1000 = 10%" />
-                  <input className="input" value={partnerProgramForm.fixedPayoutCents} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, fixedPayoutCents: event.target.value })} placeholder="Фиксированная выплата, центы" />
-                  <select className="input" value={partnerProgramForm.commissionWindowType} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, commissionWindowType: event.target.value })}>
-                    <option value="FIRST_PAYMENT">Первый платёж</option>
-                    <option value="MONTHS">Несколько месяцев</option>
-                    <option value="LIFETIME">Весь срок</option>
-                  </select>
-                  <input className="input" value={partnerProgramForm.commissionWindowMonths} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, commissionWindowMonths: event.target.value })} placeholder="Период комиссии, месяцев" />
-                  <input className="input" value={partnerProgramForm.lockDays} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, lockDays: event.target.value })} placeholder="Срок удержания, дней" />
-                  <input className="input" value={partnerProgramForm.termsVersion} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, termsVersion: event.target.value })} placeholder="Версия условий" />
-                </div>
-                <div className="grid grid-2">
-                  <button className="button" onClick={savePartnerProgram}>Сохранить программу</button>
-                  <button className="button secondary" onClick={() => setPartnerProgramForm(emptyPartnerProgramForm)}>Очистить</button>
-                </div>
-              </div>
-
-              <div className="stack">
-                <h3>Размещение партнёрского оффера</h3>
-                <p className="muted">Форма обновляет карточку в Orken и создаёт размещение награды в Partner Core. Публикация для проектов студии управляется в Partner Core.</p>
-                <div className="grid grid-2">
-                  <select className="input" value={partnerOfferForm.programConfigId} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, programConfigId: event.target.value })}>
-                    <option value="">Без локальной программы</option>
-                    {partnerPrograms.map((program) => <option value={program.id} key={program.id}>{program.name}</option>)}
-                  </select>
-                  <input className="input" value={partnerOfferForm.partnerId} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, partnerId: event.target.value })} placeholder="ID партнёра в Partner Core" />
-                  <input className="input" value={partnerOfferForm.partnerCorePlacementId} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, partnerCorePlacementId: event.target.value })} placeholder="ID размещения в Partner Core" />
-                  <select className="input" value={partnerOfferForm.kind} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, kind: event.target.value })}>
-                    <option value="manual_deal">Ручная сделка</option>
-                    <option value="reward_trial">Пробный доступ</option>
-                    <option value="portfolio_credit">Баллы портфолио</option>
-                    <option value="qualified_lead">Квалифицированный лид</option>
-                    <option value="paid_service">Платная услуга</option>
-                  </select>
-                  <input className="input" value={partnerOfferForm.title} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, title: event.target.value })} placeholder="Название оффера" />
-                  <input className="input" value={partnerOfferForm.imageUrl} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, imageUrl: event.target.value })} placeholder="URL изображения" />
-                  <input className="input" value={partnerOfferForm.redemptionAmount} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, redemptionAmount: event.target.value })} placeholder="Стоимость в XP" />
-                  <input className="input" value={partnerOfferForm.capPerMonth} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, capPerMonth: event.target.value })} placeholder="Лимит в месяц" />
-                  <input className="input" value={partnerOfferForm.partnerPayoutCents} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, partnerPayoutCents: event.target.value })} placeholder="Выплата партнёру, центы" />
-                  <input className="input" value={partnerOfferForm.entitlementType} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, entitlementType: event.target.value })} placeholder="Тип выдаваемого доступа" />
-                </div>
-                <textarea className="input text-editor compact" value={partnerOfferForm.description} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, description: event.target.value })} placeholder="Описание для пользователей" />
-                <textarea className="input text-editor compact" value={partnerOfferForm.userBenefit} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, userBenefit: event.target.value })} placeholder="Польза для пользователя" />
-                <input className="input" value={partnerOfferForm.entitlementValue} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, entitlementValue: event.target.value })} placeholder="Право доступа, купон или ссылка" />
-                <div className="grid grid-2">
-                  <button className="button" onClick={savePartnerOffer}>Сохранить оффер</button>
-                  <button className="button secondary" onClick={() => setPartnerOfferForm(emptyPartnerOfferForm)}>Очистить</button>
-                </div>
-              </div>
-            </div>
-
-            <div className="admin-program-list">
+            {partnerAdminView === "program" && <div className="admin-program-list admin-partner-view">
+              <div><h3>Сохранённые программы</h3><p className="muted">Выберите программу, чтобы изменить её условия или создать отдельную ссылку.</p></div>
               {partnerPrograms.length === 0 ? <p className="muted">Локальные партнёрские программы не созданы</p> : partnerPrograms.map((program) => (
                 <div className="admin-program-row" key={program.id}>
                   <div>
-                    <strong>{program.name} · {program.status}</strong>
-                    <span>Бонус: {program.customerBonusType} {program.customerBonusValue ?? ""} · комиссия: {program.commissionModel} {program.commissionRateBps ?? program.fixedPayoutCents ?? 0} · удержание: {program.lockDays} дн.</span>
-                    <span>Программа Core: {program.partnerCoreProgramId ?? "не связана"} · версия условий: {program.termsVersion}</span>
+                    <strong>{program.name} · {partnerAdminStatusLabel(program.status)}</strong>
+                    <span>Бонус пользователю: {partnerBonusLabel(program.customerBonusType, program.customerBonusValue)} · партнёру: {partnerCommissionLabel(program)}</span>
+                    <span>Связь с общей системой: {program.partnerCoreProgramId ? "настроена" : "не настроена"} · версия условий: {program.termsVersion}</span>
                     {program.referralLinks.map((link) => <span key={link.id}>{link.channel}: {link.url ?? link.referralCode ?? link.status}</span>)}
                   </div>
                   <div className="admin-gift-form">
@@ -1617,14 +1633,15 @@ export function AdminConsole({ section }: { section: AdminSection }) {
                   </div>
                 </div>
               ))}
-            </div>
+            </div>}
 
-            <div className="admin-program-list">
+            {partnerAdminView === "offers" && <div className="admin-program-list admin-partner-view">
+              <div><h3>Созданные предложения</h3><p className="muted">Черновик можно изменить, затем отправить на модерацию.</p></div>
               {partnerOffers.length === 0 ? <p className="muted">Синхронизированных офферов пока нет</p> : partnerOffers.map((offer) => (
                 <div className="admin-program-row" key={offer.id}>
                   <div>
-                    <strong>{offer.title} · {offer.status}</strong>
-                    <span>Статус Core: {offer.partnerCoreStatus ?? "локальный"} · размещение: {offer.partnerCorePlacementId ?? "не создано"}</span>
+                    <strong>{offer.title} · {partnerAdminStatusLabel(offer.status)}</strong>
+                    <span>Синхронизация: {offer.partnerCorePlacementId ? partnerAdminStatusLabel(offer.partnerCoreStatus) : "ещё не отправлено"}</span>
                     <span>{offer.redemptionCost.amount} {offer.redemptionCost.currency} · выплата {offer.partnerPayoutCents} центов · активаций {offer.redemptionsCount ?? 0}</span>
                     <span>{offer.userBenefit}</span>
                   </div>
@@ -1636,16 +1653,17 @@ export function AdminConsole({ section }: { section: AdminSection }) {
                   </div>
                 </div>
               ))}
-            </div>
+            </div>}
 
-            <div className="admin-program-list">
-              <h3>Лиды и активации</h3>
+            {partnerAdminView === "operations" && <>
+            <div className="admin-program-list admin-partner-view">
+              <div><h3>Активации предложений</h3><p className="muted">Пользователи, которые обменяли Orken Points на партнёрское предложение.</p></div>
               {partnerRedemptions.length === 0 ? <p className="muted">Активаций пока нет</p> : partnerRedemptions.map((item) => (
                 <div className="admin-program-row" key={item.id}>
                   <div>
-                    <strong>{item.offerTitle ?? item.offerId} · {item.status}</strong>
-                    <span>{item.userEmail ?? item.userId ?? item.sessionId ?? "anonymous"} · {item.costAmount} {item.costCurrency}</span>
-                    <span>Активация Core: {item.partnerCoreRedemptionId ?? "не связана"} · {formatAdminDate(item.createdAt)}</span>
+                    <strong>{item.offerTitle ?? item.offerId} · {partnerAdminStatusLabel(item.status)}</strong>
+                    <span>{item.userEmail ?? item.userId ?? item.sessionId ?? "Пользователь без аккаунта"} · {item.costAmount} {item.costCurrency}</span>
+                    <span>Связь с общей системой: {item.partnerCoreRedemptionId ? "настроена" : "не настроена"} · {formatAdminDate(item.createdAt)}</span>
                     {item.deliveryError && <span>{item.deliveryError}</span>}
                   </div>
                 </div>
@@ -1653,17 +1671,18 @@ export function AdminConsole({ section }: { section: AdminSection }) {
             </div>
 
             <div className="admin-program-list">
-              <h3>Выручка и начисления</h3>
+              <div><h3>Выручка и начисления</h3><p className="muted">Финансовые операции, полученные из Partner Core.</p></div>
               {partnerCoreSnapshot.ledgerEntries.length === 0 ? <p className="muted">Начислений пока нет</p> : partnerCoreSnapshot.ledgerEntries.slice(0, 30).map((entry, index) => (
                 <div className="admin-program-row" key={adminRecordText(entry, "id") || index}>
                   <div>
-                    <strong>{adminRecordText(entry, "account") || "Ledger entry"} · {adminRecordText(entry, "status") || "unknown"}</strong>
+                    <strong>{adminRecordText(entry, "account") || "Начисление"} · {partnerAdminStatusLabel(adminRecordText(entry, "status"))}</strong>
                     <span>{adminRecordText(entry, "counterparty") || "Orken"} · {adminRecordText(entry, "source") || "event"}</span>
                     <span>{adminRecordText(entry, "amount_text", "amountText") || formatPartnerMoney(adminRecordNumber(entry, "amount_cents", "amountCents"))}</span>
                   </div>
                 </div>
               ))}
             </div>
+            </>}
           </section>}
 
           {section === "system" && <section id="admin-system" className="grid grid-2 admin-system-grid">
@@ -1743,6 +1762,41 @@ function adminRecordNumber(record: Record<string, unknown>, ...keys: string[]) {
     if (Number.isFinite(value)) return value;
   }
   return 0;
+}
+
+function partnerAdminStatusLabel(status?: string | null) {
+  const labels: Record<string, string> = {
+    ACTIVE: "Активна",
+    APPROVED: "Одобрено",
+    PUBLISHED: "Опубликовано",
+    PAUSED: "Приостановлено",
+    SUSPENDED: "Доступ приостановлен",
+    DRAFT: "Черновик",
+    PENDING_REVIEW: "На проверке",
+    REJECTED: "Нужны изменения",
+    FULFILLED: "Выполнено",
+    PARTNER_FAILED: "Ошибка партнёра",
+    REFUNDED: "Возвращено"
+  };
+  const normalized = String(status ?? "").toUpperCase();
+  return labels[normalized] ?? status ?? "Не указан";
+}
+
+function partnerBonusLabel(type: string, value?: number | null) {
+  const labels: Record<string, string> = {
+    NONE: "без бонуса",
+    FREE_DAYS: `${value ?? 0} бесплатных дней`,
+    DISCOUNT: `скидка ${value ?? 0}%`,
+    CREDITS: `${value ?? 0} баллов`,
+    CUSTOM_ENTITLEMENT: "особый доступ"
+  };
+  return labels[type] ?? type;
+}
+
+function partnerCommissionLabel(program: PartnerAffiliateProgramSummary) {
+  if (program.commissionModel === "PERCENT") return `${Number(program.commissionRateBps ?? 0) / 100}% от выручки`;
+  if (program.commissionModel === "FIXED") return `${program.fixedPayoutCents ?? 0} центов за конверсию`;
+  return `${Number(program.commissionRateBps ?? 0) / 100}% + ${program.fixedPayoutCents ?? 0} центов`;
 }
 
 function formatPartnerMoney(cents: number) {

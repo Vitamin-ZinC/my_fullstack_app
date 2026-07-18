@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  ArrowRight,
   BarChart3,
   CheckCircle2,
+  CircleCheckBig,
   ClipboardList,
   Copy,
   HandCoins,
@@ -12,7 +14,6 @@ import {
   LogOut,
   Pencil,
   Plus,
-  ReceiptText,
   RefreshCw,
   Send,
   ShieldCheck,
@@ -29,7 +30,7 @@ import type {
 } from "@levelup/contracts";
 import { partnerPortalApi } from "@/lib/api";
 
-type Tab = "overview" | "links" | "offers" | "activity" | "ledger" | "payouts" | "profile";
+type Tab = "overview" | "links" | "offers" | "results" | "finances" | "profile";
 type DataRecord = Record<string, unknown>;
 type OfferKind = "paid_service" | "qualified_lead" | "portfolio_credit" | "reward_trial" | "manual_deal";
 type OfferSurface = "rewards_tab" | "milestone_modal" | "home_module" | "admin_recommendation";
@@ -40,19 +41,27 @@ const defaultOfferForm: OfferForm = {
   kind: "qualified_lead",
   surface: "rewards_tab",
   price: "120 Orken Points",
-  cap: "25 / month",
+  cap: "25 в месяц",
   partnerPayoutCents: "0"
 };
 
 const tabs: Array<{ id: Tab; label: string; icon: typeof BarChart3 }> = [
-  { id: "overview", label: "Обзор", icon: BarChart3 },
-  { id: "links", label: "Реферальные ссылки", icon: Link2 },
-  { id: "offers", label: "Офферы", icon: HandCoins },
-  { id: "activity", label: "Лиды и конверсии", icon: ClipboardList },
-  { id: "ledger", label: "Начисления", icon: ReceiptText },
-  { id: "payouts", label: "Выплаты", icon: WalletCards },
+  { id: "overview", label: "Главная", icon: BarChart3 },
+  { id: "links", label: "Мои ссылки", icon: Link2 },
+  { id: "offers", label: "Предложения", icon: HandCoins },
+  { id: "results", label: "Результаты", icon: ClipboardList },
+  { id: "finances", label: "Финансы", icon: WalletCards },
   { id: "profile", label: "Профиль", icon: UserRound }
 ];
+
+const tabDescriptions: Record<Tab, string> = {
+  overview: "Что сделать сейчас и как работает ваша партнёрская программа.",
+  links: "Создавайте отдельную ссылку для каждого канала и делитесь ею.",
+  offers: "Предлагайте пользователям Orken свои услуги и бонусы.",
+  results: "Регистрации и оплаты, пришедшие по вашим ссылкам.",
+  finances: "Начисленные комиссии и статусы выплат.",
+  profile: "Данные аккаунта и статус доступа к программе."
+};
 
 function makeIdempotencyKey() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
@@ -116,7 +125,12 @@ function rowId(row: DataRecord) {
 
 function statusCopy(status: string) {
   const normalized = status.toUpperCase();
-  if (normalized === "APPROVED" || normalized === "ACTIVE" || normalized === "PUBLISHED") return { label: "Одобрен", tone: "approved" };
+  if (normalized === "APPROVED" || normalized === "PUBLISHED") return { label: "Одобрено", tone: "approved" };
+  if (normalized === "ACTIVE") return { label: "Активна", tone: "approved" };
+  if (normalized === "PAID") return { label: "Выплачено", tone: "approved" };
+  if (normalized === "AVAILABLE") return { label: "Доступно", tone: "approved" };
+  if (normalized === "NEW") return { label: "Новый", tone: "pending" };
+  if (normalized === "PENDING" || normalized === "PROCESSING") return { label: "Ожидает", tone: "pending" };
   if (normalized === "REJECTED") return { label: "Нужны изменения", tone: "rejected" };
   if (normalized === "SUSPENDED") return { label: "Доступ приостановлен", tone: "suspended" };
   if (normalized === "DRAFT") return { label: "Черновик", tone: "draft" };
@@ -126,9 +140,9 @@ function statusCopy(status: string) {
 function metricsFromDashboard(dashboard: PartnerPortalDashboard | null) {
   const metrics = dashboard?.metrics ?? {};
   return [
-    { label: "Клики", value: readValue(metrics, ["clicks", "linkClicks", "link_clicks"]) },
-    { label: "Регистрации", value: readValue(metrics, ["signups", "registrations", "leads"]) },
-    { label: "Платные конверсии", value: readValue(metrics, ["paidConversions", "paid_conversions", "payments", "conversions"]) },
+    { label: "Переходы по ссылкам", value: readValue(metrics, ["clicks", "linkClicks", "link_clicks"]) },
+    { label: "Новые пользователи", value: readValue(metrics, ["signups", "registrations", "leads"]) },
+    { label: "Оплаты", value: readValue(metrics, ["paidConversions", "paid_conversions", "payments", "conversions"]) },
     { label: "Начислено", value: readValue(metrics, ["earned", "accrued", "ledgerBalance", "ledger_balance"]) },
     { label: "Выплаты в ожидании", value: readValue(metrics, ["pendingPayouts", "pending_payouts", "payoutsPending", "payouts_pending"]) },
     { label: "Выплачено", value: readValue(metrics, ["paidPayouts", "paid_payouts", "payoutsPaid", "payouts_paid"]) }
@@ -257,16 +271,16 @@ export default function PartnersPage() {
       };
       if (editingOfferId) {
         await partnerPortalApi.updateOffer(editingOfferId, payload);
-        setNotice("Изменения оффера сохранены.");
+        setNotice("Изменения предложения сохранены.");
       } else {
         await partnerPortalApi.createOffer(payload);
-        setNotice("Оффер сохранён как черновик.");
+        setNotice("Предложение сохранено как черновик.");
       }
       setOfferForm(defaultOfferForm);
       setEditingOfferId(null);
       await loadPortal();
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Не удалось сохранить оффер");
+      setError(nextError instanceof Error ? nextError.message : "Не удалось сохранить предложение");
     } finally {
       setSubmitting(false);
     }
@@ -298,10 +312,10 @@ export default function PartnersPage() {
     setError("");
     try {
       await partnerPortalApi.submitOfferReview(offerId, makeIdempotencyKey());
-      setNotice("Оффер отправлен на модерацию.");
+      setNotice("Предложение отправлено на модерацию.");
       await loadPortal();
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Не удалось отправить оффер");
+      setError(nextError instanceof Error ? nextError.message : "Не удалось отправить предложение");
     } finally {
       setSubmitting(false);
     }
@@ -325,7 +339,7 @@ export default function PartnersPage() {
           <div className="partner-auth-copy">
             <span className="partner-eyebrow">Партнёрская программа</span>
             <h1 id="partner-auth-title">Кабинет партнёра</h1>
-            <p>Ссылки, офферы, конверсии и начисления по программе Orken.</p>
+            <p>Ссылки, новые пользователи, оплаты и вознаграждения по программе Orken.</p>
           </div>
           <div className="partner-auth-tabs" role="tablist" aria-label="Доступ к кабинету">
             <button className={authMode === "login" ? "active" : ""} onClick={() => setAuthMode("login")} type="button">Войти</button>
@@ -367,37 +381,119 @@ export default function PartnersPage() {
 
       <section className="partner-main">
         <header className="partner-header">
-          <div><span className="partner-eyebrow">Orken · партнёрская программа</span><h1>{tabs.find((item) => item.id === tab)?.label}</h1></div>
+          <div>
+            <span className="partner-eyebrow">Orken · партнёрская программа</span>
+            <h1>{tabs.find((item) => item.id === tab)?.label}</h1>
+            <p className="partner-header-copy">{tabDescriptions[tab]}</p>
+          </div>
           <button className="partner-icon-button" onClick={() => void loadPortal()} disabled={loading || submitting} type="button" title="Обновить данные"><RefreshCw size={18} /></button>
         </header>
 
         {error && <p className="partner-inline-error" role="alert">{error}</p>}
         {notice && <p className="partner-notice"><CheckCircle2 size={17} />{notice}</p>}
-        {identity && status.tone !== "approved" && <section className={`partner-review-banner ${status.tone}`}><ShieldCheck size={20} /><div><strong>{status.label}</strong><span>{status.tone === "rejected" ? "Проверьте комментарии модератора и обновите оффер перед повторной отправкой." : "Доступ к данным сохранён. Публикация ссылок и офферов станет доступна после одобрения."}</span></div></section>}
+        {identity && status.tone !== "approved" && <section className={`partner-review-banner ${status.tone}`}><ShieldCheck size={20} /><div><strong>{status.label}</strong><span>{status.tone === "rejected" ? "Проверьте комментарии модератора и обновите предложение перед повторной отправкой." : "Доступ к данным сохранён. Публикация ссылок и предложений станет доступна после одобрения."}</span></div></section>}
 
-        {tab === "overview" && <Overview metrics={metrics} dashboard={dashboard} />}
+        {tab === "overview" && <Overview metrics={metrics} dashboard={dashboard} onNavigate={setTab} />}
         {tab === "links" && <LinksSection links={dashboard?.referralLinks ?? []} linkName={linkName} setLinkName={setLinkName} submitting={submitting} onCreate={createLink} onCopy={copyLink} />}
         {tab === "offers" && <OffersSection offers={dashboard?.offers ?? []} form={offerForm} setForm={setOfferForm} editingOfferId={editingOfferId} submitting={submitting} onSave={saveOffer} onEdit={editOffer} onCancelEdit={cancelOfferEdit} onReview={submitOfferReview} />}
-        {tab === "activity" && <ActivitySection dashboard={dashboard} />}
-        {tab === "ledger" && <DataSection title="Начисления" subtitle="Строки начислений по Orken. Выплатные реквизиты в кабинете не отображаются." rows={asRows(ledger)} />}
-        {tab === "payouts" && <DataSection title="Выплаты" subtitle="Статусы выплат из общей партнёрской системы." rows={asRows(payouts)} />}
+        {tab === "results" && <ActivitySection dashboard={dashboard} />}
+        {tab === "finances" && <FinancesSection ledger={asRows(ledger)} payouts={asRows(payouts)} dashboard={dashboard} />}
         {tab === "profile" && <ProfileSection identity={identity} expiresAt={portalSession?.expiresAt} />}
       </section>
     </main>
   );
 }
 
-function Overview({ metrics, dashboard }: { metrics: Array<{ label: string; value: unknown }>; dashboard: PartnerPortalDashboard | null }) {
+function Overview({ metrics, dashboard, onNavigate }: {
+  metrics: Array<{ label: string; value: unknown }>;
+  dashboard: PartnerPortalDashboard | null;
+  onNavigate: (tab: Tab) => void;
+}) {
   const links = dashboard?.referralLinks.length ?? 0;
   const offers = dashboard?.offers.length ?? 0;
+  const primaryMetrics = metrics.slice(0, 4);
+  const registrations = Number(metrics[1]?.value) || 0;
+  const paidConversions = Number(metrics[2]?.value) || 0;
+  const steps = [
+    { done: links > 0, title: "Создайте партнёрскую ссылку", copy: "Отдельная ссылка поможет понять, откуда приходят пользователи.", action: "Создать ссылку", tab: "links" as Tab },
+    { done: registrations > 0, title: "Поделитесь ссылкой", copy: "Разместите её в Telegram, соцсетях, рассылке или на своём сайте.", action: "Открыть ссылки", tab: "links" as Tab },
+    { done: paidConversions > 0, title: "Следите за результатом", copy: "Регистрации и оплаты автоматически появятся в кабинете.", action: "Смотреть результаты", tab: "results" as Tab }
+  ];
+
   return <div className="partner-section-stack">
-    <section className="partner-metric-grid">{metrics.map((metric) => <article className="partner-metric" key={metric.label}><span>{metric.label}</span><strong>{textValue(metric.value)}</strong></article>)}</section>
-    <section className="partner-panel partner-overview-panel"><div><span className="partner-eyebrow">Текущий проект</span><h2>Партнёрская программа Orken</h2><p>Здесь отражаются только ссылки, офферы и вознаграждения, связанные с Orken.</p></div><div className="partner-quick-facts"><span><Link2 size={16} />{links} ссылок</span><span><HandCoins size={16} />{offers} офферов</span></div></section>
+    <section className="partner-panel partner-start-panel">
+      <div className="partner-start-copy">
+        <span className="partner-eyebrow">Начните отсюда</span>
+        <h2>Привлекайте пользователей Orken и получайте вознаграждение</h2>
+        <p>Создайте ссылку, поделитесь ею и отслеживайте регистрации, оплаты и начисления в одном месте.</p>
+        <div className="partner-start-actions">
+          <button className="partner-primary-button" onClick={() => onNavigate("links")} type="button"><Link2 size={17} />Создать ссылку</button>
+          <button className="partner-secondary-button" onClick={() => onNavigate("results")} type="button">Посмотреть результаты<ArrowRight size={16} /></button>
+        </div>
+      </div>
+      <div className="partner-start-facts" aria-label="Состояние программы">
+        <strong>{links}</strong><span>активных ссылок</span>
+        <strong>{offers}</strong><span>предложений</span>
+      </div>
+    </section>
+
+    <section className="partner-metric-grid partner-metric-grid-primary">
+      {primaryMetrics.map((metric) => <article className="partner-metric" key={metric.label}><span>{metric.label}</span><strong>{textValue(metric.value)}</strong></article>)}
+    </section>
+
+    <section className="partner-panel">
+      <div className="partner-panel-head"><div><h2>Как начать</h2><p>Три шага от ссылки до первого вознаграждения.</p></div></div>
+      <div className="partner-journey-list">
+        {steps.map((step, index) => <div className={`partner-journey-step ${step.done ? "done" : ""}`} key={step.title}>
+          <span className="partner-step-marker">{step.done ? <CircleCheckBig size={18} /> : index + 1}</span>
+          <div><strong>{step.title}</strong><p>{step.copy}</p></div>
+          <button className="partner-text-button" onClick={() => onNavigate(step.tab)} type="button">{step.action}<ArrowRight size={15} /></button>
+        </div>)}
+      </div>
+    </section>
+
+    <section className="partner-panel partner-finance-preview">
+      <div><span className="partner-eyebrow">Вознаграждение</span><h2>{textValue(metrics[3]?.value)}</h2><p>Всего начислено по программе Orken.</p></div>
+      <div className="partner-finance-preview-values">
+        <span>Ожидает выплаты<strong>{textValue(metrics[4]?.value)}</strong></span>
+        <span>Уже выплачено<strong>{textValue(metrics[5]?.value)}</strong></span>
+        <button className="partner-secondary-button" onClick={() => onNavigate("finances")} type="button">Подробнее<ArrowRight size={15} /></button>
+      </div>
+    </section>
   </div>;
 }
 
 function LinksSection({ links, linkName, setLinkName, submitting, onCreate, onCopy }: { links: DataRecord[]; linkName: string; setLinkName: (value: string) => void; submitting: boolean; onCreate: (event: React.FormEvent) => Promise<void>; onCopy: (value: unknown) => Promise<void> }) {
-  return <div className="partner-section-stack"><section className="partner-panel"><div className="partner-panel-head"><div><h2>Новая ссылка</h2><p>Укажите название канала или кампании, чтобы различать источники.</p></div></div><form className="partner-inline-form" onSubmit={onCreate}><input value={linkName} onChange={(event) => setLinkName(event.target.value)} placeholder="Например: Telegram июль" required /><button className="partner-primary-button" disabled={submitting} type="submit"><Plus size={17} />Создать ссылку</button></form></section><section className="partner-panel"><div className="partner-panel-head"><div><h2>Ваши ссылки</h2><p>Ссылки принадлежат вашему аккаунту в Partner Core.</p></div></div><div className="partner-row-list">{links.length === 0 ? <EmptyState text="Пока нет ссылок. Создайте первую кампанию выше." /> : links.map((link, index) => { const url = readValue(link, ["url", "href", "referralUrl", "referral_url"]); return <article className="partner-row" key={rowId(link) ?? index}><div><strong>{rowTitle(link)}</strong><span>{typeof url === "string" ? url : "Ссылка готовится"}</span></div><div className="partner-row-actions"><span className="partner-status draft">{rowStatus(link)}</span>{typeof url === "string" && <button className="partner-icon-button" onClick={() => void onCopy(url)} type="button" title="Скопировать ссылку"><Copy size={16} /></button>}</div></article>; })}</div></section></div>;
+  return <div className="partner-section-stack">
+    <section className="partner-panel partner-link-create-panel">
+      <div className="partner-panel-head">
+        <div><h2>Создать новую ссылку</h2><p>Назовите источник, где будете размещать ссылку. Это название увидите только вы.</p></div>
+      </div>
+      <form className="partner-inline-form" onSubmit={onCreate}>
+        <label className="partner-field-label">
+          Название источника
+          <input value={linkName} onChange={(event) => setLinkName(event.target.value)} placeholder="Например: Telegram, Instagram или сайт" required />
+        </label>
+        <button className="partner-primary-button" disabled={submitting} type="submit"><Plus size={17} />Создать ссылку</button>
+      </form>
+      <p className="partner-field-help">После создания нажмите «Скопировать» и разместите ссылку в выбранном канале.</p>
+    </section>
+
+    <section className="partner-panel">
+      <div className="partner-panel-head"><div><h2>Готовые ссылки</h2><p>Используйте отдельную ссылку для каждого канала, чтобы сравнивать результат.</p></div></div>
+      <div className="partner-row-list">{links.length === 0 ? <EmptyState text="Пока нет ссылок. Создайте первую ссылку выше." /> : links.map((link, index) => {
+        const url = readValue(link, ["url", "href", "referralUrl", "referral_url"]);
+        const status = statusCopy(rowStatus(link));
+        return <article className="partner-row" key={rowId(link) ?? index}>
+          <div><strong>{rowTitle(link)}</strong><span>{typeof url === "string" ? url : "Ссылка готовится"}</span></div>
+          <div className="partner-row-actions">
+            <span className={`partner-status ${status.tone}`}>{status.label}</span>
+            {typeof url === "string" && <button className="partner-secondary-button" onClick={() => void onCopy(url)} type="button"><Copy size={16} />Скопировать</button>}
+          </div>
+        </article>;
+      })}</div>
+    </section>
+  </div>;
 }
 
 function OffersSection({ offers, form, setForm, editingOfferId, submitting, onSave, onEdit, onCancelEdit, onReview }: {
@@ -414,25 +510,9 @@ function OffersSection({ offers, form, setForm, editingOfferId, submitting, onSa
   return <div className="partner-section-stack">
     <section className="partner-panel">
       <div className="partner-panel-head">
-        <div>
-          <h2>{editingOfferId ? "Редактирование оффера" : "Новый оффер"}</h2>
-          <p>{editingOfferId ? "После сохранения оффер можно повторно отправить на модерацию." : "Оффер создаётся черновиком. Публикация возможна после модерации."}</p>
-        </div>
-        {editingOfferId && <button className="partner-icon-button" onClick={onCancelEdit} type="button" title="Отменить редактирование"><X size={17} /></button>}
+        <div><h2>Ваши предложения</h2><p>После создания отправьте предложение на проверку. Одобренные предложения увидят пользователи Orken.</p></div>
       </div>
-      <form className="partner-offer-form" onSubmit={onSave}>
-        <label>Название оффера<input value={form.offer} onChange={(event) => setForm({ ...form, offer: event.target.value })} placeholder="Например: личная установочная сессия" required /></label>
-        <label>Тип оффера<select value={form.kind} onChange={(event) => setForm({ ...form, kind: event.target.value as OfferKind })}><option value="qualified_lead">Квалифицированный лид</option><option value="paid_service">Платная услуга</option><option value="portfolio_credit">Кредит портфолио</option><option value="reward_trial">Пробный доступ</option><option value="manual_deal">Ручная сделка</option></select></label>
-        <label>Размещение<select value={form.surface} onChange={(event) => setForm({ ...form, surface: event.target.value as OfferSurface })}><option value="rewards_tab">Вкладка наград</option><option value="milestone_modal">Окно достижения</option><option value="home_module">Главный экран</option><option value="admin_recommendation">Рекомендация администратора</option></select></label>
-        <label>Цена для пользователя<input value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} required /></label>
-        <label>Лимит в месяц<input value={form.cap} onChange={(event) => setForm({ ...form, cap: event.target.value })} required /></label>
-        <label>Вознаграждение партнёра, центы<input value={form.partnerPayoutCents} onChange={(event) => setForm({ ...form, partnerPayoutCents: event.target.value })} inputMode="numeric" required /></label>
-        <button className="partner-primary-button" disabled={submitting} type="submit">{editingOfferId ? <Pencil size={17} /> : <Plus size={17} />}{editingOfferId ? "Сохранить изменения" : "Сохранить черновик"}</button>
-      </form>
-    </section>
-    <section className="partner-panel">
-      <div className="partner-panel-head"><div><h2>Ваши офферы</h2><p>Статусы и модерация управляются Partner Core.</p></div></div>
-      <div className="partner-row-list">{offers.length === 0 ? <EmptyState text="Офферов пока нет." /> : offers.map((offer, index) => {
+      <div className="partner-row-list">{offers.length === 0 ? <EmptyState text="Предложений пока нет. Создайте первое ниже." /> : offers.map((offer, index) => {
         const id = rowId(offer);
         const status = statusCopy(rowStatus(offer));
         const editable = status.tone === "draft" || status.tone === "rejected";
@@ -440,21 +520,82 @@ function OffersSection({ offers, form, setForm, editingOfferId, submitting, onSa
           <div><strong>{rowTitle(offer)}</strong><span>{textValue(readValue(offer, ["price", "price_label", "cap", "cap_label"]))}</span></div>
           <div className="partner-row-actions">
             <span className={`partner-status ${status.tone}`}>{status.label}</span>
-            {id && editable && <button className="partner-icon-button" disabled={submitting} onClick={() => onEdit(offer)} type="button" title="Редактировать оффер"><Pencil size={16} /></button>}
+            {id && editable && <button className="partner-icon-button" disabled={submitting} onClick={() => onEdit(offer)} type="button" title="Редактировать предложение"><Pencil size={16} /></button>}
             {id && editable && <button className="partner-secondary-button" disabled={submitting} onClick={() => void onReview(id)} type="button"><Send size={15} />На модерацию</button>}
           </div>
         </article>;
       })}</div>
     </section>
+
+    <details className="partner-panel partner-offer-builder" open={editingOfferId ? true : undefined}>
+      <summary>
+        <span><Plus size={17} />{editingOfferId ? "Редактировать предложение" : "Создать предложение"}</span>
+        <small>{editingOfferId ? "Сохраните изменения и повторно отправьте на проверку" : "Услуга, бонус или специальное условие для пользователей Orken"}</small>
+      </summary>
+      <div className="partner-offer-builder-body">
+        <div className="partner-panel-head">
+          <div><h2>{editingOfferId ? "Редактирование предложения" : "Новое предложение"}</h2><p>Сначала оно сохранится как черновик. Вы сможете проверить данные перед отправкой на модерацию.</p></div>
+          {editingOfferId && <button className="partner-icon-button" onClick={onCancelEdit} type="button" title="Отменить редактирование"><X size={17} /></button>}
+        </div>
+        <form className="partner-offer-form" onSubmit={onSave}>
+          <label>Что вы предлагаете<input value={form.offer} onChange={(event) => setForm({ ...form, offer: event.target.value })} placeholder="Например: личная установочная сессия" required /></label>
+          <label>Категория<select value={form.kind} onChange={(event) => setForm({ ...form, kind: event.target.value as OfferKind })}><option value="qualified_lead">Заявка на консультацию</option><option value="paid_service">Платная услуга</option><option value="portfolio_credit">Бонус или сертификат</option><option value="reward_trial">Пробный доступ</option><option value="manual_deal">Другое предложение</option></select></label>
+          <label>Стоимость для пользователя<input value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} placeholder="Например: 120 Orken Points" required /><small>Укажите сумму и валюту так, как её увидит пользователь.</small></label>
+          <label>Сколько раз доступно<input value={form.cap} onChange={(event) => setForm({ ...form, cap: event.target.value })} placeholder="Например: 25 в месяц" required /><small>Лимит помогает не получить больше заявок, чем вы сможете обработать.</small></label>
+          <details className="partner-advanced-options">
+            <summary>Дополнительная настройка размещения</summary>
+            <label>Где показать предложение<select value={form.surface} onChange={(event) => setForm({ ...form, surface: event.target.value as OfferSurface })}><option value="rewards_tab">В разделе наград</option><option value="milestone_modal">После достижения</option><option value="home_module">На главном экране</option><option value="admin_recommendation">По рекомендации команды Orken</option></select></label>
+          </details>
+          <button className="partner-primary-button" disabled={submitting} type="submit">{editingOfferId ? <Pencil size={17} /> : <Plus size={17} />}{editingOfferId ? "Сохранить изменения" : "Сохранить предложение"}</button>
+        </form>
+      </div>
+    </details>
   </div>;
 }
 
 function ActivitySection({ dashboard }: { dashboard: PartnerPortalDashboard | null }) {
-  return <div className="partner-section-stack"><DataSection title="Лиды" subtitle="Регистрации, пришедшие по вашим ссылкам." rows={dashboard?.leads ?? []} /><DataSection title="Конверсии" subtitle="Оплаты и другие подтверждённые события Orken." rows={dashboard?.conversions ?? []} /></div>;
+  const clicks = readValue(dashboard?.metrics ?? {}, ["clicks", "linkClicks", "link_clicks"]);
+  const registrations = readValue(dashboard?.metrics ?? {}, ["signups", "registrations", "leads"]);
+  const payments = readValue(dashboard?.metrics ?? {}, ["paidConversions", "paid_conversions", "payments", "conversions"]);
+  return <div className="partner-section-stack">
+    <section className="partner-panel">
+      <div className="partner-panel-head"><div><h2>Путь пользователя</h2><p>Здесь видно, сколько людей перешло по ссылке, зарегистрировалось и оплатило продукт Orken.</p></div></div>
+      <div className="partner-funnel" aria-label="Воронка партнёрской программы">
+        <span><small>1. Перешли по ссылке</small><strong>{textValue(clicks)}</strong></span>
+        <ArrowRight size={18} />
+        <span><small>2. Зарегистрировались</small><strong>{textValue(registrations)}</strong></span>
+        <ArrowRight size={18} />
+        <span><small>3. Оплатили</small><strong>{textValue(payments)}</strong></span>
+      </div>
+    </section>
+    <DataSection title="Новые пользователи" subtitle="Регистрации, пришедшие по вашим партнёрским ссылкам." rows={dashboard?.leads ?? []} />
+    <DataSection title="Оплаты" subtitle="Подтверждённые оплаты и другие целевые действия." rows={dashboard?.conversions ?? []} />
+  </div>;
+}
+
+function FinancesSection({ ledger, payouts, dashboard }: { ledger: DataRecord[]; payouts: DataRecord[]; dashboard: PartnerPortalDashboard | null }) {
+  const metrics = dashboard?.metrics ?? {};
+  return <div className="partner-section-stack">
+    <section className="partner-finance-summary" aria-label="Сводка по финансам">
+      <div><span>Всего начислено</span><strong>{textValue(readValue(metrics, ["earned", "accrued", "ledgerBalance", "ledger_balance"]))}</strong></div>
+      <div><span>Ожидает выплаты</span><strong>{textValue(readValue(metrics, ["pendingPayouts", "pending_payouts", "payoutsPending", "payouts_pending"]))}</strong></div>
+      <div><span>Выплачено</span><strong>{textValue(readValue(metrics, ["paidPayouts", "paid_payouts", "payoutsPaid", "payouts_paid"]))}</strong></div>
+    </section>
+    <DataSection title="История начислений" subtitle="Комиссии по подтверждённым действиям пользователей Orken." rows={ledger} />
+    <DataSection title="История выплат" subtitle="Статусы выплат. Реквизиты безопасно хранятся в общей партнёрской системе." rows={payouts} />
+  </div>;
 }
 
 function DataSection({ title, subtitle, rows }: { title: string; subtitle: string; rows: DataRecord[] }) {
-  return <section className="partner-panel"><div className="partner-panel-head"><div><h2>{title}</h2><p>{subtitle}</p></div></div><div className="partner-row-list">{rows.length === 0 ? <EmptyState text="Данных пока нет." /> : rows.map((row, index) => <article className="partner-row" key={rowId(row) ?? index}><div><strong>{rowTitle(row)}</strong><span>{textValue(readValue(row, ["amount", "amountCents", "amount_cents", "createdAt", "created_at", "date"]))}</span></div><span className="partner-status draft">{rowStatus(row)}</span></article>)}</div></section>;
+  return <section className="partner-panel"><div className="partner-panel-head"><div><h2>{title}</h2><p>{subtitle}</p></div></div><div className="partner-row-list">{rows.length === 0 ? <EmptyState text="Данных пока нет." /> : rows.map((row, index) => {
+    const amount = readValue(row, ["amount", "amountText", "amount_text", "amountCents", "amount_cents"]);
+    const date = readValue(row, ["createdAt", "created_at", "date"]);
+    const status = statusCopy(rowStatus(row));
+    return <article className="partner-row" key={rowId(row) ?? index}>
+      <div><strong>{rowTitle(row)}</strong><span>{[amount, date].filter(Boolean).map(textValue).join(" · ") || "Подробности появятся после обработки"}</span></div>
+      <span className={`partner-status ${status.tone}`}>{status.label}</span>
+    </article>;
+  })}</div></section>;
 }
 
 function ProfileSection({ identity, expiresAt }: { identity: PartnerPortalIdentity | null; expiresAt?: string }) {

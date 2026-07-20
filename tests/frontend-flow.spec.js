@@ -414,6 +414,100 @@ test("habits tracker records daily marks and uses AI navigator", async ({ page }
   await expect(page.getByText("Пингви видит состояние")).toBeVisible({ timeout: 10000 });
 });
 
+test("Telegram connection works in WebView and exposes a manual fallback", async ({ page }) => {
+  const program = createHabitProgram();
+  await page.addInitScript(() => {
+    window.Telegram = {
+      WebApp: {
+        openTelegramLink: (url) => window.sessionStorage.setItem("telegram-connect-url", url)
+      }
+    };
+  });
+  await page.route(`${apiBase}/api/auth/guest`, async (route) => fulfillJson(route, { sessionId: "telegram-session", guestToken: "telegram-token" }));
+  await page.route(`${apiBase}/api/habits/me`, async (route) => fulfillJson(route, {
+    program,
+    latestReport: null,
+    config: habitConfig
+  }));
+  await page.route(`${apiBase}/api/telegram/status**`, async (route) => fulfillJson(route, {
+    configured: true,
+    linked: false,
+    account: null,
+    preferences: null
+  }));
+  await page.route(`${apiBase}/api/telegram/link-token`, async (route) => {
+    expect(route.request().method()).toBe("POST");
+    expect(route.request().postDataJSON()).toEqual({ programId: "habit-program-1" });
+    await fulfillJson(route, {
+      configured: true,
+      connectUrl: "https://t.me/myorken_bot?start=connect-test",
+      expiresAt: "2026-07-20T15:15:00.000Z"
+    });
+  });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${appBase}/habits`);
+  await expect(page.getByTestId("habits-app")).toBeVisible({ timeout: 15000 });
+  await page.getByRole("button", { name: /Мой путь/ }).click();
+  await page.getByRole("button", { name: "Подключить Telegram" }).click();
+
+  await expect.poll(() => page.evaluate(() => window.sessionStorage.getItem("telegram-connect-url"))).toBe("https://t.me/myorken_bot?start=connect-test");
+  const manualTelegramLink = page.getByRole("link", { name: "Открыть бота вручную" });
+  await expect(manualTelegramLink).toBeVisible();
+  await expect(manualTelegramLink).toHaveAttribute("href", "https://t.me/myorken_bot?start=connect-test");
+});
+
+test("account Telegram connection uses the same WebView-safe flow", async ({ page }) => {
+  const user = {
+    id: "telegram-user",
+    email: "coach@example.com",
+    name: "Coach",
+    locale: "ru",
+    role: "USER",
+    status: "ACTIVE",
+    emailVerifiedAt: "2026-07-20T10:00:00.000Z",
+    lastLoginAt: "2026-07-20T10:00:00.000Z",
+    createdAt: "2026-07-20T10:00:00.000Z"
+  };
+  await page.addInitScript(() => {
+    window.Telegram = {
+      WebApp: {
+        openTelegramLink: (url) => window.sessionStorage.setItem("account-telegram-connect-url", url)
+      }
+    };
+  });
+  await page.route(`${apiBase}/api/auth/guest`, async (route) => fulfillJson(route, { sessionId: "account-telegram-session", guestToken: "account-telegram-token" }));
+  await page.route(`${apiBase}/api/me`, async (route) => fulfillJson(route, { user, reportCount: 0, lastAnalysis: null }));
+  await page.route(`${apiBase}/api/me/reports`, async (route) => fulfillJson(route, []));
+  await page.route(`${apiBase}/api/habits/me`, async (route) => fulfillJson(route, {
+    program: createHabitProgram(),
+    latestReport: null,
+    config: habitConfig
+  }));
+  await page.route(`${apiBase}/api/telegram/status**`, async (route) => fulfillJson(route, {
+    configured: true,
+    linked: false,
+    account: null,
+    preferences: null
+  }));
+  await page.route(`${apiBase}/api/telegram/link-token`, async (route) => fulfillJson(route, {
+    configured: true,
+    connectUrl: "https://t.me/myorken_bot?start=account-connect-test",
+    expiresAt: "2026-07-20T15:15:00.000Z"
+  }));
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${appBase}/account`);
+  await expect(page.getByTestId("account-page")).toBeVisible({ timeout: 15000 });
+  await page.getByText("Подключение Telegram-бота").click();
+  await page.getByRole("button", { name: "Подключить Telegram" }).click();
+
+  await expect.poll(() => page.evaluate(() => window.sessionStorage.getItem("account-telegram-connect-url"))).toBe("https://t.me/myorken_bot?start=account-connect-test");
+  const manualTelegramLink = page.getByRole("link", { name: "Открыть бота вручную" });
+  await expect(manualTelegramLink).toBeVisible();
+  await expect(manualTelegramLink).toHaveAttribute("href", "https://t.me/myorken_bot?start=account-connect-test");
+});
+
 test("password registration opens account with report history", async ({ page }) => {
   await page.route(`${apiBase}/api/auth/guest`, async (route) => fulfillJson(route, { sessionId: "auth-session", guestToken: "auth-token" }));
   await page.route(`${apiBase}/api/auth/register`, async (route) => {

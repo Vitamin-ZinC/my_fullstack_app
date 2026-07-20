@@ -51,8 +51,9 @@ export function hashTelegramToken(token: string) {
 }
 
 export function buildTelegramConnectUrl(token: string) {
-  if (!env.TELEGRAM_BOT_USERNAME) return "";
-  return `https://t.me/${env.TELEGRAM_BOT_USERNAME}?start=${encodeURIComponent(token)}`;
+  const username = env.TELEGRAM_BOT_USERNAME?.trim().replace(/^@+/, "");
+  if (!username) return "";
+  return `https://t.me/${username}?start=${encodeURIComponent(token)}`;
 }
 
 async function buildTelegramWebLoginUrl(account?: { telegramUserId?: string; userId?: string | null; sessionId?: string | null } | null) {

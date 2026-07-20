@@ -10,12 +10,14 @@ import {
   CheckCircle2,
   ChevronDown,
   Compass,
+  ExternalLink,
   Save,
   Trophy,
   User
 } from "lucide-react";
 import type { HabitConfigResponse, HabitEnrollmentSummary, HabitProgramResponse, HabitProgramSummary, PartnerMarketplaceResponse, TelegramStatusResponse } from "@levelup/contracts";
 import { api, getStoredLocale, restoreSessionFromUrl, type TextLocale } from "@/lib/api";
+import { openTelegramConnectUrl } from "@/lib/telegram";
 import { useSiteText } from "@/lib/useSiteText";
 
 type Tab = "dashboard" | "journey" | "habits" | "navigator" | "archive" | "rewards" | "guide" | "settings";
@@ -130,6 +132,7 @@ function HabitsContent() {
   const [insightSavedFlash, setInsightSavedFlash] = useState(false);
   const [telegramStatus, setTelegramStatus] = useState<TelegramStatusResponse | null>(null);
   const [telegramBusy, setTelegramBusy] = useState(false);
+  const [telegramConnectUrl, setTelegramConnectUrl] = useState("");
   const [partnerMarketplace, setPartnerMarketplace] = useState<PartnerMarketplaceResponse | null>(null);
   const [partnerMarketplaceLoading, setPartnerMarketplaceLoading] = useState(false);
   const [partnerRedemptionBusy, setPartnerRedemptionBusy] = useState<string | null>(null);
@@ -433,10 +436,9 @@ function HabitsContent() {
     setError("");
     try {
       const result = await api.createTelegramLinkToken(program.id);
-      if (typeof window !== "undefined") {
-        window.open(result.connectUrl, "_blank", "noopener,noreferrer");
-      }
+      setTelegramConnectUrl(result.connectUrl);
       markSaved(t.messages.telegramLinkCreated);
+      if (typeof window !== "undefined") openTelegramConnectUrl(result.connectUrl);
       const status = await api.telegramStatus(program.id);
       setTelegramStatus(status);
     } catch (reason) {
@@ -774,6 +776,7 @@ function HabitsContent() {
             dailyFeedback={dailyFeedback}
             telegramStatus={telegramStatus}
             telegramBusy={telegramBusy}
+            telegramConnectUrl={telegramConnectUrl}
             connectTelegram={connectTelegram}
             addCalendarEvent={addCalendarEvent}
           />
@@ -832,6 +835,7 @@ function HabitsContent() {
             reminderTime={reminderTime}
             telegramStatus={telegramStatus}
             telegramBusy={telegramBusy}
+            telegramConnectUrl={telegramConnectUrl}
             busy={busy}
             setName={setSettingsName}
             setZone={setSettingsZone}
@@ -1260,6 +1264,7 @@ function JourneyTab(props: {
   dailyFeedback: string;
   telegramStatus: TelegramStatusResponse | null;
   telegramBusy: boolean;
+  telegramConnectUrl: string;
   connectTelegram: () => void;
   addCalendarEvent: () => void;
 }) {
@@ -1383,10 +1388,18 @@ function JourneyTab(props: {
                 : props.t.settings.telegramNotLinked}
           </div>
         </div>
-        <button className="button secondary" type="button" disabled={props.telegramBusy || !telegramConfigured} onClick={props.connectTelegram}>
-          <Bot size={17} />
-          {telegramLinked ? props.t.settings.telegramReconnect : props.t.settings.telegramConnect}
-        </button>
+        <div className="habits-action-stack">
+          <button className="button secondary" type="button" disabled={props.telegramBusy || !telegramConfigured} onClick={props.connectTelegram}>
+            <Bot size={17} />
+            {telegramLinked ? props.t.settings.telegramReconnect : props.t.settings.telegramConnect}
+          </button>
+          {props.telegramConnectUrl && (
+            <a className="button secondary" href={props.telegramConnectUrl} target="_blank" rel="noopener noreferrer">
+              <ExternalLink size={17} />
+              {props.t.settings.telegramOpenManually}
+            </a>
+          )}
+        </div>
       </section>
 
       <section className="habits-panel">
@@ -1859,6 +1872,7 @@ function SettingsTab(props: {
   reminderTime: string;
   telegramStatus: TelegramStatusResponse | null;
   telegramBusy: boolean;
+  telegramConnectUrl: string;
   busy: boolean;
   setName: (value: string) => void;
   setZone: (value: string) => void;
@@ -1936,10 +1950,18 @@ function SettingsTab(props: {
             </div>
           )}
         </div>
-        <button className="button secondary" type="button" disabled={props.telegramBusy || props.telegramStatus?.configured === false} onClick={props.connectTelegram}>
-          <Bot size={17} />
-          {telegramLinked ? props.t.settings.telegramReconnect : props.t.settings.telegramConnect}
-        </button>
+        <div className="habits-action-stack">
+          <button className="button secondary" type="button" disabled={props.telegramBusy || props.telegramStatus?.configured === false} onClick={props.connectTelegram}>
+            <Bot size={17} />
+            {telegramLinked ? props.t.settings.telegramReconnect : props.t.settings.telegramConnect}
+          </button>
+          {props.telegramConnectUrl && (
+            <a className="button secondary" href={props.telegramConnectUrl} target="_blank" rel="noopener noreferrer">
+              <ExternalLink size={17} />
+              {props.t.settings.telegramOpenManually}
+            </a>
+          )}
+        </div>
         <label className="habits-toggle">
           <input
             type="checkbox"

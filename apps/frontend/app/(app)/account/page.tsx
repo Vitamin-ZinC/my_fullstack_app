@@ -3,9 +3,10 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
-import { Bot, CheckCircle2, CreditCard, History, LogOut, Send, Sparkles } from "lucide-react";
+import { Bot, CheckCircle2, CreditCard, ExternalLink, History, LogOut, Send, Sparkles } from "lucide-react";
 import type { HabitConfigResponse, HabitProgramSummary, MeReportSummary, MeResponse, TelegramStatusResponse } from "@levelup/contracts";
 import { api } from "@/lib/api";
+import { openTelegramConnectUrl } from "@/lib/telegram";
 
 type ChatMessage = { role: "user" | "assistant"; text: string };
 type TelegramFrequency = "off" | "daily" | "weekdays" | "weekly";
@@ -17,6 +18,7 @@ export default function AccountPage() {
   const [program, setProgram] = useState<HabitProgramSummary | null>(null);
   const [config, setConfig] = useState<HabitConfigResponse | null>(null);
   const [telegramStatus, setTelegramStatus] = useState<TelegramStatusResponse | null>(null);
+  const [telegramConnectUrl, setTelegramConnectUrl] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [telegramBusy, setTelegramBusy] = useState(false);
@@ -140,10 +142,9 @@ export default function AccountPage() {
     setSavedMessage("");
     try {
       const result = await api.createTelegramLinkToken(program.id);
-      window.open(result.connectUrl, "_blank", "noopener,noreferrer");
-      const status = await api.telegramStatus(program.id);
-      setTelegramStatus(status);
-      setSavedMessage("Открыли Telegram-бота. Нажми Start в Telegram, чтобы связать кабинет.");
+      setTelegramConnectUrl(result.connectUrl);
+      setSavedMessage("Ссылка готова. Если Telegram не открылся автоматически, нажми «Открыть бота вручную».");
+      openTelegramConnectUrl(result.connectUrl);
     } catch (reason) {
       setSavedMessage(reason instanceof Error ? reason.message : "Не удалось открыть Telegram");
     } finally {
@@ -375,6 +376,12 @@ export default function AccountPage() {
             <Bot size={17} />
             {telegramLinked ? "Открыть Telegram" : "Подключить Telegram"}
           </button>
+          {telegramConnectUrl && (
+            <a className="button secondary" href={telegramConnectUrl} target="_blank" rel="noopener noreferrer">
+              <ExternalLink size={17} />
+              Открыть бота вручную
+            </a>
+          )}
           <label className="habits-toggle account-toggle">
             <input
               type="checkbox"

@@ -71,15 +71,28 @@ export async function telegramRoutes(app: FastifyInstance) {
     const program = body.programId ? await requireTelegramProgram(session, reply, body.programId) : await findAnyProgram(session);
     if (body.programId && !program) return;
     const token = createTelegramRawToken();
+    const issuedAt = new Date();
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
-    await prisma.telegramLinkToken.create({
-      data: {
-        tokenHash: hashTelegramToken(token),
-        userId: session.userId,
-        sessionId: session.id,
-        programId: program?.id,
-        expiresAt
-      }
+    await prisma.$transaction(async (tx) => {
+      await tx.telegramLinkToken.updateMany({
+        where: {
+          usedAt: null,
+          OR: [
+            ...(session.userId ? [{ userId: session.userId }] : []),
+            { sessionId: session.id }
+          ]
+        },
+        data: { usedAt: issuedAt }
+      });
+      await tx.telegramLinkToken.create({
+        data: {
+          tokenHash: hashTelegramToken(token),
+          userId: session.userId,
+          sessionId: session.id,
+          programId: program?.id,
+          expiresAt
+        }
+      });
     });
     return {
       configured: true,

@@ -9,6 +9,7 @@ import {
   ClipboardList,
   Copy,
   HandCoins,
+  Info,
   Link2,
   LogIn,
   LogOut,
@@ -40,7 +41,7 @@ const defaultOfferForm: OfferForm = {
   offer: "",
   kind: "qualified_lead",
   surface: "rewards_tab",
-  price: "120 Orken Points",
+  price: "120",
   cap: "25 в месяц",
   partnerPayoutCents: "0"
 };
@@ -98,6 +99,30 @@ function textValue(value: unknown) {
 
 function rowTitle(row: DataRecord) {
   return textValue(readValue(row, ["title", "offer", "name", "label", "channel", "id"]));
+}
+
+function referralSourceTitle(row: DataRecord) {
+  const value = rowTitle(row);
+  if (!/^https?:\/\//i.test(value)) return value;
+  try {
+    return new URL(value).hostname.replace(/^www\./i, "");
+  } catch {
+    return value;
+  }
+}
+
+function numericText(value: unknown) {
+  const match = String(value ?? "").replace(/\s+/g, "").match(/\d+/);
+  return match?.[0] ?? "";
+}
+
+function xpPriceLabel(value: unknown) {
+  const amount = numericText(value);
+  return amount ? `${amount} XP` : textValue(value);
+}
+
+function looksLikeUrl(value: string) {
+  return /^(?:https?:\/\/|www\.)/i.test(value) || /^[a-z0-9.-]+\.[a-z]{2,}(?:\/|$)/i.test(value);
 }
 
 function rowStatus(row: DataRecord) {
@@ -239,6 +264,10 @@ export default function PartnersPage() {
   async function createLink(event: React.FormEvent) {
     event.preventDefault();
     if (!linkName.trim()) return;
+    if (looksLikeUrl(linkName.trim())) {
+      setError("Введите короткое название источника, например «Instagram». Адрес страницы вставлять не нужно.");
+      return;
+    }
     setSubmitting(true);
     setError("");
     try {
@@ -257,6 +286,11 @@ export default function PartnersPage() {
 
   async function saveOffer(event: React.FormEvent) {
     event.preventDefault();
+    const xpPrice = Number(offerForm.price);
+    if (!Number.isInteger(xpPrice) || xpPrice < 1) {
+      setError("Укажите стоимость предложения целым числом XP.");
+      return;
+    }
     setSubmitting(true);
     setError("");
     try {
@@ -264,7 +298,7 @@ export default function PartnersPage() {
         offer: offerForm.offer,
         kind: offerForm.kind,
         surface: offerForm.surface,
-        price: offerForm.price,
+        price: `${xpPrice} Orken Points`,
         cap: offerForm.cap,
         partnerPayoutCents: Number(offerForm.partnerPayoutCents) || 0,
         idempotencyKey: makeIdempotencyKey()
@@ -294,7 +328,7 @@ export default function PartnersPage() {
       offer: String(readValue(offer, ["offer", "title"]) ?? ""),
       kind: offerKind(readValue(offer, ["kind"])),
       surface: offerSurface(readValue(offer, ["surface"])),
-      price: String(readValue(offer, ["price", "price_label"]) ?? ""),
+      price: numericText(readValue(offer, ["price", "price_label"])),
       cap: String(readValue(offer, ["cap", "cap_label"]) ?? ""),
       partnerPayoutCents: String(readValue(offer, ["partnerPayoutCents", "partner_payout_cents"]) ?? "0")
     });
@@ -472,11 +506,11 @@ function LinksSection({ links, linkName, setLinkName, submitting, onCreate, onCo
       <form className="partner-inline-form" onSubmit={onCreate}>
         <label className="partner-field-label">
           Название источника
-          <input value={linkName} onChange={(event) => setLinkName(event.target.value)} placeholder="Например: Telegram, Instagram или сайт" required />
+          <input value={linkName} onChange={(event) => setLinkName(event.target.value)} placeholder="Например: Telegram, Instagram или сайт" maxLength={60} required />
         </label>
         <button className="partner-primary-button" disabled={submitting} type="submit"><Plus size={17} />Создать ссылку</button>
       </form>
-      <p className="partner-field-help">После создания нажмите «Скопировать» и разместите ссылку в выбранном канале.</p>
+      <p className="partner-field-help">Введите только короткое название. Не вставляйте сюда адрес профиля или сайта: готовую ссылку Orken создаст автоматически.</p>
     </section>
 
     <section className="partner-panel">
@@ -485,7 +519,7 @@ function LinksSection({ links, linkName, setLinkName, submitting, onCreate, onCo
         const url = readValue(link, ["url", "href", "referralUrl", "referral_url"]);
         const status = statusCopy(rowStatus(link));
         return <article className="partner-row" key={rowId(link) ?? index}>
-          <div><strong>{rowTitle(link)}</strong><span>{typeof url === "string" ? url : "Ссылка готовится"}</span></div>
+          <div><strong>{referralSourceTitle(link)}</strong><span>{typeof url === "string" ? url : "Ссылка готовится"}</span></div>
           <div className="partner-row-actions">
             <span className={`partner-status ${status.tone}`}>{status.label}</span>
             {typeof url === "string" && <button className="partner-secondary-button" onClick={() => void onCopy(url)} type="button"><Copy size={16} />Скопировать</button>}
@@ -512,12 +546,13 @@ function OffersSection({ offers, form, setForm, editingOfferId, submitting, onSa
       <div className="partner-panel-head">
         <div><h2>Ваши предложения</h2><p>После создания отправьте предложение на проверку. Одобренные предложения увидят пользователи Orken.</p></div>
       </div>
+      <div className="partner-context-note"><Info size={17} /><span>Предложения активируются за накопленные XP. Комиссия за приведённые оплаты Orken рассчитывается отдельно по условиям партнёрской программы.</span></div>
       <div className="partner-row-list">{offers.length === 0 ? <EmptyState text="Предложений пока нет. Создайте первое ниже." /> : offers.map((offer, index) => {
         const id = rowId(offer);
         const status = statusCopy(rowStatus(offer));
         const editable = status.tone === "draft" || status.tone === "rejected";
         return <article className="partner-row" key={id ?? index}>
-          <div><strong>{rowTitle(offer)}</strong><span>{textValue(readValue(offer, ["price", "price_label", "cap", "cap_label"]))}</span></div>
+          <div><strong>{rowTitle(offer)}</strong><span>{xpPriceLabel(readValue(offer, ["price", "price_label"]))}</span></div>
           <div className="partner-row-actions">
             <span className={`partner-status ${status.tone}`}>{status.label}</span>
             {id && editable && <button className="partner-icon-button" disabled={submitting} onClick={() => onEdit(offer)} type="button" title="Редактировать предложение"><Pencil size={16} /></button>}
@@ -540,7 +575,7 @@ function OffersSection({ offers, form, setForm, editingOfferId, submitting, onSa
         <form className="partner-offer-form" onSubmit={onSave}>
           <label>Что вы предлагаете<input value={form.offer} onChange={(event) => setForm({ ...form, offer: event.target.value })} placeholder="Например: личная установочная сессия" required /></label>
           <label>Категория<select value={form.kind} onChange={(event) => setForm({ ...form, kind: event.target.value as OfferKind })}><option value="qualified_lead">Заявка на консультацию</option><option value="paid_service">Платная услуга</option><option value="portfolio_credit">Бонус или сертификат</option><option value="reward_trial">Пробный доступ</option><option value="manual_deal">Другое предложение</option></select></label>
-          <label>Стоимость для пользователя<input value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} placeholder="Например: 120 Orken Points" required /><small>Укажите сумму и валюту так, как её увидит пользователь.</small></label>
+          <label>Стоимость для пользователя, XP<input value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} type="number" min="1" step="1" placeholder="Например: 120" required /><small>Пользователь сможет активировать услугу, когда накопит эту сумму. XP спишутся после подтверждения.</small></label>
           <label>Сколько раз доступно<input value={form.cap} onChange={(event) => setForm({ ...form, cap: event.target.value })} placeholder="Например: 25 в месяц" required /><small>Лимит помогает не получить больше заявок, чем вы сможете обработать.</small></label>
           <details className="partner-advanced-options">
             <summary>Дополнительная настройка размещения</summary>

@@ -783,7 +783,7 @@ export function AdminConsole({ section }: { section: AdminSection }) {
       customerBonusEntitlement: program.customerBonusEntitlement ?? "",
       commissionModel: program.commissionModel,
       commissionRateBps: program.commissionRateBps === null || program.commissionRateBps === undefined ? "" : String(program.commissionRateBps),
-      fixedPayoutCents: program.fixedPayoutCents === null || program.fixedPayoutCents === undefined ? "" : String(program.fixedPayoutCents),
+      fixedPayoutCents: moneyInputFromCents(program.fixedPayoutCents),
       commissionWindowType: program.commissionWindowType,
       commissionWindowMonths: program.commissionWindowMonths === null || program.commissionWindowMonths === undefined ? "" : String(program.commissionWindowMonths),
       lockDays: String(program.lockDays),
@@ -804,8 +804,12 @@ export function AdminConsole({ section }: { section: AdminSection }) {
         customerBonusValue: partnerProgramForm.customerBonusValue ? Number(partnerProgramForm.customerBonusValue) : null,
         customerBonusEntitlement: partnerProgramForm.customerBonusEntitlement.trim() || null,
         commissionModel: partnerProgramForm.commissionModel as any,
-        commissionRateBps: partnerProgramForm.commissionRateBps ? Number(partnerProgramForm.commissionRateBps) : null,
-        fixedPayoutCents: partnerProgramForm.fixedPayoutCents ? Number(partnerProgramForm.fixedPayoutCents) : null,
+        commissionRateBps: partnerProgramForm.commissionModel === "FIXED"
+          ? null
+          : partnerProgramForm.commissionRateBps ? Number(partnerProgramForm.commissionRateBps) : null,
+        fixedPayoutCents: partnerProgramForm.commissionModel === "PERCENT"
+          ? null
+          : moneyInputToCents(partnerProgramForm.fixedPayoutCents || "0"),
         commissionWindowType: partnerProgramForm.commissionWindowType as any,
         commissionWindowMonths: partnerProgramForm.commissionWindowMonths ? Number(partnerProgramForm.commissionWindowMonths) : null,
         lockDays: Number(partnerProgramForm.lockDays),
@@ -823,6 +827,10 @@ export function AdminConsole({ section }: { section: AdminSection }) {
   async function createReferralLink(programId: string) {
     setMessage("");
     const channel = (referralChannelByProgram[programId] ?? "default").trim();
+    if (/^(?:https?:\/\/|www\.)/i.test(channel) || /^[a-z0-9.-]+\.[a-z]{2,}(?:\/|$)/i.test(channel)) {
+      setMessage("Укажите короткое название источника, например Instagram. URL профиля вставлять не нужно.");
+      return;
+    }
     try {
       await adminApi.createPartnerReferralLink(programId, channel || "default");
       setMessage("Referral link requested from Partner Core");
@@ -846,7 +854,7 @@ export function AdminConsole({ section }: { section: AdminSection }) {
       redemptionCurrency: offer.redemptionCost.currency,
       redemptionAmount: String(offer.redemptionCost.amount),
       userBenefit: offer.userBenefit,
-      partnerPayoutCents: String(offer.partnerPayoutCents),
+      partnerPayoutCents: moneyInputFromCents(offer.partnerPayoutCents),
       capPerMonth: offer.capPerMonth === null || offer.capPerMonth === undefined ? "" : String(offer.capPerMonth),
       status: offer.status,
       entitlementType: offer.entitlementType,
@@ -870,7 +878,7 @@ export function AdminConsole({ section }: { section: AdminSection }) {
         redemptionCurrency: partnerOfferForm.redemptionCurrency.trim() || "orken_points",
         redemptionAmount: Number(partnerOfferForm.redemptionAmount),
         userBenefit: partnerOfferForm.userBenefit.trim(),
-        partnerPayoutCents: Number(partnerOfferForm.partnerPayoutCents),
+        partnerPayoutCents: moneyInputToCents(partnerOfferForm.partnerPayoutCents || "0"),
         capPerMonth: partnerOfferForm.capPerMonth ? Number(partnerOfferForm.capPerMonth) : null,
         status: partnerOfferForm.status as PartnerOfferStatus,
         entitlementType: partnerOfferForm.entitlementType.trim() || "manual",
@@ -1567,10 +1575,11 @@ export function AdminConsole({ section }: { section: AdminSection }) {
                   <label className="admin-field"><span>Бонус новому пользователю</span><select className="input" value={partnerProgramForm.customerBonusType} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, customerBonusType: event.target.value })}><option value="NONE">Без бонуса</option><option value="FREE_DAYS">Бесплатные дни</option><option value="DISCOUNT">Скидка</option><option value="CREDITS">Баллы</option><option value="CUSTOM_ENTITLEMENT">Особое право доступа</option></select></label>
                   <label className="admin-field"><span>Размер бонуса</span><input className="input" value={partnerProgramForm.customerBonusValue} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, customerBonusValue: event.target.value })} inputMode="numeric" /></label>
                   <label className="admin-field"><span>Как платим партнёру</span><select className="input" value={partnerProgramForm.commissionModel} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, commissionModel: event.target.value })}><option value="PERCENT">Процент от выручки</option><option value="FIXED">Фиксированная выплата</option><option value="HYBRID">Процент и фиксированная выплата</option></select></label>
-                  <label className="admin-field"><span>Комиссия, %</span><input className="input" value={partnerProgramForm.commissionRateBps ? String(Number(partnerProgramForm.commissionRateBps) / 100) : ""} onChange={(event) => {
+                  {partnerProgramForm.commissionModel !== "FIXED" && <label className="admin-field"><span>Комиссия с оплат Orken, %</span><input className="input" value={partnerProgramForm.commissionRateBps ? String(Number(partnerProgramForm.commissionRateBps) / 100) : ""} onChange={(event) => {
                     const percent = Number(event.target.value.replace(",", "."));
                     setPartnerProgramForm({ ...partnerProgramForm, commissionRateBps: event.target.value && Number.isFinite(percent) ? String(Math.round(percent * 100)) : "" });
-                  }} inputMode="decimal" /></label>
+                  }} inputMode="decimal" /><small>Начисляется с платежей пользователей, пришедших по реферальной ссылке.</small></label>}
+                  {partnerProgramForm.commissionModel !== "PERCENT" && <label className="admin-field"><span>Фиксированная комиссия за конверсию, €</span><input className="input" value={partnerProgramForm.fixedPayoutCents} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, fixedPayoutCents: event.target.value })} inputMode="decimal" placeholder="Например: 5 или 5,50" /></label>}
                   <label className="admin-field"><span>Как долго начислять комиссию</span><select className="input" value={partnerProgramForm.commissionWindowType} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, commissionWindowType: event.target.value })}><option value="FIRST_PAYMENT">Только за первый платёж</option><option value="MONTHS">Несколько месяцев</option><option value="LIFETIME">За все будущие платежи</option></select></label>
                   {partnerProgramForm.commissionWindowType === "MONTHS" && <label className="admin-field"><span>Период, месяцев</span><input className="input" value={partnerProgramForm.commissionWindowMonths} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, commissionWindowMonths: event.target.value })} inputMode="numeric" /></label>}
                 </div>
@@ -1580,7 +1589,6 @@ export function AdminConsole({ section }: { section: AdminSection }) {
                   <div className="grid grid-2">
                     <label className="admin-field"><span>ID программы в Partner Core</span><input className="input" value={partnerProgramForm.partnerCoreProgramId} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, partnerCoreProgramId: event.target.value })} /></label>
                     <label className="admin-field"><span>Код особого доступа</span><input className="input" value={partnerProgramForm.customerBonusEntitlement} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, customerBonusEntitlement: event.target.value })} /></label>
-                    <label className="admin-field"><span>Фиксированная выплата, центы</span><input className="input" value={partnerProgramForm.fixedPayoutCents} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, fixedPayoutCents: event.target.value })} inputMode="numeric" /></label>
                     <label className="admin-field"><span>Срок удержания, дней</span><input className="input" value={partnerProgramForm.lockDays} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, lockDays: event.target.value })} inputMode="numeric" /></label>
                     <label className="admin-field"><span>Версия условий</span><input className="input" value={partnerProgramForm.termsVersion} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, termsVersion: event.target.value })} /></label>
                   </div>
@@ -1590,15 +1598,19 @@ export function AdminConsole({ section }: { section: AdminSection }) {
 
               {partnerAdminView === "offers" && <div className="stack admin-partner-view">
                 <div className="admin-partner-view-heading"><h3>Предложение для пользователей Orken</h3><p className="muted">Создайте понятную карточку, задайте стоимость в баллах и отправьте её на проверку.</p></div>
+                <div className="admin-partner-explainer">
+                  <strong>Два независимых расчёта</strong>
+                  <span>Процент программы, например 10%, начисляется партнёру с оплат Orken по его реферальной ссылке. Выплата ниже — отдельная фиксированная сумма за одну активацию партнёрской услуги за XP. Если дополнительная выплата не предусмотрена, оставьте 0 €.</span>
+                </div>
                 <div className="grid grid-2 admin-partner-form-grid">
                   <label className="admin-field"><span>Партнёрская программа</span><select className="input" value={partnerOfferForm.programConfigId} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, programConfigId: event.target.value })}><option value="">Выберите программу</option>{partnerPrograms.map((program) => <option value={program.id} key={program.id}>{program.name}</option>)}</select></label>
                   <label className="admin-field"><span>Тип предложения</span><select className="input" value={partnerOfferForm.kind} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, kind: event.target.value })}><option value="manual_deal">Другое предложение</option><option value="reward_trial">Пробный доступ</option><option value="portfolio_credit">Бонус или сертификат</option><option value="qualified_lead">Заявка на консультацию</option><option value="paid_service">Платная услуга</option></select></label>
                   <label className="admin-field admin-field-wide"><span>Название</span><input className="input" value={partnerOfferForm.title} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, title: event.target.value })} placeholder="Например: стратегическая сессия" /></label>
-                  <label className="admin-field"><span>Стоимость для пользователя, Orken Points</span><input className="input" value={partnerOfferForm.redemptionAmount} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, redemptionAmount: event.target.value })} inputMode="numeric" /></label>
+                  <label className="admin-field"><span>Стоимость для пользователя, XP</span><input className="input" value={partnerOfferForm.redemptionAmount} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, redemptionAmount: event.target.value })} inputMode="numeric" /><small>Звание не требуется: достаточно накопить эту сумму. XP списываются при активации.</small></label>
                   <label className="admin-field"><span>Лимит активаций в месяц</span><input className="input" value={partnerOfferForm.capPerMonth} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, capPerMonth: event.target.value })} inputMode="numeric" /></label>
                   <label className="admin-field admin-field-wide"><span>Короткое описание</span><textarea className="input text-editor compact" value={partnerOfferForm.description} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, description: event.target.value })} placeholder="Что получит пользователь и как это работает" /></label>
                   <label className="admin-field admin-field-wide"><span>Польза для пользователя</span><textarea className="input text-editor compact" value={partnerOfferForm.userBenefit} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, userBenefit: event.target.value })} placeholder="Конкретный результат или выгода" /></label>
-                  <label className="admin-field"><span>Выплата партнёру, центы</span><input className="input" value={partnerOfferForm.partnerPayoutCents} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, partnerPayoutCents: event.target.value })} inputMode="numeric" /></label>
+                  <label className="admin-field"><span>Выплата партнёру за одну активацию, €</span><input className="input" value={partnerOfferForm.partnerPayoutCents} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, partnerPayoutCents: event.target.value })} inputMode="decimal" placeholder="0" /><small>Не связана с процентом от выручки. Укажите 0, если отдельной выплаты за услугу нет.</small></label>
                   <label className="admin-field"><span>Что выдать после активации</span><input className="input" value={partnerOfferForm.entitlementValue} onChange={(event) => setPartnerOfferForm({ ...partnerOfferForm, entitlementValue: event.target.value })} placeholder="Купон, ссылка или инструкция" /></label>
                 </div>
                 <details className="admin-advanced-panel">
@@ -1627,7 +1639,7 @@ export function AdminConsole({ section }: { section: AdminSection }) {
                     {program.referralLinks.map((link) => <span key={link.id}>{link.channel}: {link.url ?? link.referralCode ?? link.status}</span>)}
                   </div>
                   <div className="admin-gift-form">
-                    <input className="input" value={referralChannelByProgram[program.id] ?? "default"} onChange={(event) => setReferralChannelByProgram({ ...referralChannelByProgram, [program.id]: event.target.value })} placeholder="Канал" />
+                    <input className="input" value={referralChannelByProgram[program.id] ?? "default"} onChange={(event) => setReferralChannelByProgram({ ...referralChannelByProgram, [program.id]: event.target.value })} placeholder="Например: Instagram (без URL)" maxLength={60} />
                     <button className="button secondary" onClick={() => createReferralLink(program.id)}>Создать ссылку</button>
                     <button className="button secondary" onClick={() => selectPartnerProgram(program)}>Изменить</button>
                   </div>
@@ -1642,7 +1654,7 @@ export function AdminConsole({ section }: { section: AdminSection }) {
                   <div>
                     <strong>{offer.title} · {partnerAdminStatusLabel(offer.status)}</strong>
                     <span>Синхронизация: {offer.partnerCorePlacementId ? partnerAdminStatusLabel(offer.partnerCoreStatus) : "ещё не отправлено"}</span>
-                    <span>{offer.redemptionCost.amount} {offer.redemptionCost.currency} · выплата {offer.partnerPayoutCents} центов · активаций {offer.redemptionsCount ?? 0}</span>
+                    <span>{offer.redemptionCost.amount} XP · выплата за активацию {formatPartnerMoney(offer.partnerPayoutCents)} · активаций {offer.redemptionsCount ?? 0}</span>
                     <span>{offer.userBenefit}</span>
                   </div>
                   <div className="row" style={{ justifyContent: "flex-end" }}>
@@ -1657,7 +1669,7 @@ export function AdminConsole({ section }: { section: AdminSection }) {
 
             {partnerAdminView === "operations" && <>
             <div className="admin-program-list admin-partner-view">
-              <div><h3>Активации предложений</h3><p className="muted">Пользователи, которые обменяли Orken Points на партнёрское предложение.</p></div>
+              <div><h3>Активации предложений</h3><p className="muted">Пользователи, которые обменяли XP на партнёрское предложение.</p></div>
               {partnerRedemptions.length === 0 ? <p className="muted">Активаций пока нет</p> : partnerRedemptions.map((item) => (
                 <div className="admin-program-row" key={item.id}>
                   <div>
@@ -1795,12 +1807,27 @@ function partnerBonusLabel(type: string, value?: number | null) {
 
 function partnerCommissionLabel(program: PartnerAffiliateProgramSummary) {
   if (program.commissionModel === "PERCENT") return `${Number(program.commissionRateBps ?? 0) / 100}% от выручки`;
-  if (program.commissionModel === "FIXED") return `${program.fixedPayoutCents ?? 0} центов за конверсию`;
-  return `${Number(program.commissionRateBps ?? 0) / 100}% + ${program.fixedPayoutCents ?? 0} центов`;
+  if (program.commissionModel === "FIXED") return `${formatPartnerMoney(program.fixedPayoutCents ?? 0)} за конверсию`;
+  return `${Number(program.commissionRateBps ?? 0) / 100}% + ${formatPartnerMoney(program.fixedPayoutCents ?? 0)}`;
 }
 
 function formatPartnerMoney(cents: number) {
   return new Intl.NumberFormat("ru-RU", { style: "currency", currency: "EUR" }).format(cents / 100);
+}
+
+function moneyInputFromCents(value?: number | null) {
+  const cents = Number(value ?? 0);
+  if (!Number.isFinite(cents)) return "0";
+  const amount = cents / 100;
+  return Number.isInteger(amount) ? String(amount) : amount.toFixed(2).replace(".", ",");
+}
+
+function moneyInputToCents(value: string) {
+  const amount = Number(value.trim().replace(",", "."));
+  if (!Number.isFinite(amount) || amount < 0) {
+    throw new Error("Укажите сумму в евро, например 25 или 25,50");
+  }
+  return Math.round(amount * 100);
 }
 
 function List({ title, items }: { title: string; items: string[] }) {

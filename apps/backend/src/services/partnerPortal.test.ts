@@ -3,9 +3,10 @@ import { createHash, createHmac } from "node:crypto";
 import test from "node:test";
 
 process.env.DATABASE_URL ??= "postgresql://test:test@localhost:5432/orken_test";
+process.env.APP_ORIGIN ??= "https://orken.life";
 
 const { PartnerCoreServiceClient } = await import("./partnerCore.js");
-const { partnerPortalIdentity, portalIdentityFromAuth, sanitizePartnerCorePayload } = await import("./partnerPortal.js");
+const { partnerPortalDashboard, partnerPortalIdentity, partnerPortalReferralLink, portalIdentityFromAuth, sanitizePartnerCorePayload } = await import("./partnerPortal.js");
 
 test("Partner Core portal registration is server-signed and idempotent", async () => {
   let requestUrl = "";
@@ -211,4 +212,24 @@ test("Partner portal payload never returns Core credentials or payout details", 
     payoutStatus: "pending",
     ledger: [{ id: "ledger_1", amount: 1200 }]
   });
+});
+
+test("Partner portal rewrites Core short links to the Orken referral entrypoint", () => {
+  const link = partnerPortalReferralLink({
+    referralLink: {
+      id: "link_123",
+      channel: "Instagram",
+      code: "INSTAGRAM-ORKEN",
+      url: "https://go.enchantstartup.com/instagram-orken"
+    }
+  });
+  assert.equal(link.url, "https://orken.life/?ref=INSTAGRAM-ORKEN");
+  assert.equal(link.referralUrl, "https://orken.life/?ref=INSTAGRAM-ORKEN");
+  assert.equal(link.channel, "Instagram");
+
+  const dashboard = partnerPortalDashboard({
+    partner: { id: "partner_123", status: "APPROVED" },
+    referralLinks: [{ code: "TELEGRAM-ORKEN", url: "https://go.enchantstartup.com/telegram-orken" }]
+  }, { partnerCorePartnerId: "partner_123", status: "APPROVED" });
+  assert.equal(dashboard.referralLinks[0]?.url, "https://orken.life/?ref=TELEGRAM-ORKEN");
 });

@@ -6400,6 +6400,25 @@ p {
   margin-top: 10px;
 }
 
+.partner-context-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 14px 0 4px;
+  border: 1px solid rgba(34, 211, 238, 0.2);
+  background: rgba(8, 145, 178, 0.08);
+  padding: 11px 12px;
+  color: rgba(207, 250, 254, 0.82);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.partner-context-note svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: #22d3ee;
+}
+
 .partner-offer-form {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   margin-top: 18px;
@@ -7417,6 +7436,28 @@ p {
   color: #a7b4c2;
   font-size: 11px;
   font-weight: 600;
+}
+
+.admin-field > small {
+  color: #7f90a4;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.admin-partner-explainer {
+  display: grid;
+  gap: 5px;
+  border-left: 3px solid #22c7dd;
+  background: #111a24;
+  padding: 12px 14px;
+  color: #9eafc2;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.admin-partner-explainer strong {
+  color: #e8f4f8;
+  font-size: 13px;
 }
 
 .admin-field-wide {

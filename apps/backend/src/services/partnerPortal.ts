@@ -264,13 +264,36 @@ function arrayAt(value: unknown, ...keys: string[]) {
   return [];
 }
 
+export function partnerPortalReferralLink(value: unknown): CorePartnerRecord {
+  const sanitized = sanitizePartnerCorePayload(value);
+  const root = asRecord(sanitized) ?? {};
+  const link = firstRecord(root.referralLink, root.referral_link, root.link, root) ?? {};
+  const rawCode = firstString(link.referralCode, link.referral_code, link.code);
+  const code = rawCode?.toUpperCase();
+  if (!code || code.length > 120 || !/^[A-Z0-9._-]+$/.test(code)) return link;
+
+  const url = new URL("/", env.APP_ORIGIN);
+  url.searchParams.set("ref", code);
+  const referralUrl = url.toString();
+  return {
+    ...link,
+    code,
+    referralCode: code,
+    referral_code: code,
+    url: referralUrl,
+    href: referralUrl,
+    referralUrl,
+    referral_url: referralUrl
+  };
+}
+
 export function partnerPortalDashboard(value: unknown, fallback: PartnerPortalIdentity): PartnerPortalDashboard {
   const sanitized = sanitizePartnerCorePayload(value);
   const identity = partnerPortalIdentity(sanitized, fallback) ?? fallback;
   return {
     partner: identity,
     metrics: recordAt(sanitized, "metrics", "summary", "stats"),
-    referralLinks: arrayAt(sanitized, "referralLinks", "referral_links", "links"),
+    referralLinks: arrayAt(sanitized, "referralLinks", "referral_links", "links").map(partnerPortalReferralLink),
     offers: arrayAt(sanitized, "offers", "placements", "rewardPlacements"),
     leads: arrayAt(sanitized, "leads"),
     conversions: arrayAt(sanitized, "conversions"),

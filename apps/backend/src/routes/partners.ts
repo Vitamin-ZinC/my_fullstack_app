@@ -35,6 +35,7 @@ import {
   partnerPortalClientRef,
   partnerPortalDashboard,
   partnerPortalIdentity,
+  partnerPortalReferralLink,
   refreshPartnerPortalIdentity,
   revokePartnerPortalSession,
   sanitizePartnerCorePayload,
@@ -89,7 +90,9 @@ const partnerProjectStatusSchema = z.object({
 });
 
 const referralLinkSchema = z.object({
-  channel: z.string().trim().min(2).max(120)
+  channel: z.string().trim().min(2).max(60).refine((value) => {
+    return !/^(?:https?:\/\/|www\.)/i.test(value) && !/^[a-z0-9.-]+\.[a-z]{2,}(?:\/|$)/i.test(value);
+  }, { message: "Channel must be a short name, not a URL" })
 });
 
 const redemptionSchema = z.object({
@@ -111,7 +114,9 @@ const partnerPortalLoginSchema = z.object({
 });
 
 const partnerPortalReferralSchema = z.object({
-  channel: z.string().trim().min(2).max(120),
+  channel: z.string().trim().min(2).max(60).refine((value) => {
+    return !/^(?:https?:\/\/|www\.)/i.test(value) && !/^[a-z0-9.-]+\.[a-z]{2,}(?:\/|$)/i.test(value);
+  }, { message: "Channel must be a short name, not a URL" }),
   idempotencyKey: z.string().trim().min(12).max(220)
 });
 
@@ -240,7 +245,7 @@ export async function partnerRoutes(app: FastifyInstance) {
         channel: body.channel,
         idempotencyKey: `partner-ref:${body.idempotencyKey}`
       });
-      return { link: sanitizePartnerCorePayload(link) };
+      return { link: partnerPortalReferralLink(link) };
     } catch (error) {
       return handlePartnerPortalCoreError(request, reply, session.id, error);
     }
@@ -606,12 +611,13 @@ function serializeProgram(program: any) {
 }
 
 function serializeReferralLink(link: any) {
+  const safeLink = partnerPortalReferralLink(link);
   return {
     id: link.id,
     programConfigId: link.programConfigId,
     channel: link.channel,
     referralCode: link.referralCode,
-    url: link.url,
+    url: safeLink.url ?? link.url,
     partnerCoreLinkId: link.partnerCoreLinkId,
     status: link.status,
     createdAt: link.createdAt.toISOString(),

@@ -14,6 +14,7 @@ import {
   validateAnalysisPhotoSuitability,
   type PhotoSuitabilityResult
 } from "../services/photoSuitability.js";
+import { normalizeFullReportValue } from "../services/aiReport.js";
 import { sendReportEmail } from "../services/email.js";
 import { buildFallbackFreeReport, buildFallbackReport } from "../services/report.js";
 
@@ -167,6 +168,8 @@ export async function analysisRoutes(app: FastifyInstance) {
     if (!access) return;
     const analysis = access.analysis;
     if (analysis.payment?.status !== "SUCCEEDED") return reply.code(402).send({ error: "Payment required" });
+    if (!analysis.reportFull) return reply.code(409).send({ error: "Full report is not available" });
+    const reportFull = normalizeFullReportValue(analysis.reportFull);
     await prisma.analyticsEvent.create({
       data: {
         name: "full_report_viewed",
@@ -177,7 +180,7 @@ export async function analysisRoutes(app: FastifyInstance) {
       }
     });
     const reportMeta = await buildReportGenerationMeta(params.id, analysis.locale);
-    return { reportFull: analysis.reportFull, reportMeta };
+    return { reportFull, reportMeta };
   });
 
   app.post("/api/analyses/:id/contact", async (request, reply) => {

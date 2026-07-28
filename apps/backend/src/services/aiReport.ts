@@ -438,7 +438,7 @@ export async function generateOpenAiReport(context: ReportContext): Promise<Gene
       schemaName: "ikigai_full_report",
       jsonSchema: reportFullJsonSchema,
       useAsync: useCompatibleAsync,
-      parseReport: (content) => normalizeFullReport(reportFullSchema.parse(completeFullReportCandidate(parseCompletionJson(content))))
+      parseReport: (content) => normalizeFullReportValue(parseCompletionJson(content))
     })
   ]);
   const promptVersion = Math.max(freeCompletion.promptVersion, fullCompletion.promptVersion);
@@ -592,9 +592,17 @@ export function completeFullReportCandidate(value: unknown) {
   };
 }
 
-function normalizeFullReport(report: ReportFull): ReportFull {
+export function normalizeFullReportValue(value: unknown): ReportFull {
+  const report = reportFullSchema.parse(completeFullReportCandidate(value));
+  const seenRoleNames = new Set<string>();
   const sortedRoles = [...report.top_roles]
     .sort((left, right) => right.match - left.match)
+    .filter((role) => {
+      const key = role.name.trim().toLocaleLowerCase();
+      if (!key || seenRoleNames.has(key)) return false;
+      seenRoleNames.add(key);
+      return true;
+    })
     .slice(0, 5);
   const fallbackNames = [
     "Стратег развития",
@@ -615,8 +623,11 @@ function normalizeFullReport(report: ReportFull): ReportFull {
 
   while (sortedRoles.length < 5) {
     const index = sortedRoles.length;
+    const fallbackName = fallbackNames.find((name) => !seenRoleNames.has(name.toLocaleLowerCase()))
+      ?? `${sourceRole.name}: прикладной формат ${index + 1}`;
+    seenRoleNames.add(fallbackName.toLocaleLowerCase());
     sortedRoles.push({
-      name: fallbackNames[index] ?? `${sourceRole.name}: прикладной формат`,
+      name: fallbackName,
       match: Math.max(55, Math.min(95, sourceRole.match - (index + 1) * 4)),
       why: `Дополнительное направление из общего профиля: ${report.summary}`,
       voiceEvidence: `Голосовой сигнал и содержание речи поддерживают это направление как рабочую гипотезу: ${sourceRole.voiceEvidence}`,

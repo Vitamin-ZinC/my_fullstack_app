@@ -4,7 +4,7 @@ import { emitProgress } from "../lib/progress.js";
 import { prisma } from "../lib/prisma.js";
 import { env } from "../env.js";
 import { buildFallbackFreeReport, buildFallbackReport } from "../services/report.js";
-import { generateOpenAiReport } from "../services/aiReport.js";
+import { generateOpenAiReport, normalizeFullReportValue } from "../services/aiReport.js";
 import { sendDueTelegramReminders } from "../services/telegramBot.js";
 import { retryPartnerCoreEvents } from "../services/partnerCore.js";
 
@@ -80,6 +80,7 @@ export const worker = new Worker("analysis", async (job) => {
   if (!report || !reportFree) {
     throw new Error("AI report generation did not produce a report");
   }
+  report = normalizeFullReportValue(report);
 
   await prisma.analysis.update({
     where: { id: analysisId },

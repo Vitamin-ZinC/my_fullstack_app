@@ -9,6 +9,11 @@ import { subscribeProgress } from "../lib/progress.js";
 import { prisma } from "../lib/prisma.js";
 import { createMediaUploadUrls, readMediaAssetBuffer, verifyRequiredMedia } from "../services/media.js";
 import { validatePhotoBuffer } from "../services/imageValidation.js";
+import {
+  photoSuitabilityHttpStatus,
+  validateAnalysisPhotoSuitability,
+  type PhotoSuitabilityResult
+} from "../services/photoSuitability.js";
 import { sendReportEmail } from "../services/email.js";
 import { buildFallbackFreeReport, buildFallbackReport } from "../services/report.js";
 
@@ -76,6 +81,15 @@ export async function analysisRoutes(app: FastifyInstance) {
       : body.ikigaiAnswers;
     const mediaStatus = await verifyRequiredMedia(params.id);
     if (!mediaStatus.ok) return reply.code(409).send({ error: mediaStatus.reason });
+    const photoStatus = await validateAnalysisPhotoSuitability(params.id, access.analysis.locale);
+    if (!photoStatus.ok) {
+      await trackPhotoSuitabilityResult(access, photoStatus);
+      return reply.code(photoSuitabilityHttpStatus(photoStatus)).send({
+        error: photoStatus.message,
+        code: photoStatus.code,
+        retryable: photoStatus.retryable
+      });
+    }
     const job = await analysisQueue.add("generate-report", { analysisId: params.id });
     await prisma.analysis.update({
       where: { id: params.id },
@@ -95,6 +109,27 @@ export async function analysisRoutes(app: FastifyInstance) {
       }
     });
     return { status: "queued", jobId: job.id };
+  });
+
+  app.post("/api/analyses/:id/photo/validate", async (request, reply) => {
+    const params = z.object({ id: z.string() }).parse(request.params);
+    const access = await requireAnalysisAccess(request, reply, params.id);
+    if (!access) return;
+
+    const result = await validateAnalysisPhotoSuitability(params.id, access.analysis.locale);
+    await trackPhotoSuitabilityResult(access, result);
+    if (!result.ok) {
+      return reply.code(photoSuitabilityHttpStatus(result)).send({
+        error: result.message,
+        code: result.code,
+        retryable: result.retryable
+      });
+    }
+    return {
+      suitable: true,
+      cached: result.cached,
+      confidence: result.confidence
+    };
   });
 
   app.get("/api/analyses/:id/status", async (request, reply) => {
@@ -263,7 +298,9 @@ export async function analysisRoutes(app: FastifyInstance) {
         status: "UPLOADED",
         size: body.length || (Number.isFinite(contentLength) ? contentLength : undefined),
         mimeType: contentType ?? undefined,
-        uploadedAt: new Date()
+        uploadedAt: new Date(),
+        checksum: null,
+        verifiedAt: null
       }
     });
     return { ok: true, mediaAssetId: asset.id };
@@ -314,6 +351,44 @@ export async function analysisRoutes(app: FastifyInstance) {
       }
     });
     return { ok: true };
+  });
+}
+
+type PhotoSuitabilityAccess = {
+  analysis: {
+    id: string;
+    locale: string;
+  };
+  session: {
+    id: string;
+    userId: string | null;
+  };
+};
+
+async function trackPhotoSuitabilityResult(
+  access: PhotoSuitabilityAccess,
+  result: PhotoSuitabilityResult
+) {
+  if (result.cached) return;
+  const eventName = result.ok
+    ? "photo_suitability_accepted"
+    : result.code === "PHOTO_VALIDATION_UNAVAILABLE"
+      ? "photo_suitability_unavailable"
+      : "photo_suitability_rejected";
+  await prisma.analyticsEvent.create({
+    data: {
+      name: eventName,
+      locale: access.analysis.locale,
+      sessionId: access.session.id,
+      userId: access.session.userId,
+      analysisId: access.analysis.id,
+      properties: JSON.parse(JSON.stringify({
+        code: result.ok ? "SUITABLE" : result.code,
+        confidence: result.confidence,
+        retryable: result.ok ? false : result.retryable,
+        model: result.model
+      }))
+    }
   });
 }
 

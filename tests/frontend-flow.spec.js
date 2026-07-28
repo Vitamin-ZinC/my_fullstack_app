@@ -1,8 +1,9 @@
 const { test, expect } = require("@playwright/test");
+const path = require("node:path");
 
 const apiBase = "http://localhost:3001";
 const appBase = "http://localhost:3000";
-const pngBase64 = "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAASElEQVR4nO3PQQ0AIBDAMMC/5+ONAvZoFSzZnpldtwJ8NgEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAb4GSAABlzm3xQAAAABJRU5ErkJggg==";
+const testPhotoPath = path.join(__dirname, "..", "assets", "ikigai-cones.jpg");
 const corsHeaders = {
   "access-control-allow-origin": appBase,
   "access-control-allow-credentials": "true",
@@ -138,6 +139,10 @@ test("ORKEN.LIFE frontend flow works with mocked backend", async ({ page }) => {
     expect(body.clientMetrics.voiceDurationSeconds).toBeGreaterThanOrEqual(30);
     await fulfillJson(route, { status: "QUEUED", jobId: "job-test" });
   });
+  await page.route(`${apiBase}/api/analyses/analysis-test/photo/validate`, async (route) => {
+    expect(route.request().method()).toBe("POST");
+    await fulfillJson(route, { suitable: true, cached: false, confidence: 0.97 });
+  });
   await page.route(`${apiBase}/api/analyses/analysis-test/stream**`, async (route) => route.fulfill({
     status: 200,
     headers: { ...corsHeaders, "content-type": "text/event-stream" },
@@ -256,12 +261,9 @@ test("ORKEN.LIFE frontend flow works with mocked backend", async ({ page }) => {
   await expect(page).toHaveURL(/\/flow\/face$/);
 
   await expect(page.getByTestId("face-file-button")).toBeEnabled({ timeout: 30000 });
-  await page.getByTestId("face-file-input").setInputFiles({
-    name: "face.png",
-    mimeType: "image/png",
-    buffer: Buffer.from(pngBase64, "base64")
-  });
+  await page.getByTestId("face-file-input").setInputFiles(testPhotoPath);
   await expect(page.getByTestId("face-metrics")).toBeVisible({ timeout: 10000 });
+  await expect(page.getByText("Фото подходит для анализа.")).toBeVisible();
   await expect(page.getByTestId("face-next-link")).toHaveText("Узнать результат");
   const confirmResponse = page.waitForResponse(`${apiBase}/api/analyses/analysis-test/confirm`);
   await page.getByTestId("face-next-link").click();
@@ -314,6 +316,63 @@ test("ORKEN.LIFE frontend flow works with mocked backend", async ({ page }) => {
   await expect(page).toHaveURL(/\/habits\?from=ikigai&analysisId=analysis-test$/);
   await expect(page.getByTestId("habits-app")).toBeVisible();
   await expect(page.getByText("Навигатор привычек ORKEN.LIFE")).toBeVisible({ timeout: 15000 });
+});
+
+test("face step rejects an unsuitable photo and allows a valid replacement", async ({ page }) => {
+  let validationAttempts = 0;
+  await page.addInitScript(({ apiUrl }) => {
+    window.sessionStorage.setItem("levelup_session_id", "photo-reject-session");
+    window.sessionStorage.setItem("levelup_guest_token", "photo-reject-token");
+    window.sessionStorage.setItem("levelup_analysis_id", "analysis-photo-reject");
+    window.sessionStorage.setItem("levelup_audio_upload_url", `${apiUrl}/uploads/audio-photo-reject`);
+    window.sessionStorage.setItem("levelup_photo_upload_url", `${apiUrl}/uploads/photo-photo-reject`);
+  }, { apiUrl: apiBase });
+  await page.route(`${apiBase}/api/content/ru`, async (route) => fulfillJson(route, { locale: "ru", value: null }));
+  await page.route(`${apiBase}/uploads/photo-photo-reject`, async (route) => {
+    if (route.request().method() === "OPTIONS") {
+      await route.fulfill({ status: 204, headers: corsHeaders });
+      return;
+    }
+    await route.fulfill({ status: 200, body: "ok", headers: corsHeaders });
+  });
+  await page.route(`${apiBase}/api/analyses/analysis-photo-reject/photo/validate`, async (route) => {
+    if (route.request().method() === "OPTIONS") {
+      await route.fulfill({ status: 204, headers: corsHeaders });
+      return;
+    }
+    validationAttempts += 1;
+    if (validationAttempts > 1) {
+      await route.fulfill({
+        status: 200,
+        json: { suitable: true, cached: false, confidence: 0.96 },
+        headers: corsHeaders
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 422,
+      json: {
+        error: "Фото не подходит. Загрузите реальную фотографию одного человека, а не предмет, животное, рисунок или скриншот.",
+        code: "PHOTO_PERSON_REQUIRED",
+        retryable: false
+      },
+      headers: corsHeaders
+    });
+  });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${appBase}/flow/face`);
+  await expect(page.getByTestId("face-file-button")).toBeEnabled({ timeout: 15000 });
+  await page.getByTestId("face-file-input").setInputFiles(testPhotoPath);
+
+  await expect(page.getByText(/Фото не подходит\. Загрузите реальную фотографию одного человека/)).toBeVisible({ timeout: 15000 });
+  await expect(page.getByTestId("face-metrics")).toBeVisible();
+  await expect(page.getByTestId("face-next-link")).toHaveCount(0);
+
+  await page.getByTestId("face-file-input").setInputFiles(testPhotoPath);
+  await expect(page.getByText("Фото подходит для анализа.")).toBeVisible({ timeout: 15000 });
+  await expect(page.getByTestId("face-next-link")).toHaveText("Узнать результат");
+  expect(validationAttempts).toBe(2);
 });
 
 test("legacy ikigai flow route launches analysis instead of showing the map step", async ({ page }) => {

@@ -21,6 +21,7 @@ import type {
   MeResponse,
   PaymentConfigResponse,
   PaymentIntentResponse,
+  PhotoSuitabilityResponse,
   PartnerAffiliateProgramInput,
   PartnerAffiliateProgramSummary,
   PartnerCoreAdminSnapshot,
@@ -520,6 +521,10 @@ export const api = {
   confirmAnalysis: (analysisId: string, ikigaiAnswers: IkigaiAnswers, clientMetrics?: AnalysisClientMetrics) => request<{ status: string; jobId: string }>(`/api/analyses/${analysisId}/confirm`, {
     method: "POST",
     body: JSON.stringify({ ikigaiAnswers, ...(clientMetrics ? { clientMetrics } : {}) })
+  }),
+  validateAnalysisPhoto: (analysisId: string) => request<PhotoSuitabilityResponse>(`/api/analyses/${analysisId}/photo/validate`, {
+    method: "POST",
+    body: JSON.stringify({})
   }),
   getStatus: (analysisId: string) => request<AnalysisStatusResponse>(`/api/analyses/${analysisId}/status`),
   getFreeReport: (analysisId: string) => request<FreeReportResponse>(`/api/analyses/${analysisId}/report/free`),

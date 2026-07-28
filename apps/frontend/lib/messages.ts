@@ -127,7 +127,10 @@ export const ruSiteText = {
       cameraError: "Камера недоступна",
       cameraNotReady: "Камера еще не готова. Подождите секунду и нажмите “Снять” снова.",
       fileTypeError: "Загрузите изображение в формате JPG, PNG или HEIC.",
-      uploadError: "Не удалось загрузить фото"
+      uploadError: "Не удалось загрузить фото",
+      uploadingPhoto: "Загружаем фото...",
+      checkingPhoto: "Проверяем, что на фото один человек и лицо хорошо видно...",
+      photoAccepted: "Фото подходит для анализа."
     },
     ikigai: {
       eyebrow: "Шаг 3",

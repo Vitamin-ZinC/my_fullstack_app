@@ -79,8 +79,9 @@ export async function verifyRequiredMedia(analysisId: string) {
   if (!audio || !photo) return { ok: false, reason: "Missing media assets" };
 
   if (!hasS3Config) {
-    const bothUploaded = [audio, photo].every((asset) => asset.status === "UPLOADED" || asset.status === "VERIFIED");
-    if (!bothUploaded) return { ok: false, reason: "Media files are not uploaded" };
+    const audioUploaded = audio.status === "UPLOADED" || audio.status === "VERIFIED";
+    const photoUploaded = photo.status === "UPLOADED" || photo.status === "VERIFIED" || photo.status === "REJECTED";
+    if (!audioUploaded || !photoUploaded) return { ok: false, reason: "Media files are not uploaded" };
     return validateUploadedPhoto(photo.id, photo.key);
   }
 
@@ -93,10 +94,15 @@ export async function verifyRequiredMedia(analysisId: string) {
       await prisma.mediaAsset.update({
         where: { id: asset.id },
         data: {
-          status: "VERIFIED",
+          status: asset.type === "AUDIO"
+            ? "VERIFIED"
+            : asset.status === "CREATED"
+              ? "UPLOADED"
+              : asset.status,
           size: head.ContentLength ? Number(head.ContentLength) : asset.size,
           mimeType: head.ContentType ?? asset.mimeType,
-          verifiedAt: new Date()
+          uploadedAt: asset.uploadedAt ?? new Date(),
+          verifiedAt: asset.type === "AUDIO" ? new Date() : asset.verifiedAt
         }
       });
     } catch {
@@ -168,10 +174,8 @@ export async function validateUploadedPhoto(mediaAssetId: string, key: string) {
   await prisma.mediaAsset.update({
     where: { id: mediaAssetId },
     data: {
-      status: "VERIFIED",
       size: buffer.length,
-      mimeType: `image/${validation.format === "jpeg" ? "jpeg" : validation.format}`,
-      verifiedAt: new Date()
+      mimeType: `image/${validation.format === "jpeg" ? "jpeg" : validation.format}`
     }
   });
 

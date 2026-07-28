@@ -30,6 +30,7 @@ export default function FacePage() {
   const [ready, setReady] = useState(false);
   const [metrics, setMetrics] = useState<FaceMetrics | null>(null);
   const [error, setError] = useState("");
+  const [photoCheckMessage, setPhotoCheckMessage] = useState("");
 
   useEffect(() => {
     setReady(true);
@@ -57,6 +58,9 @@ export default function FacePage() {
     }
 
     try {
+      setError("");
+      setPhotoCheckMessage("");
+      setUploaded(false);
       const prepared = await preparePhotoFile(file);
       await uploadPhoto(prepared.blob, prepared.dataUrl);
     } catch (reason) {
@@ -75,6 +79,8 @@ export default function FacePage() {
       });
       streamRef.current = mediaStream;
       setPreview("");
+      setMetrics(null);
+      setPhotoCheckMessage("");
       setCameraReady(true);
       setUploaded(false);
     } catch (reason) {
@@ -120,17 +126,27 @@ export default function FacePage() {
 
     setBusy(true);
     setError("");
+    setUploaded(false);
+    setPhotoCheckMessage(text.uploadingPhoto);
+    window.sessionStorage.removeItem("levelup_face_ready");
     try {
       await uploadMedia(draft.photoUploadUrl, blob);
       setPreview(dataUrl);
       setMetrics(await analyzeImage(dataUrl));
-      setUploaded(true);
       setCameraReady(false);
       stopCamera();
+      setPhotoCheckMessage(text.checkingPhoto);
+      await api.validateAnalysisPhoto(draft.analysisId);
+      setUploaded(true);
+      setPhotoCheckMessage(text.photoAccepted);
       window.sessionStorage.setItem("levelup_face_ready", "1");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : text.uploadError);
+      setPhotoCheckMessage("");
       setUploaded(false);
+      setCameraReady(false);
+      stopCamera();
+      window.sessionStorage.removeItem("levelup_face_ready");
     } finally {
       setBusy(false);
     }
@@ -227,6 +243,7 @@ export default function FacePage() {
       </div>
 
       {error && <div className="card error-card">{error}</div>}
+      {photoCheckMessage && <p className="auth-message" role="status">{photoCheckMessage}</p>}
 
       <div className="flow-actions">
         <button className="button" data-testid="face-file-button" type="button" onClick={triggerFileInput} disabled={!ready || busy}>

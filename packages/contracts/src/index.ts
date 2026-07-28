@@ -157,6 +157,12 @@ export type CreateAnalysisResponse = {
   photoUploadUrl: string;
 };
 
+export type PhotoSuitabilityResponse = {
+  suitable: true;
+  cached: boolean;
+  confidence: number;
+};
+
 export type AnalysisProgressEvent = {
   status?: AnalysisStatus;
   progress: number;

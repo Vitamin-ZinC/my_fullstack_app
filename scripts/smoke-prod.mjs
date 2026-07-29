@@ -5,6 +5,12 @@ const promoCode = process.env.SMOKE_PROMO_CODE || "";
 const allowFallback = process.env.SMOKE_ALLOW_FALLBACK === "true";
 const timeoutMs = Number(process.env.SMOKE_TIMEOUT_MS || 20 * 60 * 1000);
 const pollIntervalMs = Number(process.env.SMOKE_POLL_INTERVAL_MS || 5000);
+const audioFixturePath = process.env.SMOKE_AUDIO_FILE || "";
+const photoFixturePath = process.env.SMOKE_PHOTO_FILE || "";
+
+if (Boolean(audioFixturePath) !== Boolean(photoFixturePath)) {
+  throw new Error("Set both SMOKE_AUDIO_FILE and SMOKE_PHOTO_FILE for a full diagnostic smoke test");
+}
 
 async function request(path, init = {}, session) {
   const headers = {
@@ -23,6 +29,23 @@ async function request(path, init = {}, session) {
   return body;
 }
 
+async function requestExpected(path, expectedStatus, init = {}, session) {
+  const headers = {
+    "Content-Type": "application/json",
+    ...(session?.sessionId ? { "x-session-id": session.sessionId } : {}),
+    ...(session?.guestToken ? { "x-guest-token": session.guestToken } : {}),
+    "x-locale": "ru",
+    ...(init.headers || {})
+  };
+  const response = await fetch(`${baseUrl}${path}`, { ...init, headers });
+  const text = await response.text();
+  const body = text ? JSON.parse(text) : null;
+  if (response.status !== expectedStatus) {
+    throw new Error(`${init.method || "GET"} ${path} returned ${response.status}, expected ${expectedStatus}: ${text}`);
+  }
+  return body;
+}
+
 async function upload(url, body, contentType) {
   const response = await fetch(url, {
     method: "PUT",
@@ -34,20 +57,61 @@ async function upload(url, body, contentType) {
   return text ? JSON.parse(text) : null;
 }
 
-const smokePhoto = readFileSync(new URL("../assets/ikigai-cones.jpg", import.meta.url));
+const publicContent = await request("/api/content/ru");
+if (publicContent?.locale !== "ru") throw new Error("Public content endpoint is unavailable");
 
 const session = await request("/api/auth/guest", {
   method: "POST",
   body: JSON.stringify({ locale: "ru" })
 });
 
-const analysis = await request("/api/analyses", {
+const rejectedConsent = await requestExpected("/api/analyses", 400, {
   method: "POST",
   body: JSON.stringify({ locale: "ru" })
 }, session);
+if (rejectedConsent?.code !== "AUDIO_CONSENT_REQUIRED") {
+  throw new Error(`Consent contract returned an unexpected payload: ${JSON.stringify(rejectedConsent)}`);
+}
 
-await upload(analysis.audioUploadUrl, Buffer.alloc(4096, 1), "audio/webm");
+const analysis = await request("/api/analyses", {
+  method: "POST",
+  body: JSON.stringify({ locale: "ru", audioConsent: true })
+}, session);
+
+if (!audioFixturePath) {
+  await upload(analysis.audioUploadUrl, Buffer.alloc(4096, 1), "audio/webm");
+  const audioValidation = await requestExpected(`/api/analyses/${analysis.analysisId}/audio/validate`, 422, {
+    method: "POST",
+    body: JSON.stringify({ consent: true })
+  }, session);
+  if (audioValidation?.code !== "AUDIO_INVALID") {
+    throw new Error(`Invalid audio contract returned an unexpected payload: ${JSON.stringify(audioValidation)}`);
+  }
+  console.log(JSON.stringify({
+    ok: true,
+    mode: "contract",
+    baseUrl,
+    health: true,
+    consentGate: true,
+    invalidAudioGate: true
+  }, null, 2));
+  process.exit(0);
+}
+
+const smokeAudio = readFileSync(audioFixturePath);
+const smokePhoto = readFileSync(photoFixturePath);
+await upload(analysis.audioUploadUrl, smokeAudio, "audio/webm");
 await upload(analysis.photoUploadUrl, smokePhoto, "image/jpeg");
+
+await request(`/api/analyses/${analysis.analysisId}/audio/validate`, {
+  method: "POST",
+  body: JSON.stringify({ consent: true })
+}, session);
+
+await request(`/api/analyses/${analysis.analysisId}/photo/validate`, {
+  method: "POST",
+  body: JSON.stringify({ consent: true })
+}, session);
 
 await request(`/api/analyses/${analysis.analysisId}/confirm`, {
   method: "POST",
@@ -99,6 +163,7 @@ if (promoCode) {
 
 console.log(JSON.stringify({
   ok: true,
+  mode: "full",
   baseUrl,
   analysisId: analysis.analysisId,
   status: status.status,

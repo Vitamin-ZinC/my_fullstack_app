@@ -42,10 +42,17 @@ export async function analysisRoutes(app: FastifyInstance) {
   app.post("/api/analyses", async (request, reply) => {
     const session = await requireSession(request, reply);
     if (!session) return;
-    const body = z.object({
+    const parsedBody = z.object({
       locale: z.string().optional(),
       audioConsent: z.literal(true)
-    }).parse(request.body ?? {});
+    }).safeParse(request.body ?? {});
+    if (!parsedBody.success) {
+      return reply.code(400).send({
+        error: "Подтвердите согласие на обработку аудиозаписи и персональных данных.",
+        code: "AUDIO_CONSENT_REQUIRED"
+      });
+    }
+    const body = parsedBody.data;
     const locale = (body.locale ?? session.locale ?? getRequestedLocale(request)).slice(0, 12);
     const media = await createMediaUploadUrls();
     const consentedAt = new Date();
@@ -147,7 +154,13 @@ export async function analysisRoutes(app: FastifyInstance) {
     const params = z.object({ id: z.string() }).parse(request.params);
     const access = await requireAnalysisAccess(request, reply, params.id);
     if (!access) return;
-    z.object({ consent: z.literal(true) }).parse(request.body ?? {});
+    const consent = z.object({ consent: z.literal(true) }).safeParse(request.body ?? {});
+    if (!consent.success) {
+      return reply.code(400).send({
+        error: "Подтвердите согласие на обработку изображения лица и персональных данных.",
+        code: "FACE_CONSENT_REQUIRED"
+      });
+    }
     const consentedAt = access.analysis.faceConsentAt ?? new Date();
     await prisma.analysis.update({
       where: { id: params.id },
@@ -177,7 +190,13 @@ export async function analysisRoutes(app: FastifyInstance) {
     const params = z.object({ id: z.string() }).parse(request.params);
     const access = await requireAnalysisAccess(request, reply, params.id);
     if (!access) return;
-    z.object({ consent: z.literal(true) }).parse(request.body ?? {});
+    const consent = z.object({ consent: z.literal(true) }).safeParse(request.body ?? {});
+    if (!consent.success) {
+      return reply.code(400).send({
+        error: "Подтвердите согласие на обработку аудиозаписи и персональных данных.",
+        code: "AUDIO_CONSENT_REQUIRED"
+      });
+    }
     const consentedAt = access.analysis.audioConsentAt ?? new Date();
     await prisma.analysis.update({
       where: { id: params.id },

@@ -6,7 +6,6 @@ import type {
   ChatCompletionCreateParamsNonStreaming,
   ChatCompletionMessageParam
 } from "openai/resources/chat/completions";
-import { basename } from "node:path";
 import { z } from "zod";
 import { env } from "../env.js";
 import { getMediaAssetPublicUrl, readMediaAssetBuffer } from "./media.js";
@@ -14,6 +13,7 @@ import { buildReportPromptMessages } from "./reportPrompts.js";
 import { analyzeAudioMetrics, type AudioTranscription, type VoiceSignalMetrics } from "./audioMetrics.js";
 import { parseCompletionJson, parseGatewayJson } from "./completionJson.js";
 import { getOpenAiApiKey, getOpenAiClient, hasOpenAiClient } from "./openaiClient.js";
+import { isLikelyAudio, transcribeAudioAsset } from "./audioTranscription.js";
 import {
   isAsyncCompletionPollingTimeoutError,
   isRetryableAsyncCompletionError,
@@ -321,60 +321,8 @@ function isLikelyImage(buffer: Buffer) {
   return isJpeg || isPng;
 }
 
-function isLikelyAudio(buffer: Buffer) {
-  if (buffer.length < 4) return false;
-  const isWebm = buffer[0] === 0x1a && buffer[1] === 0x45 && buffer[2] === 0xdf && buffer[3] === 0xa3;
-  const isMp3 = buffer.subarray(0, 3).toString("latin1") === "ID3" || (buffer[0] === 0xff && (buffer[1] & 0xe0) === 0xe0);
-  const isWav = buffer.subarray(0, 4).toString("latin1") === "RIFF";
-  const isOgg = buffer.subarray(0, 4).toString("latin1") === "OggS";
-  const isMp4 = buffer.length >= 12 && buffer.subarray(4, 8).toString("latin1") === "ftyp";
-  return isWebm || isMp3 || isWav || isOgg || isMp4;
-}
-
 function getAsset(assets: MediaAsset[], type: "AUDIO" | "PHOTO") {
   return assets.find((asset) => asset.type === type && (asset.status === "UPLOADED" || asset.status === "VERIFIED")) ?? null;
-}
-
-async function transcribeAudio(asset: MediaAsset | null) {
-  const apiKey = getOpenAiApiKey();
-  if (!asset || !apiKey) return null;
-  const buffer = await readMediaAssetBuffer(asset.key);
-  if (!buffer) return null;
-  if (!isLikelyAudio(buffer)) return null;
-
-  const formData = new FormData();
-  formData.set("model", env.OPENAI_TRANSCRIPTION_MODEL);
-  formData.set("response_format", "verbose_json");
-  formData.set("file", new Blob([buffer], { type: asset.mimeType || "application/octet-stream" }), basename(asset.key));
-
-  const response = await withOpenAiDeadline((signal) => fetch(`${env.OPENAI_BASE_URL.replace(/\/$/, "")}/audio/transcriptions`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`
-      },
-      body: formData,
-      signal
-    }),
-    "OpenAI-compatible transcription"
-  );
-
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`OpenAI transcription failed with ${response.status}: ${body.slice(0, 240)}`);
-  }
-
-  const data = await response.json() as {
-    text?: string;
-    duration?: number;
-    segments?: Array<{ start?: number; end?: number; text?: string }>;
-  };
-  const text = data.text?.trim();
-  if (!text) return null;
-  return {
-    text,
-    durationSeconds: data.duration,
-    segments: Array.isArray(data.segments) ? data.segments : []
-  } satisfies AudioTranscription;
 }
 
 async function buildVoiceMetrics(asset: MediaAsset | null, transcription: AudioTranscription | null, clientDurationSeconds?: number | null) {
@@ -401,7 +349,7 @@ export async function generateOpenAiReport(context: ReportContext): Promise<Gene
 
   let transcription: AudioTranscription | null = null;
   try {
-    transcription = await transcribeAudio(audioAsset);
+    transcription = await transcribeAudioAsset(audioAsset);
   } catch {
     transcription = null;
   }

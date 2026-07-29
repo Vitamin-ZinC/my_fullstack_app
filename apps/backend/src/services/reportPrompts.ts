@@ -109,7 +109,7 @@ export const defaultReportPromptTemplates: PromptDraft[] = [
   {
     key: REPORT_FULL_SYSTEM_PROMPT_KEY,
     locale: "ru",
-    version: 7,
+    version: 8,
     status: "ACTIVE",
     title: "ORKEN.LIFE PREMIUM report system prompt",
     content: [
@@ -129,7 +129,7 @@ export const defaultReportPromptTemplates: PromptDraft[] = [
   {
     key: REPORT_FULL_USER_PROMPT_KEY,
     locale: "ru",
-    version: 7,
+    version: 8,
     status: "ACTIVE",
     title: "ORKEN.LIFE PREMIUM report user prompt",
     content: [
@@ -139,6 +139,7 @@ export const defaultReportPromptTemplates: PromptDraft[] = [
       "Explicitly separate content analysis from voice delivery analysis: if the user says a profession or role, use it only as self-described context and explain that it does not automatically determine the result.",
       "If media evidence is unavailable or weak, still write useful sections, but ground them in the questionnaire and clearly phrase media parts as limited hypotheses.",
       "Return a practical premium report with detailed voice_analysis, face_analysis, exactly 5 top_roles, personalized ikigai_zones, career_action, and final_insight.",
+      "The visible top_roles block is titled 'ТОП-5 профессиональных направлений с уклоном в будущее'. Treat each item as a forward-looking professional direction: connect the user's transferable strengths to realistic roles, industries, or emerging work formats that are likely to remain useful as technology changes.",
       "Sections 2 through 8 must be personalized. Do not output placeholders, one-word labels, English trait words, raw scores, or 'unavailable' as a value.",
       "Each voice_analysis and face_analysis value must be a Russian short paragraph with exactly these three visible labeled parts: 'Ваш результат:', 'Что это значит:', and 'Рекомендация:'.",
       "Use this style for every diagnostic parameter: 'Ваш результат: [конкретный результат по параметру]. Что это значит: [рабочая интерпретация, где это помогает и какой риск возникает]. Рекомендация: [одно конкретное действие развития]'.",
@@ -154,14 +155,14 @@ export const defaultReportPromptTemplates: PromptDraft[] = [
       "For face_analysis, describe observable presentation effects only: facial readability, steadiness, expressiveness, visual organization, and perceived communication style in the submitted image. Do not infer identity, ethnicity, health, attractiveness, age, or hidden psychological states.",
       "For ikigai_zones, write personalized answers for passion, mission, profession, vocation, and ikigai. Each zone must have title, insight, and recommendation. These texts are shown when the user selects a zone, so they must be useful without extra context.",
       "For each ikigai zone, connect the recommendation to one of the user's questionnaire answers and one career experiment or communication behavior.",
-      "Top roles must include exactly 5 roles with realistic match percentages from 55 to 95, sorted descending. Each role must include role-specific why, voiceEvidence, faceEvidence, strengths, and risks.",
+      "top_roles must contain exactly five distinct items, never two, three, four, or more than five. Use realistic match percentages from 55 to 95 and sort them descending. Each role must include role-specific why, voiceEvidence, faceEvidence, strengths, and risks.",
       "Do not reuse the same evidence sentence across all roles. Each role must explain a different practical fit.",
       "career_action must be a 30-day implementation route with Week 1, Week 2, Week 3, and Week 4 steps, each with a concrete deliverable and a measurable check.",
       "final_insight is section 8, titled 'Итоговое аналитическое заключение'. Write it as one cohesive analytical paragraph, not a list. It must synthesize the visible presentation, voice signal, facial/micromimic signal, inner potential, leadership/learning vector, and the user's deeper Ikigai direction.",
       "Use this final_insight format and level of specificity: 'Комплексный AI-анализ показывает [главная синхронизация или рассинхронизация внешнего проявления и внутреннего потенциала]. [Как уверенность в голосе, мимика и/или визуальная собранность создают фундамент для конкретных профессиональных сфер]. Однако ваш истинный Икигай лежит глубже: [какие качества или компетенции нужно развивать, чтобы получать больше удовлетворения от деятельности]. [Какой фокус с личных результатов на пользу людям, команду, обучение, продукт или рынок позволит раскрыть потенциал и найти баланс в профессии].'",
       "Keep every field specific, useful, and safe. Avoid generic coaching filler.",
       "Every visible value must be in Russian when Output language is Russian.",
-      "Quality gate before returning JSON: every voice_analysis and face_analysis value has the three labels; no value is a raw score or translated parameter name; top_roles are sorted and role-specific; all ikigai_zones are personal; final_insight starts with the requested analytical synthesis style; all visible values are Russian.",
+      "Quality gate before returning JSON: every voice_analysis and face_analysis value has the three labels; no value is a raw score or translated parameter name; top_roles has array length exactly 5, is sorted, distinct, forward-looking, and role-specific; all ikigai_zones are personal; final_insight starts with the requested analytical synthesis style; all visible values are Russian.",
       "Return exactly the requested JSON shape.",
       "",
       "Analysis ID: {{analysisId}}",

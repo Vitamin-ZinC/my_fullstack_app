@@ -163,6 +163,12 @@ export type PhotoSuitabilityResponse = {
   confidence: number;
 };
 
+export type AudioSuitabilityResponse = {
+  suitable: true;
+  cached: boolean;
+  wordCount: number;
+};
+
 export type AnalysisProgressEvent = {
   status?: AnalysisStatus;
   progress: number;

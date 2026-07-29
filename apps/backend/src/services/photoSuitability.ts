@@ -46,7 +46,7 @@ const MIN_ACCEPTED_CONFIDENCE = 0.65;
 const VISION_TIMEOUT_MS = 30_000;
 
 export function interpretPhotoSuitabilityDecision(decision: VisionDecision): PhotoSuitabilityResult {
-  if (!decision.hasHuman || !decision.isPhotographicHuman) {
+  if (!decision.hasHuman || !decision.isPhotographicHuman || decision.visibleFaceCount === 0) {
     return {
       ok: false,
       cached: false,
@@ -237,13 +237,13 @@ export function photoSuitabilityMessage(locale: string, code: PhotoSuitabilityCo
   const isEnglish = locale.toLowerCase().startsWith("en");
   const messages = isEnglish ? {
     PHOTO_INVALID: "The photo is empty, damaged, or too small. Please upload or take another photo.",
-    PHOTO_PERSON_REQUIRED: "This photo is not suitable. Upload a real photo of one person, not an object, animal, drawing, or screenshot.",
+    PHOTO_PERSON_REQUIRED: "No face was detected in the photo. Please upload another photo.",
     PHOTO_SINGLE_PERSON_REQUIRED: "The photo must show only one person. Please upload an individual portrait or selfie.",
     PHOTO_FACE_NOT_CLEAR: "We could not clearly see one face. Use a front-facing photo with good light and no strong blur or obstruction.",
     PHOTO_VALIDATION_UNAVAILABLE: "We could not verify the photo right now. Please try again in a minute."
   } : {
     PHOTO_INVALID: "Фото пустое, повреждено или слишком маленькое. Загрузите другое фото или сделайте новое.",
-    PHOTO_PERSON_REQUIRED: "Фото не подходит. Загрузите реальную фотографию одного человека, а не предмет, животное, рисунок или скриншот.",
+    PHOTO_PERSON_REQUIRED: "На фото не обнаружено лицо. Пожалуйста, загрузите другое фото",
     PHOTO_SINGLE_PERSON_REQUIRED: "На фото должен быть только один человек. Загрузите индивидуальный портрет или селфи.",
     PHOTO_FACE_NOT_CLEAR: "Не удалось уверенно увидеть одно лицо. Используйте фото анфас при хорошем свете, без сильного смаза и перекрытий.",
     PHOTO_VALIDATION_UNAVAILABLE: "Сейчас не удалось проверить фото. Повторите попытку через минуту."

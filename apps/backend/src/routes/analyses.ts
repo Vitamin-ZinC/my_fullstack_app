@@ -14,6 +14,11 @@ import {
   validateAnalysisPhotoSuitability,
   type PhotoSuitabilityResult
 } from "../services/photoSuitability.js";
+import {
+  audioSuitabilityHttpStatus,
+  validateAnalysisAudioSuitability,
+  type AudioSuitabilityResult
+} from "../services/audioSuitability.js";
 import { normalizeFullReportValue } from "../services/aiReport.js";
 import { sendReportEmail } from "../services/email.js";
 import { buildFallbackFreeReport, buildFallbackReport } from "../services/report.js";
@@ -37,14 +42,19 @@ export async function analysisRoutes(app: FastifyInstance) {
   app.post("/api/analyses", async (request, reply) => {
     const session = await requireSession(request, reply);
     if (!session) return;
-    const body = z.object({ locale: z.string().optional() }).parse(request.body ?? {});
+    const body = z.object({
+      locale: z.string().optional(),
+      audioConsent: z.literal(true)
+    }).parse(request.body ?? {});
     const locale = (body.locale ?? session.locale ?? getRequestedLocale(request)).slice(0, 12);
     const media = await createMediaUploadUrls();
+    const consentedAt = new Date();
     const analysis = await prisma.analysis.create({
       data: {
         sessionId: session.id,
         userId: session.userId,
         locale,
+        audioConsentAt: consentedAt,
         audioKey: media.audioKey,
         photoKey: media.photoKey,
         status: "PENDING",
@@ -62,7 +72,13 @@ export async function analysisRoutes(app: FastifyInstance) {
         locale,
         sessionId: session.id,
         userId: session.userId,
-        analysisId: analysis.id
+        analysisId: analysis.id,
+        properties: {
+          audioConsentAt: consentedAt.toISOString(),
+          legalRevision: "2026-07-29",
+          privacyPolicyPath: "/privacy",
+          publicOfferPath: "/offer"
+        }
       }
     });
     return {
@@ -77,11 +93,24 @@ export async function analysisRoutes(app: FastifyInstance) {
     const access = await requireAnalysisAccess(request, reply, params.id);
     if (!access) return;
     const body = z.object({ ikigaiAnswers: ikigaiAnswersSchema, clientMetrics: clientMetricsSchema }).parse(request.body);
+    if (!access.analysis.audioConsentAt || !access.analysis.faceConsentAt) {
+      return reply.code(409).send({
+        error: "Перед запуском анализа подтвердите согласие на обработку аудиозаписи и изображения лица.",
+        code: "MEDIA_CONSENT_REQUIRED"
+      });
+    }
     const answersWithMetrics = body.clientMetrics
       ? { ...body.ikigaiAnswers, clientMetrics: body.clientMetrics }
       : body.ikigaiAnswers;
-    const mediaStatus = await verifyRequiredMedia(params.id);
-    if (!mediaStatus.ok) return reply.code(409).send({ error: mediaStatus.reason });
+    const audioStatus = await validateAnalysisAudioSuitability(params.id, access.analysis.locale);
+    await trackAudioSuitabilityResult(access, audioStatus);
+    if (!audioStatus.ok) {
+      return reply.code(audioSuitabilityHttpStatus(audioStatus)).send({
+        error: audioStatus.message,
+        code: audioStatus.code,
+        retryable: audioStatus.retryable
+      });
+    }
     const photoStatus = await validateAnalysisPhotoSuitability(params.id, access.analysis.locale);
     if (!photoStatus.ok) {
       await trackPhotoSuitabilityResult(access, photoStatus);
@@ -91,6 +120,8 @@ export async function analysisRoutes(app: FastifyInstance) {
         retryable: photoStatus.retryable
       });
     }
+    const mediaStatus = await verifyRequiredMedia(params.id);
+    if (!mediaStatus.ok) return reply.code(409).send({ error: mediaStatus.reason });
     const job = await analysisQueue.add("generate-report", { analysisId: params.id });
     await prisma.analysis.update({
       where: { id: params.id },
@@ -116,6 +147,15 @@ export async function analysisRoutes(app: FastifyInstance) {
     const params = z.object({ id: z.string() }).parse(request.params);
     const access = await requireAnalysisAccess(request, reply, params.id);
     if (!access) return;
+    z.object({ consent: z.literal(true) }).parse(request.body ?? {});
+    const consentedAt = access.analysis.faceConsentAt ?? new Date();
+    await prisma.analysis.update({
+      where: { id: params.id },
+      data: { faceConsentAt: consentedAt }
+    });
+    if (!access.analysis.faceConsentAt) {
+      await trackMediaConsent(access, "face", consentedAt);
+    }
 
     const result = await validateAnalysisPhotoSuitability(params.id, access.analysis.locale);
     await trackPhotoSuitabilityResult(access, result);
@@ -130,6 +170,36 @@ export async function analysisRoutes(app: FastifyInstance) {
       suitable: true,
       cached: result.cached,
       confidence: result.confidence
+    };
+  });
+
+  app.post("/api/analyses/:id/audio/validate", async (request, reply) => {
+    const params = z.object({ id: z.string() }).parse(request.params);
+    const access = await requireAnalysisAccess(request, reply, params.id);
+    if (!access) return;
+    z.object({ consent: z.literal(true) }).parse(request.body ?? {});
+    const consentedAt = access.analysis.audioConsentAt ?? new Date();
+    await prisma.analysis.update({
+      where: { id: params.id },
+      data: { audioConsentAt: consentedAt }
+    });
+    if (!access.analysis.audioConsentAt) {
+      await trackMediaConsent(access, "audio", consentedAt);
+    }
+
+    const result = await validateAnalysisAudioSuitability(params.id, access.analysis.locale);
+    await trackAudioSuitabilityResult(access, result);
+    if (!result.ok) {
+      return reply.code(audioSuitabilityHttpStatus(result)).send({
+        error: result.message,
+        code: result.code,
+        retryable: result.retryable
+      });
+    }
+    return {
+      suitable: true,
+      cached: result.cached,
+      wordCount: result.wordCount
     };
   });
 
@@ -391,6 +461,54 @@ async function trackPhotoSuitabilityResult(
         retryable: result.ok ? false : result.retryable,
         model: result.model
       }))
+    }
+  });
+}
+
+async function trackAudioSuitabilityResult(
+  access: PhotoSuitabilityAccess,
+  result: AudioSuitabilityResult
+) {
+  if (result.cached) return;
+  const eventName = result.ok
+    ? "audio_suitability_accepted"
+    : result.code === "AUDIO_VALIDATION_UNAVAILABLE"
+      ? "audio_suitability_unavailable"
+      : "audio_suitability_rejected";
+  await prisma.analyticsEvent.create({
+    data: {
+      name: eventName,
+      locale: access.analysis.locale,
+      sessionId: access.session.id,
+      userId: access.session.userId,
+      analysisId: access.analysis.id,
+      properties: JSON.parse(JSON.stringify({
+        code: result.ok ? "SUITABLE" : result.code,
+        retryable: result.ok ? false : result.retryable,
+        wordCount: result.ok ? result.wordCount : undefined
+      }))
+    }
+  });
+}
+
+async function trackMediaConsent(
+  access: PhotoSuitabilityAccess,
+  mediaType: "audio" | "face",
+  consentedAt: Date
+) {
+  await prisma.analyticsEvent.create({
+    data: {
+      name: `${mediaType}_media_consent_recorded`,
+      locale: access.analysis.locale,
+      sessionId: access.session.id,
+      userId: access.session.userId,
+      analysisId: access.analysis.id,
+      properties: {
+        consentedAt: consentedAt.toISOString(),
+        legalRevision: "2026-07-29",
+        privacyPolicyPath: "/privacy",
+        publicOfferPath: "/offer"
+      }
     }
   });
 }

@@ -2,9 +2,22 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Camera, Compass } from "lucide-react";
+import {
+  AudioLines,
+  Camera,
+  Check,
+  Compass,
+  FileText,
+  Microscope,
+  ScanFace,
+  ShieldCheck,
+  Sparkles,
+  Target,
+  type LucideIcon
+} from "lucide-react";
 import { IkigaiPremiumMap } from "@/components/IkigaiPremiumMap";
 import { api } from "@/lib/api";
+import { SUPPORT_EMAIL } from "@/lib/legal";
 import { useSiteText } from "@/lib/useSiteText";
 
 export default function LandingPage() {
@@ -65,8 +78,8 @@ export default function LandingPage() {
               <div className="landing-pain-list" aria-label={landing.problemListLabel}>
                 {landing.problemItems.map((item) => (
                   <div className="landing-pain-row" key={item}>
-                    <span aria-hidden="true">—</span>
-                    <span>{item}</span>
+                    <Sparkles size={17} strokeWidth={2.2} aria-hidden="true" />
+                    <strong>{item}</strong>
                   </div>
                 ))}
               </div>
@@ -76,10 +89,13 @@ export default function LandingPage() {
             <div className="divider landing-divider" />
 
             <section className="landing-section compact">
-              <h2 className="ub landing-section-title">{landing.signalsTitle}</h2>
+              <h2 className="ub landing-section-title landing-heading-with-icon">
+                <Microscope size={28} strokeWidth={2.1} aria-hidden="true" />
+                <span>{formatHeading(landing.signalsTitle)}</span>
+              </h2>
               <div className="landing-two-col">
-                <SignalCard tone="cyan" title={landing.faceTitle} icon="📷" items={landing.faceSignals} />
-                <SignalCard tone="violet" title={landing.voiceTitle} icon="🎤" items={landing.voiceSignals} />
+                <SignalCard tone="cyan" title={landing.faceTitle} Icon={ScanFace} items={landing.faceSignals} />
+                <SignalCard tone="violet" title={landing.voiceTitle} Icon={AudioLines} items={landing.voiceSignals} />
               </div>
             </section>
 
@@ -91,10 +107,13 @@ export default function LandingPage() {
 
             <section className="landing-section compact">
               <div className="card cyan-border card-lg">
-                <h2 className="ub cyan landing-card-title">{landing.freeTitle}</h2>
+                <h2 className="ub cyan landing-card-title landing-card-heading">
+                  <FileText size={21} strokeWidth={2.1} aria-hidden="true" />
+                  <span>{formatHeading(landing.freeTitle)}</span>
+                </h2>
                 {landing.freeItems.map((item) => (
                   <div className="landing-bullet" key={item}>
-                    <span className="cyan">✦</span>
+                    <Sparkles className="cyan" size={16} strokeWidth={2.2} aria-hidden="true" />
                     <span>{item}</span>
                   </div>
                 ))}
@@ -103,7 +122,10 @@ export default function LandingPage() {
 
             <section className="landing-section compact">
               <div className="card cyan-border card-lg ikigai-landing-card">
-                <h2 className="ub cyan landing-card-title">{landing.modelTitle}</h2>
+                <h2 className="ub cyan landing-card-title landing-card-heading">
+                  <Target size={21} strokeWidth={2.1} aria-hidden="true" />
+                  <span>{formatHeading(landing.modelTitle)}</span>
+                </h2>
                 <IkigaiPremiumMap allActive landingMode />
                 <p className="landing-model-copy">{landing.modelCopy}</p>
                 <div className="ikigai-factor-list">
@@ -115,10 +137,13 @@ export default function LandingPage() {
 
             <section className="landing-section compact">
               <div className="card green-border">
-                <h2 className="ub landing-privacy-title">{landing.privacyTitle}</h2>
+                <h2 className="ub landing-privacy-title landing-card-heading">
+                  <ShieldCheck size={21} strokeWidth={2.1} aria-hidden="true" />
+                  <span>{formatHeading(landing.privacyTitle)}</span>
+                </h2>
                 {landing.privacyItems.map((item) => (
                   <div className="landing-safe-row" key={item}>
-                    <span>✓</span>
+                    <Check size={16} strokeWidth={2.5} aria-hidden="true" />
                     <span>{item}</span>
                   </div>
                 ))}
@@ -126,7 +151,10 @@ export default function LandingPage() {
             </section>
 
             <section className="landing-section final">
-              <h2 className="ub landing-final-title">{landing.finalTitle}</h2>
+              <h2 className="ub landing-final-title landing-heading-with-icon">
+                <Sparkles size={20} strokeWidth={2.1} aria-hidden="true" />
+                <span>{formatHeading(landing.finalTitle)}</span>
+              </h2>
               <p className="landing-final-copy">{landing.finalCopy}</p>
               <div className="landing-final-actions">
                 <a className="btn-primary" data-testid="landing-start-final" href="/flow/voice">{landing.cta}</a>
@@ -137,6 +165,7 @@ export default function LandingPage() {
               <span>{text.nav.brand}</span>
               <Link href="/privacy">Политика конфиденциальности</Link>
               <Link href="/offer">Публичная оферта</Link>
+              <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>
               <a href="https://www.threads.com/@orken.ai?igshid=NTc4MTIwNjQ2YQ==" target="_blank" rel="noreferrer">Threads</a>
               <a href="https://www.instagram.com/orken.ai?igsh=ZXBuMXJzcmtjNDBl&utm_source=qr" target="_blank" rel="noreferrer">Instagram</a>
             </footer>
@@ -172,7 +201,7 @@ function ProductSection({ habitPriceLabel, habitTrialDays, reportPriceLabel }: {
   return (
     <section className="landing-section compact">
       <div className="landing-section-head">
-        <h2 className="ub landing-section-title">{landing.productsTitle}</h2>
+        <h2 className="ub landing-section-title">{formatHeading(landing.productsTitle)}</h2>
         <p className="landing-small-copy">{landing.productsSubtitle}</p>
       </div>
       <div className="landing-branch" aria-hidden="true">
@@ -197,7 +226,7 @@ function ProductSection({ habitPriceLabel, habitTrialDays, reportPriceLabel }: {
       <div className="landing-product-grid">
         <article className="card cyan-border landing-product-card">
           <div className="landing-product-icon"><Camera size={20} strokeWidth={2.3} aria-hidden="true" /></div>
-          <h3 className="ub">{landing.diagnosisProduct.title}</h3>
+          <h3 className="ub">{formatHeading(landing.diagnosisProduct.title)}</h3>
           <p>{landing.diagnosisProduct.copy}</p>
           <div className="landing-product-list">
             {landing.diagnosisProduct.items.map((item) => (
@@ -212,7 +241,7 @@ function ProductSection({ habitPriceLabel, habitTrialDays, reportPriceLabel }: {
         </article>
         <article className="card violet-border landing-product-card">
           <div className="landing-product-icon violet"><Compass size={20} strokeWidth={2.3} aria-hidden="true" /></div>
-          <h3 className="ub">{landing.habitsProduct.title}</h3>
+          <h3 className="ub">{formatHeading(landing.habitsProduct.title)}</h3>
           <p>{landing.habitsProduct.copy}</p>
           <div className="landing-product-list accent">
             {landing.habitsProduct.items.map((item) => (
@@ -249,16 +278,21 @@ function AppNav() {
   );
 }
 
-function SignalCard({ icon, items, title, tone }: { icon: string; items: readonly string[]; title: string; tone: "cyan" | "violet" }) {
+function SignalCard({ Icon, items, title, tone }: { Icon: LucideIcon; items: readonly string[]; title: string; tone: "cyan" | "violet" }) {
   return (
-    <div className={`card ${tone === "cyan" ? "cyan-border" : "violet-border"}`}>
-      <div className="signal-icon">{icon}</div>
-      <div className={`ub ${tone} signal-title`}>{title}</div>
+    <div className={`card landing-signal-card ${tone === "cyan" ? "cyan-border" : "violet-border"}`}>
+      <div className={`signal-icon ${tone}`}><Icon size={28} strokeWidth={1.9} aria-hidden="true" /></div>
+      <div className={`ub ${tone} signal-title`}>{formatHeading(title)}</div>
       {items.map((item) => (
-        <div className="signal-item" key={item}>· {item}</div>
+        <div className="signal-item" key={item}><span aria-hidden="true" />{item}</div>
       ))}
     </div>
   );
+}
+
+function formatHeading(value: string) {
+  const normalized = value.trim().replace(/^[^\p{L}\p{N}]+/u, "").trim();
+  return normalized.replace(/\p{L}/u, (letter) => letter.toLocaleUpperCase("ru"));
 }
 
 function formatTemplate(template: string, values: Record<string, string | number>) {

@@ -2,6 +2,7 @@ import type {
   AdminGiftDaysResponse,
   AdminStats,
   AdminUserSummary,
+  AudioSuitabilityResponse,
   AppSetting,
   AuthResult,
   AuthSessionResponse,
@@ -515,7 +516,7 @@ export const api = {
     await ensureGuestSession();
     return request<{ analysisId: string; audioUploadUrl: string; photoUploadUrl: string }>("/api/analyses", {
       method: "POST",
-      body: JSON.stringify({ locale: getStoredLocale() })
+      body: JSON.stringify({ locale: getStoredLocale(), audioConsent: true })
     });
   },
   confirmAnalysis: (analysisId: string, ikigaiAnswers: IkigaiAnswers, clientMetrics?: AnalysisClientMetrics) => request<{ status: string; jobId: string }>(`/api/analyses/${analysisId}/confirm`, {
@@ -524,7 +525,11 @@ export const api = {
   }),
   validateAnalysisPhoto: (analysisId: string) => request<PhotoSuitabilityResponse>(`/api/analyses/${analysisId}/photo/validate`, {
     method: "POST",
-    body: JSON.stringify({})
+    body: JSON.stringify({ consent: true })
+  }),
+  validateAnalysisAudio: (analysisId: string) => request<AudioSuitabilityResponse>(`/api/analyses/${analysisId}/audio/validate`, {
+    method: "POST",
+    body: JSON.stringify({ consent: true })
   }),
   getStatus: (analysisId: string) => request<AnalysisStatusResponse>(`/api/analyses/${analysisId}/status`),
   getFreeReport: (analysisId: string) => request<FreeReportResponse>(`/api/analyses/${analysisId}/report/free`),

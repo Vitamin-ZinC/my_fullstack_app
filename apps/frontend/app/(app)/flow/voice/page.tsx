@@ -30,6 +30,8 @@ export default function VoicePage() {
   const [audioUrl, setAudioUrl] = useState("");
   const [metrics, setMetrics] = useState<VoiceMetrics | null>(null);
   const [error, setError] = useState("");
+  const [validationMessage, setValidationMessage] = useState("");
+  const [consent, setConsent] = useState(false);
 
   useEffect(() => {
     setReady(true);
@@ -43,6 +45,12 @@ export default function VoicePage() {
 
   async function start() {
     setError("");
+    setValidationMessage("");
+
+    if (!consent) {
+      setError(text.consentRequired);
+      return;
+    }
 
     if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
       setError(text.unsupported);
@@ -75,7 +83,7 @@ export default function VoicePage() {
         setUploading(false);
       };
       mediaRecorder.onstop = () => {
-        void uploadRecording(draft.audioUploadUrl, mediaRecorder.mimeType || mimeType || "audio/webm");
+        void uploadRecording(draft.analysisId, draft.audioUploadUrl, mediaRecorder.mimeType || mimeType || "audio/webm");
       };
       mediaRecorder.start(250);
       setRecording(true);
@@ -108,7 +116,7 @@ export default function VoicePage() {
     }
   }
 
-  async function uploadRecording(uploadUrl: string, mime: string) {
+  async function uploadRecording(analysisId: string, uploadUrl: string, mime: string) {
     try {
       const blob = new Blob(chunks.current, { type: mime });
       const duration = secondsRef.current;
@@ -116,6 +124,8 @@ export default function VoicePage() {
       if (!validation.ok) throw new Error(validation.message);
 
       await uploadMedia(uploadUrl, blob);
+      setValidationMessage(text.checkingVoice);
+      await api.validateAnalysisAudio(analysisId);
       const nextUrl = URL.createObjectURL(blob);
       if (audioUrl) URL.revokeObjectURL(audioUrl);
       setAudioUrl(nextUrl);
@@ -123,9 +133,13 @@ export default function VoicePage() {
       window.sessionStorage.setItem("levelup_voice_ready", "1");
       window.sessionStorage.setItem("levelup_voice_duration_seconds", String(duration));
       setDone(true);
+      setValidationMessage(text.voiceAccepted);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : text.failed);
+      setValidationMessage("");
       setDone(false);
+      window.sessionStorage.removeItem("levelup_voice_ready");
+      window.sessionStorage.removeItem("levelup_voice_duration_seconds");
     } finally {
       stopStream();
       setUploading(false);
@@ -148,6 +162,8 @@ export default function VoicePage() {
     secondsRef.current = 0;
     setSeconds(0);
     setUploading(false);
+    setValidationMessage("");
+    window.sessionStorage.removeItem("levelup_voice_ready");
     window.sessionStorage.removeItem("levelup_voice_duration_seconds");
     if (clearError) setError("");
   }
@@ -176,7 +192,7 @@ export default function VoicePage() {
 
   const progress = Math.min(100, (seconds / MAX_RECORDING_SECONDS) * 100);
   const sizeKb = metrics ? Math.round(metrics.size / 1024) : 0;
-  const canContinue = done && !uploading;
+  const canContinue = done && !uploading && consent;
   const canStop = recording && seconds >= MIN_RECORDING_SECONDS;
   const secondsUntilStop = Math.max(0, MIN_RECORDING_SECONDS - seconds);
   const activeTopicIndex = text.topics.length
@@ -194,6 +210,23 @@ export default function VoicePage() {
 
       <h1 className="ub flow-title">{text.title}</h1>
       <p className="muted flow-copy">{text.copy}</p>
+
+      <label className="media-consent-card" data-testid="voice-consent">
+        <input
+          type="checkbox"
+          checked={consent}
+          onChange={(event) => {
+            setConsent(event.target.checked);
+            if (event.target.checked) setError("");
+          }}
+        />
+        <span>
+          {text.consentPrefix}{" "}
+          <a href="/offer" target="_blank" rel="noreferrer">{text.consentOffer}</a>
+          {" "}{text.consentAnd}{" "}
+          <a href="/privacy" target="_blank" rel="noreferrer">{text.consentPrivacy}</a>
+        </span>
+      </label>
 
       <div className="voice-stage">
         <div className={`voice-video-ring ${recording ? "recording" : done ? "done" : "idle"}`}>
@@ -247,9 +280,10 @@ export default function VoicePage() {
       </div>
 
       {error && <div className="card error-card">{error}</div>}
+      {validationMessage && <p className="auth-message" role="status">{validationMessage}</p>}
 
       {!recording && !done && (
-        <button className="button" data-testid="voice-record-button" onClick={start} disabled={!ready || uploading}>
+        <button className="button" data-testid="voice-record-button" onClick={start} disabled={!ready || uploading || !consent}>
           <Mic size={18} /> {uploading ? text.busy : text.start}
         </button>
       )}

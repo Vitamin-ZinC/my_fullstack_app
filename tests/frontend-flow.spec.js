@@ -120,11 +120,14 @@ test("ORKEN.LIFE frontend flow works with mocked backend", async ({ page }) => {
   let contactRequests = 0;
   await page.route(`${apiBase}/api/content/ru`, async (route) => fulfillJson(route, { locale: "ru", value: null }));
   await page.route(`${apiBase}/api/auth/guest`, async (route) => fulfillJson(route, { sessionId: "test-session", guestToken: "test-token" }));
-  await page.route(`${apiBase}/api/analyses`, async (route) => fulfillJson(route, {
-    analysisId: "analysis-test",
-    audioUploadUrl: `${apiBase}/uploads/audio-test`,
-    photoUploadUrl: `${apiBase}/uploads/photo-test`
-  }));
+  await page.route(`${apiBase}/api/analyses`, async (route) => {
+    expect(route.request().postDataJSON()).toMatchObject({ audioConsent: true });
+    await fulfillJson(route, {
+      analysisId: "analysis-test",
+      audioUploadUrl: `${apiBase}/uploads/audio-test`,
+      photoUploadUrl: `${apiBase}/uploads/photo-test`
+    });
+  });
   await page.route(`${apiBase}/uploads/**`, async (route) => {
     if (route.request().method() === "OPTIONS") {
       await route.fulfill({ status: 204, headers: corsHeaders });
@@ -141,7 +144,13 @@ test("ORKEN.LIFE frontend flow works with mocked backend", async ({ page }) => {
   });
   await page.route(`${apiBase}/api/analyses/analysis-test/photo/validate`, async (route) => {
     expect(route.request().method()).toBe("POST");
+    expect(route.request().postDataJSON()).toEqual({ consent: true });
     await fulfillJson(route, { suitable: true, cached: false, confidence: 0.97 });
+  });
+  await page.route(`${apiBase}/api/analyses/analysis-test/audio/validate`, async (route) => {
+    expect(route.request().method()).toBe("POST");
+    expect(route.request().postDataJSON()).toEqual({ consent: true });
+    await fulfillJson(route, { suitable: true, cached: false, wordCount: 42 });
   });
   await page.route(`${apiBase}/api/analyses/analysis-test/stream**`, async (route) => route.fulfill({
     status: 200,
@@ -199,15 +208,21 @@ test("ORKEN.LIFE frontend flow works with mocked backend", async ({ page }) => {
         discipline: diagnosticText,
         ambition: diagnosticText
       },
-      top_roles: [{
-        name: "Product strategist",
-        match: 87,
-        why: "Combines analysis, market view and structured communication.",
+      top_roles: [
+        ["Product strategist", 87],
+        ["AI product researcher", 82],
+        ["Learning experience designer", 78],
+        ["Innovation program manager", 73],
+        ["Independent strategy consultant", 68]
+      ].map(([name, match]) => ({
+        name,
+        match,
+        why: `${name} combines analysis, market view and structured communication.`,
         voiceEvidence: "Voice supports calm expert communication.",
         faceEvidence: "Visual signal supports focus and structure.",
         strengths: "Research, prioritization and explanation.",
         risks: "Can overprepare before market validation."
-      }],
+      })),
       ikigai_zones: {
         passion: { title: "Страсть", insight: "Интерес связан с исследованием и развитием идей.", recommendation: "Проверить один формат регулярной практики." },
         mission: { title: "Миссия", insight: "Польза возникает через ясность для рынка.", recommendation: "Сформулировать одну проблему аудитории." },
@@ -246,7 +261,9 @@ test("ORKEN.LIFE frontend flow works with mocked backend", async ({ page }) => {
   await page.getByTestId("landing-start-primary").click();
   await expect(page).toHaveURL(/\/flow\/voice$/);
 
-  await expect(page.getByTestId("voice-record-button")).toBeEnabled({ timeout: 30000 });
+  await expect(page.getByTestId("voice-record-button")).toBeDisabled({ timeout: 30000 });
+  await page.getByTestId("voice-consent").locator("input").check();
+  await expect(page.getByTestId("voice-record-button")).toBeEnabled();
   await page.getByTestId("voice-record-button").click();
   await expect(page.getByTestId("voice-stop-locked")).toBeVisible();
   await expect(page.getByTestId("voice-stop-button")).toHaveCount(0);
@@ -260,7 +277,9 @@ test("ORKEN.LIFE frontend flow works with mocked backend", async ({ page }) => {
   await page.getByTestId("voice-next-link").click();
   await expect(page).toHaveURL(/\/flow\/face$/);
 
-  await expect(page.getByTestId("face-file-button")).toBeEnabled({ timeout: 30000 });
+  await expect(page.getByTestId("face-file-button")).toBeDisabled({ timeout: 30000 });
+  await page.getByTestId("face-consent").locator("input").check();
+  await expect(page.getByTestId("face-file-button")).toBeEnabled();
   await page.getByTestId("face-file-input").setInputFiles(testPhotoPath);
   await expect(page.getByTestId("face-metrics")).toBeVisible({ timeout: 10000 });
   await expect(page.getByText("Фото подходит для анализа.")).toBeVisible();
@@ -295,6 +314,8 @@ test("ORKEN.LIFE frontend flow works with mocked backend", async ({ page }) => {
   await expect(page).toHaveURL(/\/report\/analysis-test\/full$/, { timeout: 15000 });
   await expect(page.getByTestId("full-report-page")).toBeVisible();
   await expect(page.getByText("Product strategist").first()).toBeVisible();
+  await expect(page.getByText("5. ТОП-5 профессиональных направлений с уклоном в будущее")).toBeVisible();
+  await expect(page.locator(".role-card")).toHaveCount(5);
   await expect(page.getByText("8. Итоговое аналитическое заключение")).toBeVisible();
   await expect(page.getByText("Нажмите на один из разделов диаграммы Икигай")).toBeVisible();
   await expect(page.getByTestId("ikigai-hotspot-passion")).toBeVisible();
@@ -315,7 +336,7 @@ test("ORKEN.LIFE frontend flow works with mocked backend", async ({ page }) => {
   await page.getByTestId("activate-habits-link").click();
   await expect(page).toHaveURL(/\/habits\?from=ikigai&analysisId=analysis-test$/);
   await expect(page.getByTestId("habits-app")).toBeVisible();
-  await expect(page.getByText("Навигатор привычек ORKEN.LIFE")).toBeVisible({ timeout: 15000 });
+  await expect(page.getByRole("heading", { name: "Главная: где я сейчас" })).toBeVisible({ timeout: 15000 });
 });
 
 test("face step rejects an unsuitable photo and allows a valid replacement", async ({ page }) => {
@@ -352,7 +373,7 @@ test("face step rejects an unsuitable photo and allows a valid replacement", asy
     await route.fulfill({
       status: 422,
       json: {
-        error: "Фото не подходит. Загрузите реальную фотографию одного человека, а не предмет, животное, рисунок или скриншот.",
+        error: "На фото не обнаружено лицо. Пожалуйста, загрузите другое фото",
         code: "PHOTO_PERSON_REQUIRED",
         retryable: false
       },
@@ -362,10 +383,12 @@ test("face step rejects an unsuitable photo and allows a valid replacement", asy
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`${appBase}/flow/face`);
-  await expect(page.getByTestId("face-file-button")).toBeEnabled({ timeout: 15000 });
+  await expect(page.getByTestId("face-file-button")).toBeDisabled({ timeout: 15000 });
+  await page.getByTestId("face-consent").locator("input").check();
+  await expect(page.getByTestId("face-file-button")).toBeEnabled();
   await page.getByTestId("face-file-input").setInputFiles(testPhotoPath);
 
-  await expect(page.getByText(/Фото не подходит\. Загрузите реальную фотографию одного человека/)).toBeVisible({ timeout: 15000 });
+  await expect(page.getByText("На фото не обнаружено лицо. Пожалуйста, загрузите другое фото")).toBeVisible({ timeout: 15000 });
   await expect(page.getByTestId("face-metrics")).toBeVisible();
   await expect(page.getByTestId("face-next-link")).toHaveCount(0);
 
@@ -457,19 +480,19 @@ test("habits tracker records daily marks and uses AI navigator", async ({ page }
 
   await page.goto(`${appBase}/habits`);
   await expect(page.getByTestId("habits-app")).toBeVisible({ timeout: 15000 });
-  await expect(page.getByText("Навигатор привычек ORKEN.LIFE")).toBeVisible();
-  await expect(page.getByText("Сегодняшний фокус")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Главная: где я сейчас" })).toBeVisible();
+  await page.locator(".habits-nav button").filter({ hasText: "Мой путь" }).click();
+  await expect(page.getByRole("heading", { name: "Мой путь" })).toBeVisible();
 
   await page.getByRole("button", { name: /Сохранить состояние/ }).click();
-  await expect(page.getByText("Метрика дня сохранена")).toBeVisible();
+  await expect(page.getByText("Состояние сохранено")).toBeVisible();
 
-  await page.getByPlaceholder("Короткая заметка к сегодняшнему шагу").fill("Audit");
-  await page.getByRole("button", { name: /Сохранить мягкий шаг/ }).click();
-  await expect(page.getByText("Шаг отмечен, награда добавлена")).toBeVisible();
+  await page.getByRole("button", { name: /Отметить сегодня/ }).click();
+  await expect(page.getByText("Привычка дня отмечена").first()).toBeVisible();
 
-  await page.getByRole("button", { name: /^Пингви$/ }).click();
-  await expect(page.getByText("Пингви").first()).toBeVisible();
-  await page.getByRole("button", { name: "Что сделать сегодня?" }).click();
+  await page.locator(".habits-nav button").filter({ hasText: "ORKEN" }).click();
+  await expect(page.getByRole("heading", { name: "Быстрые вопросы" })).toBeVisible();
+  await page.getByRole("button", { name: "Какой один шаг сделать сегодня?" }).click();
   await expect(page.getByText("Пингви видит состояние")).toBeVisible({ timeout: 10000 });
 });
 
@@ -634,7 +657,8 @@ test("password registration opens account with report history", async ({ page })
 
   await expect(page).toHaveURL(/\/account$/, { timeout: 10000 });
   await expect(page.getByTestId("account-page")).toBeVisible();
-  await expect(page.getByText("Привычки и AI Навигатор")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Навигатор привычек" })).toBeVisible();
+  await page.getByText("История диагностик").click();
   await expect(page.getByText("Продуктовый стратег")).toBeVisible();
-  await expect(page.getByText("Полный отчёт")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Открыть PRO" })).toBeVisible();
 });

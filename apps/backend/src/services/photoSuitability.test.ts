@@ -34,6 +34,20 @@ test("photo suitability rejects images without a real photographic person", () =
   assert.equal(result.ok, false);
   if (result.ok) return;
   assert.equal(result.code, "PHOTO_PERSON_REQUIRED");
+
+  const personWithoutVisibleFace = interpretPhotoSuitabilityDecision({
+    hasHuman: true,
+    isPhotographicHuman: true,
+    visibleFaceCount: 0,
+    primaryFaceClear: false,
+    confidence: 0.88,
+    reason: "person facing away"
+  });
+  assert.equal(personWithoutVisibleFace.ok, false);
+  if (!personWithoutVisibleFace.ok) {
+    assert.equal(personWithoutVisibleFace.code, "PHOTO_PERSON_REQUIRED");
+    assert.equal(personWithoutVisibleFace.message, "На фото не обнаружено лицо. Пожалуйста, загрузите другое фото");
+  }
 });
 
 test("photo suitability rejects group photos and unclear faces", () => {
@@ -69,6 +83,9 @@ test("photo suitability parser tolerates a compatible model think block", () => 
 });
 
 test("photo suitability messages are localized without exposing provider errors", () => {
-  assert.match(photoSuitabilityMessage("ru", "PHOTO_PERSON_REQUIRED"), /Фото не подходит/);
-  assert.match(photoSuitabilityMessage("en", "PHOTO_PERSON_REQUIRED"), /not suitable/i);
+  assert.equal(
+    photoSuitabilityMessage("ru", "PHOTO_PERSON_REQUIRED"),
+    "На фото не обнаружено лицо. Пожалуйста, загрузите другое фото"
+  );
+  assert.match(photoSuitabilityMessage("en", "PHOTO_PERSON_REQUIRED"), /No face was detected/i);
 });

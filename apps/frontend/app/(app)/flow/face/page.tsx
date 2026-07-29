@@ -31,6 +31,7 @@ export default function FacePage() {
   const [metrics, setMetrics] = useState<FaceMetrics | null>(null);
   const [error, setError] = useState("");
   const [photoCheckMessage, setPhotoCheckMessage] = useState("");
+  const [consent, setConsent] = useState(false);
 
   useEffect(() => {
     setReady(true);
@@ -45,6 +46,10 @@ export default function FacePage() {
   useEffect(() => () => stopCamera(), []);
 
   function triggerFileInput() {
+    if (!consent) {
+      setError(text.consentRequired);
+      return;
+    }
     fileInput.current?.click();
   }
 
@@ -52,6 +57,10 @@ export default function FacePage() {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file) return;
+    if (!consent) {
+      setError(text.consentRequired);
+      return;
+    }
     if (!file.type.startsWith("image/")) {
       setError(text.fileTypeError);
       return;
@@ -70,6 +79,10 @@ export default function FacePage() {
 
   async function openCamera() {
     setError("");
+    if (!consent) {
+      setError(text.consentRequired);
+      return;
+    }
     setBusy(true);
     try {
       stopCamera();
@@ -196,13 +209,30 @@ export default function FacePage() {
       <h1 className="ub flow-title">{text.title}</h1>
       <p className="muted flow-copy">{text.copy}</p>
 
+      <label className="media-consent-card" data-testid="face-consent">
+        <input
+          type="checkbox"
+          checked={consent}
+          onChange={(event) => {
+            setConsent(event.target.checked);
+            if (event.target.checked) setError("");
+          }}
+        />
+        <span>
+          {text.consentPrefix}{" "}
+          <a href="/offer" target="_blank" rel="noreferrer">{text.consentOffer}</a>
+          {" "}{text.consentAnd}{" "}
+          <a href="/privacy" target="_blank" rel="noreferrer">{text.consentPrivacy}</a>
+        </span>
+      </label>
+
       <div className="face-visual-card" aria-label={text.visualLabel}>
         <video src="/assets/processing-analysis.mp4" autoPlay muted loop playsInline />
         <div className="face-scan-frame"><div className="face-scan-line" /></div>
       </div>
 
       <div className="face-upload-panel">
-        <button className={`photo-zone ${preview || cameraReady ? "filled" : "empty"}`} data-testid="face-upload-zone" type="button" onClick={cameraReady ? undefined : triggerFileInput} disabled={!ready || busy}>
+        <button className={`photo-zone ${preview || cameraReady ? "filled" : "empty"}`} data-testid="face-upload-zone" type="button" onClick={cameraReady ? undefined : triggerFileInput} disabled={!ready || busy || !consent}>
           {preview && (
             <>
               <img src={preview} alt={text.previewAlt} />
@@ -219,7 +249,7 @@ export default function FacePage() {
           )}
         </button>
       </div>
-      <input ref={fileInput} data-testid="face-file-input" type="file" accept="image/*" hidden onChange={handleFile} />
+      <input ref={fileInput} data-testid="face-file-input" type="file" accept="image/*" hidden disabled={!consent} onChange={handleFile} />
 
       {metrics && (
         <div className="face-metrics" data-testid="face-metrics">
@@ -246,16 +276,16 @@ export default function FacePage() {
       {photoCheckMessage && <p className="auth-message" role="status">{photoCheckMessage}</p>}
 
       <div className="flow-actions">
-        <button className="button" data-testid="face-file-button" type="button" onClick={triggerFileInput} disabled={!ready || busy}>
+        <button className="button" data-testid="face-file-button" type="button" onClick={triggerFileInput} disabled={!ready || busy || !consent}>
           <Upload size={18} /> {text.uploadButton}
         </button>
-        <button className="button secondary" data-testid="face-capture-button" type="button" onClick={cameraReady ? capture : openCamera} disabled={!ready || busy}>
+        <button className="button secondary" data-testid="face-capture-button" type="button" onClick={cameraReady ? capture : openCamera} disabled={!ready || busy || !consent}>
           <Camera size={18} /> {cameraReady ? text.capture : text.openCamera}
         </button>
       </div>
 
       {uploaded && (
-        <button className="button" data-testid="face-next-link" type="button" onClick={launchAnalysis} disabled={busy}>
+        <button className="button" data-testid="face-next-link" type="button" onClick={launchAnalysis} disabled={busy || !consent}>
           {busy ? "Запускаем анализ..." : "Узнать результат"}
         </button>
       )}

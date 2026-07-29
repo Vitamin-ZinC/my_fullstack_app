@@ -4,6 +4,8 @@ export type TranscriptionSegment = {
   start?: number;
   end?: number;
   text?: string;
+  noSpeechProbability?: number;
+  averageLogProbability?: number;
 };
 
 export type AudioTranscription = {

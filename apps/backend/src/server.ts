@@ -18,6 +18,7 @@ import { meRoutes } from "./routes/me.js";
 import { partnerRoutes } from "./routes/partners.js";
 import { paymentRoutes } from "./routes/payments.js";
 import { telegramRoutes } from "./routes/telegram.js";
+import { telegramCommunityRoutes } from "./routes/telegramCommunity.js";
 
 const app = Fastify({
   logger: true,
@@ -68,6 +69,7 @@ await app.register(meRoutes);
 await app.register(partnerRoutes);
 await app.register(adminRoutes);
 await app.register(telegramRoutes);
+await app.register(telegramCommunityRoutes);
 
 app.get("/health", async () => ({ ok: true }));
 

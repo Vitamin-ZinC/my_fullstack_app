@@ -7574,6 +7574,32 @@ p {
   flex: 0 0 min(220px, 100%);
 }
 
+.admin-community-list {
+  display: grid;
+  gap: 18px;
+  margin-top: 16px;
+  padding-top: 24px;
+  border-top: 1px solid #27313c;
+}
+
+.admin-community-chat {
+  display: grid;
+  gap: 18px;
+  padding: 22px 0;
+  border-bottom: 1px solid #27313c;
+}
+
+.admin-community-chat:last-child {
+  border-bottom: 0;
+}
+
+.admin-community-actions {
+  display: grid;
+  grid-template-columns: auto minmax(220px, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
 .admin-advanced-panel {
   border-top: 1px solid #27313c;
   padding-top: 14px;
@@ -8055,6 +8081,10 @@ p {
 }
 
 @media (max-width: 620px) {
+  .admin-community-actions {
+    grid-template-columns: 1fr;
+  }
+
   .admin-console-workspace > .grid[data-testid="admin-stats"],
   .admin-overview-links {
     grid-template-columns: 1fr;

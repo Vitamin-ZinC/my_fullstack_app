@@ -56,6 +56,10 @@ export function buildTelegramConnectUrl(token: string) {
   return `https://t.me/${username}?start=${encodeURIComponent(token)}`;
 }
 
+export function isPrivateTelegramChat(type?: string) {
+  return !type || type === "private";
+}
+
 async function buildTelegramWebLoginUrl(account?: { telegramUserId?: string; userId?: string | null; sessionId?: string | null } | null) {
   const baseUrl = env.PUBLIC_API_URL?.replace(/\/$/, "");
   if (!baseUrl) return "";
@@ -104,6 +108,9 @@ export async function processTelegramUpdate(update: TelegramUpdate) {
 }
 
 async function processTelegramCallback(callback: TelegramCallbackQuery) {
+  if (!isPrivateTelegramChat(callback.message?.chat.type)) {
+    return { ok: true, ignored: true, reason: "personal_bot_private_only" };
+  }
   const chatId = callback.message?.chat.id ? String(callback.message.chat.id) : null;
   const telegramUserId = callback.from?.id ? String(callback.from.id) : null;
   if (!chatId || !telegramUserId) return { ok: true, ignored: true };
@@ -149,6 +156,9 @@ async function processTelegramMessage(message: TelegramMessage) {
   const chatId = String(message.chat.id);
   const telegramUserId = message.from?.id ? String(message.from.id) : null;
   if (!telegramUserId) return { ok: true, ignored: true };
+  if (!isPrivateTelegramChat(message.chat.type)) {
+    return { ok: true, ignored: true, reason: "personal_bot_private_only" };
+  }
 
   if (text.startsWith("/start")) {
     const token = text.split(/\s+/)[1];

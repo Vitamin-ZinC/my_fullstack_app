@@ -6,6 +6,7 @@ import { env } from "../env.js";
 import { buildFallbackFreeReport, buildFallbackReport } from "../services/report.js";
 import { generateOpenAiReport, normalizeFullReportValue } from "../services/aiReport.js";
 import { sendDueTelegramReminders } from "../services/telegramBot.js";
+import { processTelegramCommunityUpdate, sendDueTelegramCommunityPosts, type TelegramCommunityUpdate } from "../services/telegramCommunityBot.js";
 import { retryPartnerCoreEvents } from "../services/partnerCore.js";
 
 const logs = [
@@ -151,6 +152,13 @@ export const worker = new Worker("analysis", async (job) => {
   concurrency: env.ANALYSIS_WORKER_CONCURRENCY
 });
 
+export const telegramCommunityWorker = new Worker("telegram-community", async (job) => {
+  await processTelegramCommunityUpdate(job.data as TelegramCommunityUpdate);
+}, {
+  connection: redis,
+  concurrency: 2
+});
+
 worker.on("failed", async (job, error) => {
   if (!job) return;
   const maxAttempts = job.opts.attempts ?? 1;
@@ -163,9 +171,20 @@ worker.on("failed", async (job, error) => {
   }
 });
 
+telegramCommunityWorker.on("failed", (job, error) => {
+  console.error("Telegram community job failed", {
+    jobId: job?.id,
+    attemptsMade: job?.attemptsMade,
+    error: error.message
+  });
+});
+
 const telegramReminderTimer = setInterval(() => {
   sendDueTelegramReminders().catch((error) => {
     console.error("Telegram reminder sweep failed", error);
+  });
+  sendDueTelegramCommunityPosts().catch((error) => {
+    console.error("Telegram community sweep failed", error);
   });
 }, 60 * 1000);
 telegramReminderTimer.unref?.();

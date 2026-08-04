@@ -7,6 +7,11 @@ export const TELEGRAM_REMINDER_TEMPLATE_KEY = "telegram_reminder_template";
 export const TELEGRAM_WEB_LOGIN_ENABLED_KEY = "telegram_web_login_enabled";
 export const TELEGRAM_WELCOME_TEMPLATE_KEY = "telegram_welcome_template";
 export const TELEGRAM_TODAY_TEMPLATE_KEY = "telegram_today_template";
+export const TELEGRAM_COMMUNITY_MORNING_TEMPLATE_KEY = "telegram_community_morning_template";
+export const TELEGRAM_COMMUNITY_MIDDAY_TEMPLATE_KEY = "telegram_community_midday_template";
+export const TELEGRAM_COMMUNITY_EVENING_TEMPLATE_KEY = "telegram_community_evening_template";
+export const TELEGRAM_COMMUNITY_WELCOME_TEMPLATE_KEY = "telegram_community_welcome_template";
+export const TELEGRAM_COMMUNITY_TEMPERATURE_KEY = "telegram_community_temperature";
 export const HABIT_ASSISTANT_AVATAR_URL_KEY = "habit_assistant_avatar_url";
 export const HABIT_WEEK_SUMMARY_MODE_RULE = "rule";
 export const HABIT_WEEK_SUMMARY_MODE_LLM = "llm";
@@ -120,5 +125,45 @@ export async function getTelegramPolicySettings() {
       "Прогресс недели: {{weekProgress}}/7."
     ].join("\n")),
     webLoginEnabled: readBoolean(values.get(TELEGRAM_WEB_LOGIN_ENABLED_KEY), true)
+  };
+}
+
+export async function getTelegramCommunitySettings() {
+  const { prisma } = await import("../lib/prisma.js");
+  const settings = await prisma.appSetting.findMany({
+    where: {
+      key: {
+        in: [
+          TELEGRAM_COMMUNITY_MORNING_TEMPLATE_KEY,
+          TELEGRAM_COMMUNITY_MIDDAY_TEMPLATE_KEY,
+          TELEGRAM_COMMUNITY_EVENING_TEMPLATE_KEY,
+          TELEGRAM_COMMUNITY_WELCOME_TEMPLATE_KEY,
+          TELEGRAM_COMMUNITY_TEMPERATURE_KEY
+        ]
+      }
+    }
+  });
+  const values = new Map(settings.map((setting) => [setting.key, setting.value]));
+
+  return {
+    morningTemplate: readTemplate(values.get(TELEGRAM_COMMUNITY_MORNING_TEMPLATE_KEY), [
+      "Доброе утро. Выберите одну главную задачу дня.",
+      "Напишите: /focus что именно вы завершите сегодня.",
+      "Один конкретный результат полезнее длинного списка намерений."
+    ].join("\n")),
+    middayTemplate: readTemplate(values.get(TELEGRAM_COMMUNITY_MIDDAY_TEMPLATE_KEY), [
+      "Дневная сверка ORKEN.",
+      "Какой самый маленький шаг приблизит вас к утреннему фокусу за следующие 20 минут?",
+      "Можно ответить прямо на это сообщение."
+    ].join("\n")),
+    eveningTemplate: readTemplate(values.get(TELEGRAM_COMMUNITY_EVENING_TEMPLATE_KEY), [
+      "Вечерняя сверка.",
+      "Отметьте результат кнопкой ниже. Частичное выполнение тоже считается движением, если вы честно фиксируете следующий шаг."
+    ].join("\n")),
+    welcomeTemplate: readTemplate(values.get(TELEGRAM_COMMUNITY_WELCOME_TEMPLATE_KEY), [
+      "Я — ORKEN для комьюнити. Помогаю группе формулировать фокус, отмечать результат и поддерживать рабочий ритм без публичного давления.",
+      "Администратор может включить расписание командой /activate. Участие добровольное: /join — войти, /leave — выйти."
+    ].join("\n")),
+    temperature: readTemperature(values.get(TELEGRAM_COMMUNITY_TEMPERATURE_KEY), 0.55)
   };
 }

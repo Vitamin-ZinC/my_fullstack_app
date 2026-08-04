@@ -48,6 +48,8 @@ import type {
   ReportContactResponse,
   TelegramLinkTokenResponse,
   TelegramWebLoginResponse,
+  TelegramCommunityAdminSnapshot,
+  TelegramCommunityChatUpdate,
   TelegramStatusResponse,
   PromptTemplateInput,
   PromptTemplate
@@ -246,6 +248,11 @@ export const telegramReminderTemplateSettingKey = "telegram_reminder_template";
 export const telegramWebLoginEnabledSettingKey = "telegram_web_login_enabled";
 export const telegramWelcomeTemplateSettingKey = "telegram_welcome_template";
 export const telegramTodayTemplateSettingKey = "telegram_today_template";
+export const telegramCommunityMorningTemplateSettingKey = "telegram_community_morning_template";
+export const telegramCommunityMiddayTemplateSettingKey = "telegram_community_midday_template";
+export const telegramCommunityEveningTemplateSettingKey = "telegram_community_evening_template";
+export const telegramCommunityWelcomeTemplateSettingKey = "telegram_community_welcome_template";
+export const telegramCommunityTemperatureSettingKey = "telegram_community_temperature";
 export const habitAssistantAvatarUrlSettingKey = "habit_assistant_avatar_url";
 
 export const contentApi = {
@@ -721,6 +728,15 @@ export const adminApi = {
   upsertSetting: (key: string, value: unknown) => adminRequest<AppSetting>(`/api/admin/settings/${encodeURIComponent(key)}`, {
     method: "PUT",
     body: JSON.stringify({ value })
+  }),
+  telegramCommunity: () => adminRequest<TelegramCommunityAdminSnapshot>("/api/admin/telegram-community"),
+  updateTelegramCommunityChat: (id: string, payload: TelegramCommunityChatUpdate) => adminRequest<{ chat: unknown }>(`/api/admin/telegram-community/chats/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload)
+  }),
+  sendTelegramCommunityAnnouncement: (id: string, text: string) => adminRequest<{ ok: true }>(`/api/admin/telegram-community/chats/${encodeURIComponent(id)}/send`, {
+    method: "POST",
+    body: JSON.stringify({ text })
   }),
   uploadAssistantAvatar: async (file: Blob) => {
     if (!hasWindow()) throw new Error("Admin API is only available in the browser");

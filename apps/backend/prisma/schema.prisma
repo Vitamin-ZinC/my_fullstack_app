@@ -787,6 +787,92 @@ model TelegramAccount {
   @@index([chatId])
 }
 
+model TelegramCommunityChat {
+  id                 String                       @id @default(cuid())
+  telegramChatId     String                       @unique
+  type               String
+  title              String?
+  username           String?
+  status             TelegramCommunityChatStatus @default(PENDING)
+  timezone           String                       @default("Europe/Moscow")
+  schedulesEnabled   Boolean                      @default(false)
+  aiRepliesEnabled   Boolean                      @default(true)
+  smartPingEnabled   Boolean                      @default(false)
+  morningTime        String                       @default("08:30")
+  middayTime         String                       @default("13:30")
+  eveningTime        String                       @default("21:00")
+  quietHoursStart    String                       @default("22:00")
+  quietHoursEnd      String                       @default("08:30")
+  installedByUserId  String?
+  lastHumanMessageAt DateTime?
+  lastMorningAt      DateTime?
+  lastMiddayAt       DateTime?
+  lastEveningAt      DateTime?
+  lastWakeAt         DateTime?
+  createdAt          DateTime                     @default(now())
+  updatedAt          DateTime                     @updatedAt
+  members            TelegramCommunityMember[]
+  commitments        TelegramCommunityCommitment[]
+  posts              TelegramCommunityPost[]
+
+  @@index([status, schedulesEnabled])
+  @@index([updatedAt])
+}
+
+model TelegramCommunityMember {
+  id                  String                        @id @default(cuid())
+  chatId              String
+  chat                TelegramCommunityChat         @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  telegramUserId      String
+  username            String?
+  firstName           String?
+  lastName            String?
+  status              TelegramCommunityMemberStatus @default(ACTIVE)
+  optedIn             Boolean                       @default(false)
+  mentionEnabled      Boolean                       @default(false)
+  points              Int                           @default(0)
+  lastActivityAt      DateTime?
+  lastCheckinAt       DateTime?
+  createdAt           DateTime                      @default(now())
+  updatedAt           DateTime                      @updatedAt
+  commitments         TelegramCommunityCommitment[]
+
+  @@unique([chatId, telegramUserId])
+  @@index([chatId, optedIn, status])
+  @@index([telegramUserId, updatedAt])
+}
+
+model TelegramCommunityCommitment {
+  id            String                            @id @default(cuid())
+  chatId        String
+  chat          TelegramCommunityChat             @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  memberId      String
+  member        TelegramCommunityMember           @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  dateKey       String
+  text          String
+  status        TelegramCommunityCommitmentStatus @default(PLANNED)
+  pointsAwarded Int                               @default(0)
+  completedAt   DateTime?
+  createdAt     DateTime                          @default(now())
+  updatedAt     DateTime                          @updatedAt
+
+  @@unique([chatId, memberId, dateKey])
+  @@index([chatId, dateKey, status])
+}
+
+model TelegramCommunityPost {
+  id                String                    @id @default(cuid())
+  chatId            String
+  chat              TelegramCommunityChat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  dateKey           String
+  type              TelegramCommunityPostType
+  telegramMessageId String?
+  sentAt            DateTime                  @default(now())
+
+  @@unique([chatId, dateKey, type])
+  @@index([chatId, sentAt])
+}
+
 model TelegramLinkToken {
   id         String    @id @default(cuid())
   tokenHash  String    @unique
@@ -856,6 +942,34 @@ enum PromoDiscountType {
 enum UserRole {
   USER
   ADMIN
+}
+
+enum TelegramCommunityChatStatus {
+  PENDING
+  ACTIVE
+  PAUSED
+  LEFT
+}
+
+enum TelegramCommunityMemberStatus {
+  ACTIVE
+  LEFT
+  BLOCKED
+}
+
+enum TelegramCommunityCommitmentStatus {
+  PLANNED
+  DONE
+  PARTIAL
+  SKIPPED
+}
+
+enum TelegramCommunityPostType {
+  MORNING
+  MIDDAY
+  EVENING
+  WAKE
+  MANUAL
 }
 
 enum UserStatus {

@@ -15,3 +15,13 @@ export const analysisQueue = new Queue("analysis", {
     removeOnFail: 500
   }
 });
+
+export const telegramCommunityQueue = new Queue("telegram-community", {
+  connection: redis,
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: { type: "exponential", delay: 3000 },
+    removeOnComplete: 500,
+    removeOnFail: 500
+  }
+});

@@ -19,6 +19,7 @@ import type {
   AdminCoachPartnershipLead,
   AdminStats,
   AdminUserSummary,
+  AdminTelegramCommunityChat,
   AppSetting,
   FeatureFlag,
   PartnerAffiliateProgramSummary,
@@ -29,7 +30,8 @@ import type {
   CoachPartnershipLeadStatus,
   PromoCode,
   PromptTemplate,
-  PromptTemplateInput
+  PromptTemplateInput,
+  TelegramCommunityAdminSnapshot
 } from "@levelup/contracts";
 import {
   adminApi,
@@ -49,6 +51,11 @@ import {
   telegramRateLimitWindowMsSettingKey,
   telegramReminderTemplateSettingKey,
   telegramTodayTemplateSettingKey,
+  telegramCommunityMorningTemplateSettingKey,
+  telegramCommunityMiddayTemplateSettingKey,
+  telegramCommunityEveningTemplateSettingKey,
+  telegramCommunityWelcomeTemplateSettingKey,
+  telegramCommunityTemperatureSettingKey,
   telegramWelcomeTemplateSettingKey,
   telegramWebLoginEnabledSettingKey
 } from "@/lib/api";
@@ -179,6 +186,33 @@ const cleanTelegramPolicyDefaults = {
   ].join("\n")
 };
 
+const telegramCommunityDefaults = {
+  morningTemplate: [
+    "Доброе утро. Выберите одну главную задачу дня.",
+    "Напишите: /focus что именно вы завершите сегодня.",
+    "Один конкретный результат полезнее длинного списка намерений."
+  ].join("\n"),
+  middayTemplate: [
+    "Дневная сверка ORKEN.",
+    "Какой самый маленький шаг приблизит вас к утреннему фокусу за следующие 20 минут?",
+    "Можно ответить прямо на это сообщение."
+  ].join("\n"),
+  eveningTemplate: [
+    "Вечерняя сверка.",
+    "Отметьте результат кнопкой ниже. Частичное выполнение тоже считается движением, если вы честно фиксируете следующий шаг."
+  ].join("\n"),
+  welcomeTemplate: [
+    "Я — ORKEN для комьюнити. Помогаю группе формулировать фокус, отмечать результат и поддерживать рабочий ритм без публичного давления.",
+    "Администратор может включить расписание командой /activate. Участие добровольное: /join — войти, /leave — выйти."
+  ].join("\n")
+};
+
+const emptyTelegramCommunitySnapshot: TelegramCommunityAdminSnapshot = {
+  configured: false,
+  username: null,
+  chats: []
+};
+
 function cleanTemplateValue(value: unknown, fallback: string) {
   if (typeof value !== "string" || !value.trim()) return fallback;
   return value.includes("Р") || value.includes("В·") || value.includes("вЂ") ? fallback : value;
@@ -281,6 +315,12 @@ export function AdminConsole({ section }: { section: AdminSection }) {
     assistantAvatarUrl: "/assets/orken12.jpg",
     webLoginEnabled: true
   });
+  const [telegramCommunity, setTelegramCommunity] = useState<TelegramCommunityAdminSnapshot>(emptyTelegramCommunitySnapshot);
+  const [telegramCommunityForm, setTelegramCommunityForm] = useState({
+    ...telegramCommunityDefaults,
+    temperature: "0.55"
+  });
+  const [communityAnnouncements, setCommunityAnnouncements] = useState<Record<string, string>>({});
   const [promoForm, setPromoForm] = useState({
     code: "",
     description: "",
@@ -356,9 +396,14 @@ export function AdminConsole({ section }: { section: AdminSection }) {
       }
 
       if (section === "integrations") {
-        const nextSettings = await adminApi.settings();
+        const [nextSettings, nextCommunity] = await Promise.all([
+          adminApi.settings(),
+          adminApi.telegramCommunity()
+        ]);
         setSettings(nextSettings);
+        setTelegramCommunity(nextCommunity);
         hydrateTelegramPolicyForm(nextSettings);
+        hydrateTelegramCommunityForm(nextSettings);
       }
 
       if (section === "partners") {
@@ -484,6 +529,21 @@ export function AdminConsole({ section }: { section: AdminSection }) {
       assistantAvatarUrl: typeof assistantAvatarUrl === "string" ? assistantAvatarUrl : current.assistantAvatarUrl,
       webLoginEnabled: typeof webLoginEnabled === "boolean" ? webLoginEnabled : current.webLoginEnabled
     }));
+  }
+
+  function hydrateTelegramCommunityForm(nextSettings: AppSetting[]) {
+    const read = (key: string, fallback: string) => cleanTemplateValue(
+      nextSettings.find((item) => item.key === key)?.value,
+      fallback
+    );
+    const temperature = nextSettings.find((item) => item.key === telegramCommunityTemperatureSettingKey)?.value;
+    setTelegramCommunityForm({
+      morningTemplate: read(telegramCommunityMorningTemplateSettingKey, telegramCommunityDefaults.morningTemplate),
+      middayTemplate: read(telegramCommunityMiddayTemplateSettingKey, telegramCommunityDefaults.middayTemplate),
+      eveningTemplate: read(telegramCommunityEveningTemplateSettingKey, telegramCommunityDefaults.eveningTemplate),
+      welcomeTemplate: read(telegramCommunityWelcomeTemplateSettingKey, telegramCommunityDefaults.welcomeTemplate),
+      temperature: typeof temperature === "number" || typeof temperature === "string" ? String(temperature) : "0.55"
+    });
   }
 
   function toPromptForm(prompt: PromptTemplate | PromptTemplateInput): PromptTemplateInput {
@@ -733,6 +793,70 @@ export function AdminConsole({ section }: { section: AdminSection }) {
     await adminApi.upsertSetting(telegramWebLoginEnabledSettingKey, telegramPolicyForm.webLoginEnabled);
     setMessage("Telegram policy settings saved");
     await refresh();
+  }
+
+  async function saveTelegramCommunitySettings() {
+    setMessage("");
+    const temperature = Number(telegramCommunityForm.temperature);
+    if (!Number.isFinite(temperature) || temperature < 0 || temperature > 1) {
+      setMessage("Температура community-бота должна быть от 0 до 1");
+      return;
+    }
+    const templates = [
+      telegramCommunityForm.welcomeTemplate,
+      telegramCommunityForm.morningTemplate,
+      telegramCommunityForm.middayTemplate,
+      telegramCommunityForm.eveningTemplate
+    ];
+    if (templates.some((template) => !template.trim())) {
+      setMessage("Все шаблоны community-бота обязательны");
+      return;
+    }
+    await Promise.all([
+      adminApi.upsertSetting(telegramCommunityWelcomeTemplateSettingKey, telegramCommunityForm.welcomeTemplate),
+      adminApi.upsertSetting(telegramCommunityMorningTemplateSettingKey, telegramCommunityForm.morningTemplate),
+      adminApi.upsertSetting(telegramCommunityMiddayTemplateSettingKey, telegramCommunityForm.middayTemplate),
+      adminApi.upsertSetting(telegramCommunityEveningTemplateSettingKey, telegramCommunityForm.eveningTemplate),
+      adminApi.upsertSetting(telegramCommunityTemperatureSettingKey, temperature)
+    ]);
+    setMessage("Настройки community-бота сохранены");
+    await refresh();
+  }
+
+  function editTelegramCommunityChat(id: string, patch: Partial<AdminTelegramCommunityChat>) {
+    setTelegramCommunity((current) => ({
+      ...current,
+      chats: current.chats.map((chat) => chat.id === id ? { ...chat, ...patch } : chat)
+    }));
+  }
+
+  async function saveTelegramCommunityChat(chat: AdminTelegramCommunityChat) {
+    setMessage("");
+    await adminApi.updateTelegramCommunityChat(chat.id, {
+      status: chat.status,
+      timezone: chat.timezone,
+      schedulesEnabled: chat.schedulesEnabled,
+      aiRepliesEnabled: chat.aiRepliesEnabled,
+      smartPingEnabled: chat.smartPingEnabled,
+      morningTime: chat.morningTime,
+      middayTime: chat.middayTime,
+      eveningTime: chat.eveningTime,
+      quietHoursStart: chat.quietHoursStart,
+      quietHoursEnd: chat.quietHoursEnd
+    });
+    setMessage(`Настройки группы «${chat.title || chat.telegramChatId}» сохранены`);
+    await refresh();
+  }
+
+  async function sendTelegramCommunityAnnouncement(chat: AdminTelegramCommunityChat) {
+    const text = communityAnnouncements[chat.id]?.trim() ?? "";
+    if (!text) {
+      setMessage("Введите текст объявления");
+      return;
+    }
+    await adminApi.sendTelegramCommunityAnnouncement(chat.id, text);
+    setCommunityAnnouncements((current) => ({ ...current, [chat.id]: "" }));
+    setMessage(`Сообщение отправлено в «${chat.title || chat.telegramChatId}»`);
   }
 
   async function uploadAssistantAvatar(file: File | null) {
@@ -1362,6 +1486,117 @@ export function AdminConsole({ section }: { section: AdminSection }) {
               </label>
             </div>
             <button className="button" onClick={saveTelegramPolicySettings}>Сохранить настройки Telegram</button>
+          </section>}
+
+          {section === "integrations" && <section id="admin-telegram-community" className="card stack admin-section-card">
+            <div className="admin-section-heading-row">
+              <div>
+                <h2>ORKEN Community Bot</h2>
+                <p className="muted">Отдельный бот для групп. Он не читает личные отчёты, привычки, метрики и переписку основного ORKEN.</p>
+              </div>
+              <span className={`status ${telegramCommunity.configured ? "done" : "pending"}`}>
+                {telegramCommunity.configured ? `Подключён${telegramCommunity.username ? ` · @${telegramCommunity.username}` : ""}` : "Ожидает токен"}
+              </span>
+            </div>
+            {!telegramCommunity.configured && (
+              <div className="prompt-output-note">
+                <strong>Код готов, отправка выключена</strong>
+                <span>После получения токена backend-администратор добавит три server-side переменные и зарегистрирует webhook. Секреты не вводятся в эту форму и не попадают во frontend.</span>
+              </div>
+            )}
+            <div className="grid grid-2">
+              <label className="stack">
+                <span className="eyebrow">Приветствие в группе</span>
+                <textarea className="input text-editor compact" value={telegramCommunityForm.welcomeTemplate} onChange={(event) => setTelegramCommunityForm({ ...telegramCommunityForm, welcomeTemplate: event.target.value })} />
+              </label>
+              <label className="stack">
+                <span className="eyebrow">Утренний фокус</span>
+                <textarea className="input text-editor compact" value={telegramCommunityForm.morningTemplate} onChange={(event) => setTelegramCommunityForm({ ...telegramCommunityForm, morningTemplate: event.target.value })} />
+              </label>
+              <label className="stack">
+                <span className="eyebrow">Дневная сверка</span>
+                <textarea className="input text-editor compact" value={telegramCommunityForm.middayTemplate} onChange={(event) => setTelegramCommunityForm({ ...telegramCommunityForm, middayTemplate: event.target.value })} />
+              </label>
+              <label className="stack">
+                <span className="eyebrow">Вечерний чек-ин</span>
+                <textarea className="input text-editor compact" value={telegramCommunityForm.eveningTemplate} onChange={(event) => setTelegramCommunityForm({ ...telegramCommunityForm, eveningTemplate: event.target.value })} />
+              </label>
+            </div>
+            <label className="stack admin-compact-field">
+              <span className="eyebrow">Температура AI</span>
+              <input className="input" value={telegramCommunityForm.temperature} onChange={(event) => setTelegramCommunityForm({ ...telegramCommunityForm, temperature: event.target.value })} inputMode="decimal" />
+            </label>
+            <p className="muted">Системный prompt управляется в разделе «AI и промпты» под ключом <code>telegram.community.system</code>.</p>
+            <button className="button" onClick={saveTelegramCommunitySettings}>Сохранить шаблоны community-бота</button>
+
+            <div className="admin-community-list">
+              <div>
+                <h3>Зарегистрированные группы</h3>
+                <p className="muted">Новая группа появляется после добавления бота. Расписание включается командой <code>/activate</code> или здесь.</p>
+              </div>
+              {telegramCommunity.chats.length === 0 && (
+                <div className="admin-empty-state">Пока нет групп. После подключения токена добавьте нового бота в тестовую группу.</div>
+              )}
+              {telegramCommunity.chats.map((chat) => (
+                <div className="admin-community-chat" key={chat.id}>
+                  <div className="admin-section-heading-row">
+                    <div>
+                      <h3>{chat.title || `Telegram ${chat.telegramChatId}`}</h3>
+                      <p className="muted">{chat.type} · {chat.memberCount} участников · {chat.commitmentCount} фокусов · {chat.postCount} публикаций</p>
+                    </div>
+                    <span className={`status ${chat.status === "ACTIVE" ? "done" : "pending"}`}>{chat.status}</span>
+                  </div>
+                  <div className="grid grid-3">
+                    <label className="stack">
+                      <span className="eyebrow">Статус</span>
+                      <select className="input" value={chat.status} onChange={(event) => editTelegramCommunityChat(chat.id, { status: event.target.value as AdminTelegramCommunityChat["status"] })}>
+                        <option value="PENDING">Ожидает активации</option>
+                        <option value="ACTIVE">Активна</option>
+                        <option value="PAUSED">На паузе</option>
+                        <option value="LEFT">Бот удалён</option>
+                      </select>
+                    </label>
+                    <label className="stack">
+                      <span className="eyebrow">Часовой пояс</span>
+                      <input className="input" value={chat.timezone} onChange={(event) => editTelegramCommunityChat(chat.id, { timezone: event.target.value })} />
+                    </label>
+                    <label className="stack">
+                      <span className="eyebrow">Расписание</span>
+                      <select className="input" value={chat.schedulesEnabled ? "true" : "false"} onChange={(event) => editTelegramCommunityChat(chat.id, { schedulesEnabled: event.target.value === "true" })}>
+                        <option value="false">Выключено</option>
+                        <option value="true">Включено</option>
+                      </select>
+                    </label>
+                    <label className="stack">
+                      <span className="eyebrow">AI-ответы</span>
+                      <select className="input" value={chat.aiRepliesEnabled ? "true" : "false"} onChange={(event) => editTelegramCommunityChat(chat.id, { aiRepliesEnabled: event.target.value === "true" })}>
+                        <option value="true">На упоминание/reply</option>
+                        <option value="false">Выключены</option>
+                      </select>
+                    </label>
+                    <label className="stack">
+                      <span className="eyebrow">Smart Ping</span>
+                      <select className="input" value={chat.smartPingEnabled ? "true" : "false"} onChange={(event) => editTelegramCommunityChat(chat.id, { smartPingEnabled: event.target.value === "true" })}>
+                        <option value="false">Выключен</option>
+                        <option value="true">Только участники с согласием</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div className="grid grid-3">
+                    <label className="stack"><span className="eyebrow">Утро</span><input className="input" type="time" value={chat.morningTime} onChange={(event) => editTelegramCommunityChat(chat.id, { morningTime: event.target.value })} /></label>
+                    <label className="stack"><span className="eyebrow">День</span><input className="input" type="time" value={chat.middayTime} onChange={(event) => editTelegramCommunityChat(chat.id, { middayTime: event.target.value })} /></label>
+                    <label className="stack"><span className="eyebrow">Вечер</span><input className="input" type="time" value={chat.eveningTime} onChange={(event) => editTelegramCommunityChat(chat.id, { eveningTime: event.target.value })} /></label>
+                    <label className="stack"><span className="eyebrow">Тишина с</span><input className="input" type="time" value={chat.quietHoursStart} onChange={(event) => editTelegramCommunityChat(chat.id, { quietHoursStart: event.target.value })} /></label>
+                    <label className="stack"><span className="eyebrow">Тишина до</span><input className="input" type="time" value={chat.quietHoursEnd} onChange={(event) => editTelegramCommunityChat(chat.id, { quietHoursEnd: event.target.value })} /></label>
+                  </div>
+                  <div className="admin-community-actions">
+                    <button className="button" onClick={() => saveTelegramCommunityChat(chat)}>Сохранить группу</button>
+                    <input className="input" value={communityAnnouncements[chat.id] ?? ""} onChange={(event) => setCommunityAnnouncements((current) => ({ ...current, [chat.id]: event.target.value }))} placeholder="Разовое объявление без AI" />
+                    <button className="button secondary" disabled={!telegramCommunity.configured} onClick={() => sendTelegramCommunityAnnouncement(chat)}>Отправить</button>
+                  </div>
+                </div>
+              ))}
+            </div>
           </section>}
 
           {section === "ai" && <section id="admin-prompts" className="card stack admin-section-card">

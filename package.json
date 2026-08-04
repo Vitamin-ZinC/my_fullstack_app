@@ -16,6 +16,7 @@
     "test:partner-boundary": "node scripts/test-partner-portal-client-boundary.mjs",
     "test:e2e": "playwright test \"tests/frontend-flow.spec.js\" --workers=1",
     "smoke:prod": "node scripts/smoke-prod.mjs",
+    "telegram:community:configure": "node scripts/configure-telegram-community-webhook.mjs",
     "prisma:generate": "npm --workspace apps/backend run prisma:generate",
     "prisma:migrate": "npm --workspace apps/backend run prisma:migrate"
   },

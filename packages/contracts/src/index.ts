@@ -900,3 +900,49 @@ export type TelegramWebLoginResponse = {
   userId?: string | null;
   locale: string;
 };
+
+export type TelegramCommunityChatStatus = "PENDING" | "ACTIVE" | "PAUSED" | "LEFT";
+
+export type AdminTelegramCommunityChat = {
+  id: string;
+  telegramChatId: string;
+  type: string;
+  title?: string | null;
+  username?: string | null;
+  status: TelegramCommunityChatStatus;
+  timezone: string;
+  schedulesEnabled: boolean;
+  aiRepliesEnabled: boolean;
+  smartPingEnabled: boolean;
+  morningTime: string;
+  middayTime: string;
+  eveningTime: string;
+  quietHoursStart: string;
+  quietHoursEnd: string;
+  lastHumanMessageAt?: string | null;
+  lastWakeAt?: string | null;
+  memberCount: number;
+  commitmentCount: number;
+  postCount: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type TelegramCommunityAdminSnapshot = {
+  configured: boolean;
+  username?: string | null;
+  chats: AdminTelegramCommunityChat[];
+};
+
+export type TelegramCommunityChatUpdate = Partial<Pick<AdminTelegramCommunityChat,
+  | "status"
+  | "timezone"
+  | "schedulesEnabled"
+  | "aiRepliesEnabled"
+  | "smartPingEnabled"
+  | "morningTime"
+  | "middayTime"
+  | "eveningTime"
+  | "quietHoursStart"
+  | "quietHoursEnd"
+>>;

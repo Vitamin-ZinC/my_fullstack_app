@@ -10,6 +10,7 @@ import { adminRoutes } from "./routes/admin.js";
 import { authRoutes } from "./routes/auth.js";
 import { analysisRoutes } from "./routes/analyses.js";
 import { contentRoutes } from "./routes/content.js";
+import { coachRoutes } from "./routes/coaches.js";
 import { docsRoutes } from "./routes/docs.js";
 import { eventRoutes } from "./routes/events.js";
 import { habitsRoutes } from "./routes/habits.js";
@@ -57,6 +58,7 @@ app.addContentTypeParser([
 
 await app.register(authRoutes);
 await app.register(contentRoutes);
+await app.register(coachRoutes);
 await app.register(docsRoutes);
 await app.register(analysisRoutes);
 await app.register(paymentRoutes);

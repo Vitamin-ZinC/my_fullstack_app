@@ -7569,6 +7569,11 @@ p {
   grid-column: 1 / -1;
 }
 
+.admin-compact-field {
+  width: min(220px, 100%);
+  flex: 0 0 min(220px, 100%);
+}
+
 .admin-advanced-panel {
   border-top: 1px solid #27313c;
   padding-top: 14px;

@@ -34,6 +34,7 @@ const schema = z.object({
   PRICE_CURRENCY: z.string().default("usd"),
   RESEND_API_KEY: z.string().optional(),
   RESEND_FROM_EMAIL: z.string().default("ORKEN.LIFE <reports@orken.life>"),
+  COACH_APPLICATION_NOTIFY_EMAIL: z.string().email().default("orken.eco@gmail.com"),
   ORKEN_LLM_API_KEY: z.string().optional(),
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_BASE_URL: z.string().url().default("https://api.enchantstartup.com/v1"),

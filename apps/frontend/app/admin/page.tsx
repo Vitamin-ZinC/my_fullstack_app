@@ -16,6 +16,7 @@ import {
   type LucideIcon
 } from "lucide-react";
 import type {
+  AdminCoachPartnershipLead,
   AdminStats,
   AdminUserSummary,
   AppSetting,
@@ -25,6 +26,7 @@ import type {
   PartnerOfferStatus,
   PartnerOfferSummary,
   PartnerRedemptionSummary,
+  CoachPartnershipLeadStatus,
   PromoCode,
   PromptTemplate,
   PromptTemplateInput
@@ -53,7 +55,7 @@ import {
 import { defaultSiteText } from "@/lib/messages";
 
 export type AdminSection = "overview" | "users" | "commercial" | "ai" | "content" | "integrations" | "partners" | "system";
-type PartnerAdminView = "overview" | "partners" | "program" | "offers" | "operations";
+type PartnerAdminView = "overview" | "applications" | "partners" | "program" | "offers" | "operations";
 
 type AdminSectionDefinition = {
   id: AdminSection;
@@ -200,6 +202,7 @@ export function AdminConsole({ section }: { section: AdminSection }) {
   const [promptForm, setPromptForm] = useState<PromptTemplateInput>(emptyPromptForm);
   const [promoCodes, setPromoCodes] = useState<PromoCode[]>([]);
   const [partnerPrograms, setPartnerPrograms] = useState<PartnerAffiliateProgramSummary[]>([]);
+  const [coachApplications, setCoachApplications] = useState<AdminCoachPartnershipLead[]>([]);
   const [partnerOffers, setPartnerOffers] = useState<PartnerOfferSummary[]>([]);
   const [partnerRedemptions, setPartnerRedemptions] = useState<PartnerRedemptionSummary[]>([]);
   const [partnerCoreSnapshot, setPartnerCoreSnapshot] = useState<PartnerCoreAdminSnapshot>(emptyPartnerCoreSnapshot);
@@ -359,7 +362,7 @@ export function AdminConsole({ section }: { section: AdminSection }) {
       }
 
       if (section === "partners") {
-        const [nextPartnerPrograms, nextPartnerOffers, nextPartnerRedemptions, nextPartnerCoreSnapshot] = await Promise.all([
+        const [nextPartnerPrograms, nextPartnerOffers, nextPartnerRedemptions, nextPartnerCoreSnapshot, nextCoachApplications] = await Promise.all([
           adminApi.partnerPrograms(),
           adminApi.partnerOffers(),
           adminApi.partnerRedemptions(),
@@ -367,12 +370,14 @@ export function AdminConsole({ section }: { section: AdminSection }) {
             ...emptyPartnerCoreSnapshot,
             configured: true,
             error: reason instanceof Error ? reason.message : "Partner Core недоступен"
-          }))
+          })),
+          adminApi.coachApplications()
         ]);
         setPartnerPrograms(nextPartnerPrograms);
         setPartnerOffers(nextPartnerOffers);
         setPartnerRedemptions(nextPartnerRedemptions);
         setPartnerCoreSnapshot(nextPartnerCoreSnapshot);
+        setCoachApplications(nextCoachApplications);
       }
 
       if (section === "system") {
@@ -1011,6 +1016,20 @@ export function AdminConsole({ section }: { section: AdminSection }) {
     );
   }
 
+  async function setCoachApplicationStatus(id: string, status: CoachPartnershipLeadStatus) {
+    setLoading(true);
+    setMessage("");
+    try {
+      const updated = await adminApi.setCoachApplicationStatus(id, status);
+      setCoachApplications((items) => items.map((item) => item.id === id ? updated : item));
+      setMessage("Статус заявки обновлён");
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "Не удалось обновить заявку");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <main className="admin-console-shell">
       <aside className="admin-console-sidebar">
@@ -1488,6 +1507,7 @@ export function AdminConsole({ section }: { section: AdminSection }) {
                 <p className="muted">Настройте условия программы, управляйте партнёрами и проверяйте предложения. Данные общей партнёрской системы синхронизируются автоматически.</p>
               </div>
               <div className="row admin-partner-toolbar-actions">
+                <Link className="button secondary" href="/coaches" target="_blank">Открыть страницу для коучей</Link>
                 <Link className="button secondary" href="/partners" target="_blank">Открыть кабинет партнёра</Link>
                 <button className="button secondary" onClick={syncPartnerOffers}>Синхронизировать</button>
               </div>
@@ -1505,6 +1525,7 @@ export function AdminConsole({ section }: { section: AdminSection }) {
             <nav className="admin-partner-tabs" aria-label="Управление партнёрской программой">
               {([
                 ["overview", "Обзор"],
+                ["applications", "Заявки коучей"],
                 ["partners", "Партнёры"],
                 ["program", "Условия программы"],
                 ["offers", "Предложения"],
@@ -1517,6 +1538,7 @@ export function AdminConsole({ section }: { section: AdminSection }) {
             {partnerAdminView === "overview" && <>
               <div className="grid grid-3">
                 <AdminMiniMetric label="Партнёры" value={partnerCoreSnapshot.partners.length} />
+                <AdminMiniMetric label="Новые заявки" value={coachApplications.filter((item) => item.status === "NEW").length} />
                 <AdminMiniMetric label="Конверсии" value={partnerConversions} />
                 <AdminMiniMetric label="Начисления" value={formatPartnerMoney(partnerLedgerRevenueCents)} />
                 <AdminMiniMetric label="Программы" value={partnerCoreSnapshot.programs.length} />
@@ -1531,11 +1553,34 @@ export function AdminConsole({ section }: { section: AdminSection }) {
                 </div>
                 <div className="admin-partner-next-list">
                   <button onClick={() => setPartnerAdminView("program")} type="button"><strong>1. Условия</strong><span>Бонус пользователю и комиссия партнёру</span></button>
-                  <button onClick={() => setPartnerAdminView("partners")} type="button"><strong>2. Партнёры</strong><span>Доступ и текущие результаты</span></button>
-                  <button onClick={() => setPartnerAdminView("offers")} type="button"><strong>3. Предложения</strong><span>Создание и отправка на проверку</span></button>
+                  <button onClick={() => setPartnerAdminView("applications")} type="button"><strong>2. Заявки коучей</strong><span>Новые кандидаты с публичной страницы</span></button>
+                  <button onClick={() => setPartnerAdminView("partners")} type="button"><strong>3. Партнёры</strong><span>Доступ и текущие результаты</span></button>
+                  <button onClick={() => setPartnerAdminView("offers")} type="button"><strong>4. Предложения</strong><span>Создание и отправка на проверку</span></button>
                 </div>
               </div>
             </>}
+
+            {partnerAdminView === "applications" && <div className="stack admin-partner-view">
+              <div>
+                <h3>Заявки коучей</h3>
+                <p className="muted">Лиды с закрытой страницы `/coaches`. Одобрение заявки не создаёт партнёра автоматически: аккаунт оформляется в Partner Core после согласования.</p>
+              </div>
+              <div className="admin-program-list">
+                {coachApplications.length === 0 ? <p className="muted">Заявок пока нет</p> : coachApplications.map((application) => (
+                  <div className="admin-program-row" key={application.id}>
+                    <div>
+                      <strong>{application.fullName} · {coachApplicationStatusLabel(application.status)}</strong>
+                      <span>{application.email}{application.telegram ? ` · ${application.telegram}` : ""}{application.city ? ` · ${application.city}` : ""}</span>
+                      <span>Формат: {coachPracticeFormatLabel(application.practiceFormat)} · опыт {application.experienceYears ?? "—"} · клиентов {application.activeClients ?? "—"}</span>
+                      <span>Интересы: {application.interests.map(coachInterestLabel).join(", ")}</span>
+                      {application.message && <span>Комментарий: {application.message}</span>}
+                      <span>Материал: {application.materialOpenedAt ? `открыт ${formatAdminDate(application.materialOpenedAt)}` : "не открыт"} · письмо {coachDeliveryStatusLabel(application.applicantEmailStatus)} · {formatAdminDate(application.createdAt)}</span>
+                    </div>
+                    <label className="admin-field admin-compact-field"><span>Статус</span><select className="input" value={application.status} onChange={(event) => void setCoachApplicationStatus(application.id, event.target.value as CoachPartnershipLeadStatus)} disabled={loading}><option value="NEW">Новая</option><option value="CONTACTED">Связались</option><option value="APPROVED">Одобрена</option><option value="REJECTED">Отклонена</option></select></label>
+                  </div>
+                ))}
+              </div>
+            </div>}
 
             {partnerAdminView === "partners" && <div className="stack admin-partner-view">
               <div>
@@ -1792,6 +1837,24 @@ function partnerAdminStatusLabel(status?: string | null) {
   };
   const normalized = String(status ?? "").toUpperCase();
   return labels[normalized] ?? status ?? "Не указан";
+}
+
+function coachApplicationStatusLabel(status: CoachPartnershipLeadStatus) {
+  return ({ NEW: "Новая", CONTACTED: "Связались", APPROVED: "Одобрена", REJECTED: "Отклонена" } as const)[status];
+}
+
+function coachPracticeFormatLabel(format: string) {
+  return ({ individual: "Индивидуальная работа", groups: "Группы", corporate: "Корпоративный", education: "Обучение", mixed: "Смешанный" } as Record<string, string>)[format] ?? format;
+}
+
+function coachInterestLabel(interest: string) {
+  return ({ wholesale: "Пакеты", referral: "Рекомендации", marketplace: "Витрина", white_label: "White Label", personal: "Личное сопровождение" } as Record<string, string>)[interest] ?? interest;
+}
+
+function coachDeliveryStatusLabel(status: string) {
+  if (status === "SENT") return "отправлено";
+  if (status === "FAILED") return "ошибка отправки";
+  return "ожидает отправки";
 }
 
 function partnerBonusLabel(type: string, value?: number | null) {

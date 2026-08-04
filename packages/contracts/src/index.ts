@@ -423,6 +423,66 @@ export type PartnerPortalOffer = Record<string, unknown>;
 export type PartnerPortalLedgerResponse = Record<string, unknown>;
 export type PartnerPortalPayoutsResponse = Record<string, unknown>;
 
+export type CoachPartnershipInterest = "wholesale" | "referral" | "marketplace" | "white_label" | "personal";
+
+export type CoachPartnershipApplicationInput = {
+  fullName: string;
+  email: string;
+  telegram?: string;
+  city?: string;
+  practiceFormat: "individual" | "groups" | "corporate" | "education" | "mixed";
+  experienceYears?: number;
+  activeClients?: number;
+  interests: CoachPartnershipInterest[];
+  message?: string;
+  consent: true;
+  idempotencyKey: string;
+  website?: string;
+};
+
+export type CoachPartnershipApplicationResponse = {
+  applicationId: string;
+  status: "received";
+  materialDelivery: "sent" | "manual_follow_up";
+};
+
+export type CoachPartnershipMaterial = {
+  version: string;
+  title: string;
+  expiresAt: string;
+  intro: string;
+  wholesale: Array<{ product: string; retail: string; partnerPrice: string }>;
+  referral: { rate: string; basis: string; duration: string; payoutRule: string };
+  personal: { rate: string; standardSlotLimit: string; workloadRule: string };
+  visibilityRules: string[];
+  onboardingSteps: string[];
+  legalNotes: string[];
+  partnerPortalUrl: string;
+  supportEmail: string;
+};
+
+export type CoachPartnershipLeadStatus = "NEW" | "CONTACTED" | "APPROVED" | "REJECTED";
+
+export type AdminCoachPartnershipLead = {
+  id: string;
+  fullName: string;
+  email: string;
+  telegram?: string | null;
+  city?: string | null;
+  practiceFormat: string;
+  experienceYears?: number | null;
+  activeClients?: number | null;
+  interests: CoachPartnershipInterest[];
+  message?: string | null;
+  status: CoachPartnershipLeadStatus;
+  materialOpenedAt?: string | null;
+  materialExpiresAt: string;
+  applicantEmailStatus: string;
+  teamNotificationStatus: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type PartnerCoreAdminPartner = {
   id: string;
   account_type?: string | null;

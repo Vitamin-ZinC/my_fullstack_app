@@ -1,8 +1,13 @@
 import type {
   AdminGiftDaysResponse,
+  AdminCoachPartnershipLead,
   AdminStats,
   AdminUserSummary,
   AudioSuitabilityResponse,
+  CoachPartnershipApplicationInput,
+  CoachPartnershipApplicationResponse,
+  CoachPartnershipLeadStatus,
+  CoachPartnershipMaterial,
   AppSetting,
   AuthResult,
   AuthSessionResponse,
@@ -622,6 +627,14 @@ export const partnerPortalApi = {
   payouts: () => request<{ payouts: PartnerPortalPayoutsResponse }>("/api/partners/portal/payouts")
 };
 
+export const coachPartnershipApi = {
+  apply: (payload: CoachPartnershipApplicationInput) => request<CoachPartnershipApplicationResponse>("/api/coaches/applications", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  }),
+  material: (token: string) => request<CoachPartnershipMaterial>(`/api/coaches/material/${encodeURIComponent(token)}`)
+};
+
 export async function uploadMedia(uploadUrl: string, blob: Blob) {
   const res = await fetch(uploadUrl, {
     method: "PUT",
@@ -746,6 +759,11 @@ export const adminApi = {
     body: JSON.stringify({ active })
   }),
   partnerPrograms: () => adminRequest<PartnerAffiliateProgramSummary[]>("/api/admin/partner-programs"),
+  coachApplications: () => adminRequest<AdminCoachPartnershipLead[]>("/api/admin/coach-applications"),
+  setCoachApplicationStatus: (id: string, status: CoachPartnershipLeadStatus) => adminRequest<AdminCoachPartnershipLead>(`/api/admin/coach-applications/${encodeURIComponent(id)}/status`, {
+    method: "PATCH",
+    body: JSON.stringify({ status })
+  }),
   partnerCore: () => adminRequest<PartnerCoreAdminSnapshot>("/api/admin/partner-core"),
   setPartnerCorePartnerStatus: (id: string, status: "approved" | "suspended") => adminRequest<{ changed?: boolean }>(`/api/admin/partner-core/partners/${encodeURIComponent(id)}/status`, {
     method: "PATCH",

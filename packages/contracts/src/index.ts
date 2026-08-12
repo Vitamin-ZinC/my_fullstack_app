@@ -516,6 +516,8 @@ export type PartnerPortalDashboard = {
   metrics: Record<string, unknown>;
   referralLinks: Array<Record<string, unknown>>;
   offers: Array<Record<string, unknown>>;
+  registrations: Array<Record<string, unknown>>;
+  payments: Array<Record<string, unknown>>;
   leads: Array<Record<string, unknown>>;
   conversions: Array<Record<string, unknown>>;
   payouts: Record<string, unknown>;

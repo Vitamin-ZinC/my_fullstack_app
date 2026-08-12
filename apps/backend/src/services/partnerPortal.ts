@@ -307,13 +307,17 @@ export function partnerPortalReferralLink(value: unknown): CorePartnerRecord {
 export function partnerPortalDashboard(value: unknown, fallback: PartnerPortalIdentity): PartnerPortalDashboard {
   const sanitized = sanitizePartnerCorePayload(value);
   const identity = partnerPortalIdentity(sanitized, fallback) ?? fallback;
+  const registrations = arrayAt(sanitized, "registrations", "signups", "leads");
+  const payments = arrayAt(sanitized, "payments", "paidConversions", "paid_conversions", "conversions");
   return {
     partner: identity,
     metrics: recordAt(sanitized, "metrics", "summary", "stats"),
     referralLinks: arrayAt(sanitized, "referralLinks", "referral_links", "links").map(partnerPortalReferralLink),
     offers: arrayAt(sanitized, "offers", "placements", "rewardPlacements"),
-    leads: arrayAt(sanitized, "leads"),
-    conversions: arrayAt(sanitized, "conversions"),
+    registrations,
+    payments,
+    leads: registrations,
+    conversions: payments,
     payouts: recordAt(sanitized, "payouts", "payoutSummary", "payout_summary")
   };
 }

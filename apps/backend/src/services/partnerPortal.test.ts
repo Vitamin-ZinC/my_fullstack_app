@@ -269,3 +269,16 @@ test("Partner portal rewrites Core short links to the Orken referral entrypoint"
   }, { partnerCorePartnerId: "partner_123", status: "APPROVED" });
   assert.equal(dashboard.referralLinks[0]?.url, "https://orken.life/?ref=TELEGRAM-ORKEN");
 });
+
+test("Partner portal normalizes registration and payment aliases without losing legacy fields", () => {
+  const dashboard = partnerPortalDashboard({
+    partner: { id: "partner_123", status: "APPROVED" },
+    registrations: [{ id: "registration_1", customerRef: "customer_1" }],
+    payments: [{ id: "payment_1", customerRef: "customer_1", amountCents: 800, currency: "USD" }]
+  }, { partnerCorePartnerId: "partner_123", status: "APPROVED" });
+
+  assert.equal(dashboard.registrations[0]?.id, "registration_1");
+  assert.equal(dashboard.payments[0]?.id, "payment_1");
+  assert.deepEqual(dashboard.leads, dashboard.registrations);
+  assert.deepEqual(dashboard.conversions, dashboard.payments);
+});

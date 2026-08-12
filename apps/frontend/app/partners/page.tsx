@@ -8,6 +8,7 @@ import {
   CircleCheckBig,
   ClipboardList,
   Copy,
+  CreditCard,
   HandCoins,
   Info,
   Link2,
@@ -18,6 +19,7 @@ import {
   RefreshCw,
   Send,
   ShieldCheck,
+  UserPlus,
   UserRound,
   WalletCards,
   X
@@ -97,6 +99,92 @@ function textValue(value: unknown) {
   return "—";
 }
 
+function displayReference(value: unknown) {
+  const text = String(value ?? "").trim();
+  if (!text) return "Пользователь Orken";
+  if (text.includes("@") || text.length <= 24) return text;
+  return `${text.slice(0, 8)}…${text.slice(-4)}`;
+}
+
+function customerLabel(row: DataRecord) {
+  return displayReference(readValue(row, [
+    "customerName", "customer_name", "displayName", "display_name", "email", "customerEmail", "customer_email",
+    "customerRef", "customer_ref", "userRef", "user_ref", "clientRef", "client_ref", "customerId", "customer_id"
+  ]));
+}
+
+function formatPartnerDate(value: unknown) {
+  if (typeof value !== "string" && typeof value !== "number" && !(value instanceof Date)) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return textValue(value);
+  return new Intl.DateTimeFormat("ru-RU", { dateStyle: "medium", timeStyle: "short" }).format(date);
+}
+
+function currencyCode(row: DataRecord) {
+  const value = readValue(row, ["currency", "currencyCode", "currency_code"]);
+  return typeof value === "string" && /^[a-z]{3}$/i.test(value) ? value.toUpperCase() : null;
+}
+
+function formatMoney(row: DataRecord, kind: "payment" | "commission") {
+  const currency = currencyCode(row);
+  const minorKeys = kind === "payment"
+    ? ["amountCents", "amount_cents", "grossAmountCents", "gross_amount_cents", "amountMinor", "amount_minor"]
+    : ["commissionCents", "commission_cents", "rewardCents", "reward_cents", "commissionMinor", "commission_minor"];
+  const regularKeys = kind === "payment"
+    ? ["amount", "amountText", "amount_text", "grossAmount", "gross_amount"]
+    : ["commission", "commissionAmount", "commission_amount", "reward", "rewardAmount", "reward_amount"];
+  const minorValue = readValue(row, minorKeys);
+  if (typeof minorValue === "number" && Number.isFinite(minorValue)) {
+    if (!currency) return `${new Intl.NumberFormat("ru-RU").format(minorValue)} в мин. ед.`;
+    return new Intl.NumberFormat("ru-RU", { style: "currency", currency }).format(minorValue / 100);
+  }
+  const value = readValue(row, regularKeys);
+  if (typeof value === "number" && Number.isFinite(value) && currency) {
+    return new Intl.NumberFormat("ru-RU", { style: "currency", currency }).format(value);
+  }
+  return textValue(value);
+}
+
+function sourceLabel(row: DataRecord) {
+  return textValue(readValue(row, ["campaign", "channel", "source", "referralCode", "referral_code", "linkName", "link_name"]));
+}
+
+function registrationDate(row: DataRecord) {
+  return formatPartnerDate(readValue(row, ["registeredAt", "registered_at", "signupAt", "signup_at", "occurredAt", "occurred_at", "createdAt", "created_at", "date"]));
+}
+
+function paymentDate(row: DataRecord) {
+  return formatPartnerDate(readValue(row, ["paidAt", "paid_at", "conversionAt", "conversion_at", "occurredAt", "occurred_at", "createdAt", "created_at", "date"]));
+}
+
+function registrationMatchKeys(row: DataRecord) {
+  const keys = new Set<string>();
+  for (const key of ["customerRef", "customer_ref", "userRef", "user_ref", "clientRef", "client_ref", "customerId", "customer_id", "userId", "user_id"]) {
+    const value = row[key];
+    if (typeof value === "string" && value) keys.add(`customer:${value}`);
+  }
+  const id = readValue(row, ["registrationId", "registration_id", "leadId", "lead_id", "id"]);
+  if (typeof id === "string" && id) keys.add(`registration:${id}`);
+  return keys;
+}
+
+function paymentMatchKeys(row: DataRecord) {
+  const keys = new Set<string>();
+  for (const key of ["customerRef", "customer_ref", "userRef", "user_ref", "clientRef", "client_ref", "customerId", "customer_id", "userId", "user_id"]) {
+    const value = row[key];
+    if (typeof value === "string" && value) keys.add(`customer:${value}`);
+  }
+  const registrationId = readValue(row, ["registrationId", "registration_id", "leadId", "lead_id"]);
+  if (typeof registrationId === "string" && registrationId) keys.add(`registration:${registrationId}`);
+  return keys;
+}
+
+function findRegistrationPayment(registration: DataRecord, payments: DataRecord[]) {
+  const registrationKeys = registrationMatchKeys(registration);
+  if (registrationKeys.size === 0) return null;
+  return payments.find((payment) => [...paymentMatchKeys(payment)].some((key) => registrationKeys.has(key))) ?? null;
+}
+
 function rowTitle(row: DataRecord) {
   return textValue(readValue(row, ["title", "offer", "name", "label", "channel", "id"]));
 }
@@ -151,15 +239,27 @@ function rowId(row: DataRecord) {
 function statusCopy(status: string) {
   const normalized = status.toUpperCase();
   if (normalized === "APPROVED" || normalized === "PUBLISHED") return { label: "Одобрено", tone: "approved" };
+  if (normalized === "REGISTERED") return { label: "Зарегистрирован", tone: "approved" };
+  if (["SUCCEEDED", "COMPLETED", "CONFIRMED", "CONVERTED"].includes(normalized)) return { label: "Подтверждено", tone: "approved" };
   if (normalized === "ACTIVE") return { label: "Активна", tone: "approved" };
   if (normalized === "PAID") return { label: "Выплачено", tone: "approved" };
   if (normalized === "AVAILABLE") return { label: "Доступно", tone: "approved" };
   if (normalized === "NEW") return { label: "Новый", tone: "pending" };
   if (normalized === "PENDING" || normalized === "PROCESSING") return { label: "Ожидает", tone: "pending" };
   if (normalized === "REJECTED") return { label: "Нужны изменения", tone: "rejected" };
+  if (normalized === "REFUNDED" || normalized === "REVERSED") return { label: "Возврат", tone: "rejected" };
+  if (["FAILED", "CANCELLED", "CANCELED"].includes(normalized)) return { label: "Не завершено", tone: "rejected" };
   if (normalized === "SUSPENDED") return { label: "Доступ приостановлен", tone: "suspended" };
   if (normalized === "DRAFT") return { label: "Черновик", tone: "draft" };
   return { label: "На проверке", tone: "pending" };
+}
+
+function paymentStatusCopy(status: string) {
+  const normalized = status.toUpperCase();
+  if (["PAID", "SUCCEEDED", "COMPLETED", "CONFIRMED", "CONVERTED"].includes(normalized)) {
+    return { label: "Оплачено", tone: "approved" };
+  }
+  return statusCopy(status);
 }
 
 function metricsFromDashboard(dashboard: PartnerPortalDashboard | null) {
@@ -595,9 +695,11 @@ function OffersSection({ offers, form, setForm, editingOfferId, submitting, onSa
 }
 
 function ActivitySection({ dashboard }: { dashboard: PartnerPortalDashboard | null }) {
+  const registrationRows = dashboard?.registrations ?? dashboard?.leads ?? [];
+  const paymentRows = dashboard?.payments ?? dashboard?.conversions ?? [];
   const clicks = readValue(dashboard?.metrics ?? {}, ["clicks", "linkClicks", "link_clicks"]);
-  const registrations = readValue(dashboard?.metrics ?? {}, ["signups", "registrations", "leads"]);
-  const payments = readValue(dashboard?.metrics ?? {}, ["paidConversions", "paid_conversions", "payments", "conversions"]);
+  const registrations = readValue(dashboard?.metrics ?? {}, ["signups", "registrations", "leads"]) ?? registrationRows.length;
+  const payments = readValue(dashboard?.metrics ?? {}, ["paidConversions", "paid_conversions", "payments", "conversions"]) ?? paymentRows.length;
   return <div className="partner-section-stack">
     <section className="partner-panel">
       <div className="partner-panel-head"><div><h2>Путь пользователя</h2><p>Здесь видно, сколько людей перешло по ссылке, зарегистрировалось и оплатило продукт Orken.</p></div></div>
@@ -609,9 +711,59 @@ function ActivitySection({ dashboard }: { dashboard: PartnerPortalDashboard | nu
         <span><small>3. Оплатили</small><strong>{textValue(payments)}</strong></span>
       </div>
     </section>
-    <DataSection title="Новые пользователи" subtitle="Регистрации, пришедшие по вашим партнёрским ссылкам." rows={dashboard?.leads ?? []} />
-    <DataSection title="Оплаты" subtitle="Подтверждённые оплаты и другие целевые действия." rows={dashboard?.conversions ?? []} />
+    <RegistrationsTable registrations={registrationRows} payments={paymentRows} />
+    <PaymentsTable payments={paymentRows} />
   </div>;
+}
+
+function RegistrationsTable({ registrations, payments }: { registrations: DataRecord[]; payments: DataRecord[] }) {
+  return <section className="partner-panel">
+    <div className="partner-panel-head">
+      <div><h2>Регистрации</h2><p>Пользователи, которые зарегистрировались после перехода по вашим ссылкам.</p></div>
+      <span className="partner-count-badge"><UserPlus size={14} />{registrations.length}</span>
+    </div>
+    {registrations.length === 0 ? <EmptyState text="Регистраций по вашим ссылкам пока нет." /> : <div className="partner-data-table-wrap">
+      <table className="partner-data-table">
+        <thead><tr><th>Пользователь</th><th>Дата регистрации</th><th>Источник</th><th>Оплата</th></tr></thead>
+        <tbody>{registrations.map((registration, index) => {
+          const payment = findRegistrationPayment(registration, payments);
+          const paymentStatus = payment ? paymentStatusCopy(rowStatus(payment)) : null;
+          return <tr key={rowId(registration) ?? index}>
+            <td data-label="Пользователь"><strong>{customerLabel(registration)}</strong></td>
+            <td data-label="Дата регистрации">{registrationDate(registration)}</td>
+            <td data-label="Источник">{sourceLabel(registration)}</td>
+            <td data-label="Оплата">{paymentStatus
+              ? <span className={`partner-status ${paymentStatus.tone}`}>{paymentStatus.label}</span>
+              : <span className="partner-payment-unmatched">Не зафиксирована</span>}</td>
+          </tr>;
+        })}</tbody>
+      </table>
+    </div>}
+  </section>;
+}
+
+function PaymentsTable({ payments }: { payments: DataRecord[] }) {
+  return <section className="partner-panel">
+    <div className="partner-panel-head">
+      <div><h2>Оплаты</h2><p>Оплаты привлечённых пользователей и начисленная по ним комиссия.</p></div>
+      <span className="partner-count-badge"><CreditCard size={14} />{payments.length}</span>
+    </div>
+    {payments.length === 0 ? <EmptyState text="Оплат привлечённых пользователей пока нет." /> : <div className="partner-data-table-wrap">
+      <table className="partner-data-table">
+        <thead><tr><th>Пользователь</th><th>Дата оплаты</th><th>Сумма</th><th>Комиссия</th><th>Статус</th></tr></thead>
+        <tbody>{payments.map((payment, index) => {
+          const status = paymentStatusCopy(rowStatus(payment));
+          return <tr key={rowId(payment) ?? index}>
+            <td data-label="Пользователь"><strong>{customerLabel(payment)}</strong></td>
+            <td data-label="Дата оплаты">{paymentDate(payment)}</td>
+            <td data-label="Сумма">{formatMoney(payment, "payment")}</td>
+            <td data-label="Комиссия">{formatMoney(payment, "commission")}</td>
+            <td data-label="Статус"><span className={`partner-status ${status.tone}`}>{status.label}</span></td>
+          </tr>;
+        })}</tbody>
+      </table>
+    </div>}
+  </section>;
 }
 
 function FinancesSection({ ledger, payouts, dashboard }: { ledger: DataRecord[]; payouts: DataRecord[]; dashboard: PartnerPortalDashboard | null }) {

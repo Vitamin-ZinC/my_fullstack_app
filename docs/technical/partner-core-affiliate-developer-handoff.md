@@ -142,10 +142,18 @@ fields and accepts either camelCase or snake_case names:
   },
   "referralLinks": [],
   "offers": [],
-  "leads": [],
-  "conversions": []
+  "registrations": [],
+  "payments": []
 }
 ```
+
+For backward compatibility Orken also accepts `leads` instead of
+`registrations` and `conversions` instead of `payments`. Registration rows should
+include a stable customer reference, registration timestamp, referral
+code/campaign and status. Payment rows should include the same customer
+reference, payment timestamp, amount in explicit minor units, currency,
+commission in explicit minor units and status. Do not include bank details,
+credentials or cross-project customer activity.
 
 Amounts must have an explicit currency or documented minor-unit convention.
 Ledger and payout responses must not contain payout credentials or banking data.

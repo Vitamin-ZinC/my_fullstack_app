@@ -128,6 +128,59 @@ test("partner referral is captured before leaving the landing", async ({ page })
   await expect.poll(() => page.evaluate(() => window.localStorage.getItem("orken_referral_code"))).toBe("COACH-AUDIT-2026");
 });
 
+test("partner cabinet shows attributed registrations and their payments on mobile", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.route(`${apiBase}/api/partners/portal/me`, async (route) => fulfillJson(route, {
+    partner: {
+      partnerCorePartnerId: "partner-coach-1",
+      status: "APPROVED",
+      displayName: "Анна",
+      accountName: "Практика Анны",
+      email: "coach@example.com"
+    },
+    expiresAt: "2026-08-13T10:00:00.000Z"
+  }));
+  await page.route(`${apiBase}/api/partners/portal/dashboard`, async (route) => fulfillJson(route, {
+    partner: { partnerCorePartnerId: "partner-coach-1", status: "APPROVED" },
+    metrics: { clicks: 15, registrations: 1, payments: 1 },
+    referralLinks: [],
+    offers: [],
+    registrations: [{
+      id: "registration-1",
+      customerRef: "client@example.com",
+      registeredAt: "2026-08-11T10:00:00.000Z",
+      campaign: "Telegram август",
+      status: "REGISTERED"
+    }],
+    payments: [{
+      id: "payment-1",
+      customerRef: "client@example.com",
+      paidAt: "2026-08-12T09:30:00.000Z",
+      amountCents: 800,
+      commissionCents: 80,
+      currency: "USD",
+      status: "SUCCEEDED"
+    }],
+    leads: [],
+    conversions: [],
+    payouts: {}
+  }));
+  await page.route(`${apiBase}/api/partners/portal/ledger`, async (route) => fulfillJson(route, { ledger: [] }));
+  await page.route(`${apiBase}/api/partners/portal/payouts`, async (route) => fulfillJson(route, { payouts: [] }));
+
+  await page.goto(`${appBase}/partners`);
+  await page.getByRole("button", { name: "Результаты", exact: true }).click();
+
+  await expect(page.getByRole("heading", { name: "Регистрации" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Оплаты" })).toBeVisible();
+  await expect(page.getByText("client@example.com")).toHaveCount(2);
+  await expect(page.getByText("Telegram август")).toBeVisible();
+  await expect(page.getByText("8,00 $")).toBeVisible();
+  await expect(page.getByText("0,80 $")).toBeVisible();
+  await expect(page.getByText("Оплачено")).toHaveCount(2);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
 test("voice flow renews an expired guest session before recording", async ({ page }) => {
   let analysisRequests = 0;
   let guestRequests = 0;

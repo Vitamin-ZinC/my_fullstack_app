@@ -14,6 +14,7 @@ export type PartnerPortalSessionContext = {
   partnerStatus: string;
   displayName: string | null;
   accountName: string | null;
+  email: string | null;
   expiresAt: Date;
   coreSessionToken: string;
 };
@@ -103,8 +104,8 @@ export function partnerPortalIdentity(value: unknown, fallback?: Partial<Partner
   };
 }
 
-export function portalIdentityFromAuth(value: PartnerCorePortalSessionResponse) {
-  const identity = partnerPortalIdentity(value);
+export function portalIdentityFromAuth(value: PartnerCorePortalSessionResponse, fallback?: Partial<PartnerPortalIdentity>) {
+  const identity = partnerPortalIdentity(value, fallback);
   if (!identity || !value.sessionToken?.trim()) throw new Error("Partner Core response is missing a portal session");
   return { identity, expiresAt: resolveExpiry(value) };
 }
@@ -138,8 +139,20 @@ export function clearPartnerPortalCookies(reply: FastifyReply) {
   reply.clearCookie(PARTNER_PORTAL_CSRF_COOKIE, clearCookieOptions());
 }
 
-export async function createPartnerPortalSession(coreSession: PartnerCorePortalSessionResponse) {
-  const { identity, expiresAt } = portalIdentityFromAuth(coreSession);
+export async function createPartnerPortalSession(coreSession: PartnerCorePortalSessionResponse, fallback?: Partial<PartnerPortalIdentity>) {
+  const resolved = portalIdentityFromAuth(coreSession, fallback);
+  const previous = await prisma.partnerPortalSession.findFirst({
+    where: { partnerCorePartnerId: resolved.identity.partnerCorePartnerId },
+    orderBy: { createdAt: "desc" },
+    select: { displayName: true, accountName: true, email: true }
+  });
+  const identity: PartnerPortalIdentity = {
+    ...resolved.identity,
+    displayName: firstString(fallback?.displayName, previous?.displayName, resolved.identity.displayName),
+    accountName: firstString(fallback?.accountName, previous?.accountName, resolved.identity.accountName),
+    email: firstString(fallback?.email, previous?.email, resolved.identity.email)
+  };
+  const { expiresAt } = resolved;
   const rawSessionToken = randomBytes(32).toString("base64url");
   await prisma.partnerPortalSession.create({
     data: {
@@ -149,6 +162,7 @@ export async function createPartnerPortalSession(coreSession: PartnerCorePortalS
       partnerStatus: identity.status,
       displayName: identity.displayName ?? null,
       accountName: identity.accountName ?? null,
+      email: identity.email ?? null,
       expiresAt
     }
   });
@@ -175,6 +189,7 @@ export async function getPartnerPortalSession(request: FastifyRequest): Promise<
       partnerStatus: session.partnerStatus,
       displayName: session.displayName,
       accountName: session.accountName,
+      email: session.email,
       expiresAt: session.expiresAt,
       coreSessionToken
     };
@@ -195,7 +210,8 @@ export async function refreshPartnerPortalIdentity(sessionId: string, identity: 
       partnerCorePartnerId: identity.partnerCorePartnerId,
       partnerStatus: identity.status,
       displayName: identity.displayName ?? null,
-      accountName: identity.accountName ?? null
+      accountName: identity.accountName ?? null,
+      ...(identity.email ? { email: identity.email } : {})
     }
   });
 }
@@ -205,7 +221,8 @@ export function sessionIdentity(session: PartnerPortalSessionContext): PartnerPo
     partnerCorePartnerId: session.partnerCorePartnerId,
     status: session.partnerStatus,
     displayName: session.displayName,
-    accountName: session.accountName
+    accountName: session.accountName,
+    email: session.email
   };
 }
 

@@ -156,7 +156,11 @@ export async function partnerRoutes(app: FastifyInstance) {
         idempotencyKey: `partner-register:${body.idempotencyKey}`,
         clientRef: partnerPortalClientRef(request)
       });
-      const portalSession = await createPartnerPortalSession(coreSession);
+      const portalSession = await createPartnerPortalSession(coreSession, {
+        displayName: body.displayName,
+        accountName: body.accountName,
+        email: body.email
+      });
       setPartnerPortalCookies(reply, portalSession.rawSessionToken, portalSession.expiresAt);
       return { partner: portalSession.identity, expiresAt: portalSession.expiresAt.toISOString() };
     } catch (error) {
@@ -172,7 +176,7 @@ export async function partnerRoutes(app: FastifyInstance) {
     const body = partnerPortalLoginSchema.parse(request.body ?? {});
     try {
       const coreSession = await loginPartnerCorePortal({ ...body, clientRef: partnerPortalClientRef(request) });
-      const portalSession = await createPartnerPortalSession(coreSession);
+      const portalSession = await createPartnerPortalSession(coreSession, { email: body.email });
       setPartnerPortalCookies(reply, portalSession.rawSessionToken, portalSession.expiresAt);
       return { partner: portalSession.identity, expiresAt: portalSession.expiresAt.toISOString() };
     } catch (error) {

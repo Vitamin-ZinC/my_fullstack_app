@@ -450,6 +450,7 @@ model PartnerPortalSession {
   partnerStatus         String
   displayName           String?
   accountName           String?
+  email                 String?
   expiresAt             DateTime
   revokedAt             DateTime?
   lastSeenAt            DateTime?

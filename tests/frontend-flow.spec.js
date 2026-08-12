@@ -1,8 +1,8 @@
 const { test, expect } = require("@playwright/test");
 const path = require("node:path");
 
-const apiBase = "http://localhost:3001";
-const appBase = "http://localhost:3000";
+const apiBase = process.env.E2E_API_BASE ?? "http://localhost:3001";
+const appBase = process.env.E2E_APP_BASE ?? "http://localhost:3000";
 const testPhotoPath = path.join(__dirname, "..", "assets", "ikigai-cones.jpg");
 const corsHeaders = {
   "access-control-allow-origin": appBase,
@@ -114,6 +114,18 @@ test.use({
   launchOptions: {
     args: ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream"]
   }
+});
+
+test("partner referral is captured before leaving the landing", async ({ page }) => {
+  await page.route(`${apiBase}/api/content/ru`, async (route) => fulfillJson(route, { locale: "ru", value: null }));
+  await page.goto(`${appBase}/?ref=COACH-AUDIT-2026`);
+
+  await expect.poll(() => page.evaluate(() => window.localStorage.getItem("orken_referral_code"))).toBe("COACH-AUDIT-2026");
+  await expect(page).toHaveURL(`${appBase}/`);
+
+  await page.getByRole("link", { name: "Пройти диагностику" }).first().click();
+  await expect(page).toHaveURL(/\/flow\/voice$/);
+  await expect.poll(() => page.evaluate(() => window.localStorage.getItem("orken_referral_code"))).toBe("COACH-AUDIT-2026");
 });
 
 test("ORKEN.LIFE frontend flow works with mocked backend", async ({ page }) => {

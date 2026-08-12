@@ -226,6 +226,12 @@ export default function PartnersPage() {
   const status = statusCopy(identity?.status ?? "PENDING_REVIEW");
   const metrics = useMemo(() => metricsFromDashboard(dashboard), [dashboard]);
 
+  const navigate = useCallback((nextTab: Tab) => {
+    setTab(nextTab);
+    setError("");
+    setNotice("");
+  }, []);
+
   async function submitAuth(event: React.FormEvent) {
     event.preventDefault();
     setSubmitting(true);
@@ -407,7 +413,7 @@ export default function PartnersPage() {
         <nav className="partner-nav" aria-label="Разделы кабинета">
           {tabs.map((item) => {
             const Icon = item.icon;
-            return <button className={tab === item.id ? "active" : ""} key={item.id} onClick={() => setTab(item.id)} type="button"><Icon size={17} />{item.label}</button>;
+            return <button className={tab === item.id ? "active" : ""} key={item.id} onClick={() => navigate(item.id)} type="button"><Icon size={17} />{item.label}</button>;
           })}
         </nav>
         <button className="partner-logout" onClick={logout} disabled={submitting} type="button"><LogOut size={16} />Выйти</button>
@@ -427,7 +433,7 @@ export default function PartnersPage() {
         {notice && <p className="partner-notice"><CheckCircle2 size={17} />{notice}</p>}
         {identity && status.tone !== "approved" && <section className={`partner-review-banner ${status.tone}`}><ShieldCheck size={20} /><div><strong>{status.label}</strong><span>{status.tone === "rejected" ? "Проверьте комментарии модератора и обновите предложение перед повторной отправкой." : "Доступ к данным сохранён. Публикация ссылок и предложений станет доступна после одобрения."}</span></div></section>}
 
-        {tab === "overview" && <Overview metrics={metrics} dashboard={dashboard} onNavigate={setTab} />}
+        {tab === "overview" && <Overview metrics={metrics} dashboard={dashboard} onNavigate={navigate} />}
         {tab === "links" && <LinksSection links={dashboard?.referralLinks ?? []} linkName={linkName} setLinkName={setLinkName} submitting={submitting} onCreate={createLink} onCopy={copyLink} />}
         {tab === "offers" && <OffersSection offers={dashboard?.offers ?? []} form={offerForm} setForm={setOfferForm} editingOfferId={editingOfferId} submitting={submitting} onSave={saveOffer} onEdit={editOffer} onCancelEdit={cancelOfferEdit} onReview={submitOfferReview} />}
         {tab === "results" && <ActivitySection dashboard={dashboard} />}

@@ -196,6 +196,21 @@ test("Partner portal identity uses Core partner id and caps missing expiry safel
   assert.equal(partnerPortalIdentity({}), null);
 });
 
+test("Partner portal auth identity fills display fields that Core omits", () => {
+  const result = portalIdentityFromAuth({
+    sessionToken: "opaque-core-session",
+    partner: { id: "partner_123", status: "approved" }
+  }, {
+    displayName: "Jane Coach",
+    accountName: "Jane Practice",
+    email: "jane@example.com"
+  });
+
+  assert.equal(result.identity.displayName, "Jane Coach");
+  assert.equal(result.identity.accountName, "Jane Practice");
+  assert.equal(result.identity.email, "jane@example.com");
+});
+
 test("Partner portal payload never returns Core credentials or payout details", () => {
   const payload = sanitizePartnerCorePayload({
     partner: { id: "partner_123", displayName: "Jane" },

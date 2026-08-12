@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { BRAND_NAME } from "@/lib/messages";
+import { ReferralCapture } from "@/components/ReferralCapture";
 
 export const metadata: Metadata = {
   title: `Икигай — ${BRAND_NAME}`,
@@ -10,7 +11,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ru">
-      <body>{children}</body>
+      <body><ReferralCapture />{children}</body>
     </html>
   );
 }

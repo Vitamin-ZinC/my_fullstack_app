@@ -171,6 +171,9 @@ async function processTelegramMessage(message: TelegramMessage) {
       ].join("\n"));
       return { ok: true };
     }
+    if (token.startsWith("coach_")) {
+      return showCoachInTelegram(chatId, token.slice("coach_".length));
+    }
     return linkTelegramAccount(token, chatId, message.from);
   }
 
@@ -246,6 +249,38 @@ async function processTelegramMessage(message: TelegramMessage) {
 
   await sendTelegramMessage(chatId, await askOrkenFromTelegram(account, text || "Что мне сделать сегодня?"), await defaultKeyboard(account));
   return { ok: true };
+}
+
+async function showCoachInTelegram(chatId: string, slug: string) {
+  const coach = await prisma.coachProfile.findFirst({
+    where: { slug, status: "APPROVED" },
+    include: { serviceOffers: { where: { status: "APPROVED", paymentModel: "CLIENT_PAID" }, orderBy: { amount: "asc" }, take: 8 } }
+  });
+  if (!coach) {
+    await sendTelegramMessage(chatId, "Профиль коуча не найден или ещё проходит модерацию.");
+    return { ok: true };
+  }
+  const profileUrl = `${env.APP_ORIGIN.replace(/\/$/, "")}/coaches/${encodeURIComponent(coach.slug)}`;
+  const services = coach.serviceOffers.map((offer) => `${offer.type === "CONSULTATION" ? "Консультация" : "Ведение"}: ${offer.title} — ${formatTelegramMoney(offer.amount, offer.currency)}`);
+  await sendTelegramMessage(chatId, [
+    coach.displayName,
+    coach.headline || "Персональное сопровождение в ORKEN.LIFE",
+    coach.city ? `Город: ${coach.city}` : "",
+    "",
+    services.length ? services.join("\n") : "Опубликованных услуг пока нет.",
+    "",
+    "Оплата и запись проходят только внутри ORKEN."
+  ].filter(Boolean).join("\n"), {
+    inline_keyboard: [
+      [{ text: "Открыть профиль и услуги", url: profileUrl }],
+      [{ text: "Каталог коучей", url: `${env.APP_ORIGIN.replace(/\/$/, "")}/coaches` }]
+    ]
+  });
+  return { ok: true, coach: coach.id };
+}
+
+function formatTelegramMoney(amount: number, currency: string) {
+  return new Intl.NumberFormat("ru-RU", { style: "currency", currency: currency.toUpperCase(), maximumFractionDigits: 0 }).format(amount / 100);
 }
 
 async function linkTelegramAccount(token: string, chatId: string, from?: TelegramUser) {

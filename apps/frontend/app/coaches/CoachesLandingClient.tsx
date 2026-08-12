@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
   BadgeCheck,
@@ -23,8 +23,8 @@ import {
   Store,
   UsersRound
 } from "lucide-react";
-import type { CoachPartnershipApplicationInput, CoachPartnershipInterest } from "@levelup/contracts";
-import { coachPartnershipApi } from "@/lib/api";
+import { DEFAULT_COACH_PUBLIC_CONTENT, type CoachPartnershipApplicationInput, type CoachPartnershipInterest, type PublicCoachPlatformConfig } from "@levelup/contracts";
+import { coachCatalogApi, coachPartnershipApi } from "@/lib/api";
 import styles from "./coaches.module.css";
 
 const interestOptions: Array<{ id: CoachPartnershipInterest; label: string }> = [
@@ -98,6 +98,9 @@ export function CoachesLandingClient() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState<"sent" | "manual_follow_up" | null>(null);
+  const [platformConfig, setPlatformConfig] = useState<PublicCoachPlatformConfig | null>(null);
+  const publicContent = platformConfig?.content ?? DEFAULT_COACH_PUBLIC_CONTENT;
+  useEffect(() => { coachCatalogApi.config().then(setPlatformConfig).catch(() => setPlatformConfig(null)); }, []);
   const canSubmit = useMemo(() => (
     form.fullName.trim().length >= 2
     && form.email.includes("@")
@@ -158,12 +161,12 @@ export function CoachesLandingClient() {
       <section className={styles.hero}>
         <img className={styles.heroVisual} src="/assets/ikigai-cones-transparent.png" alt="" aria-hidden="true" />
         <div className={styles.heroInner}>
-          <p className={styles.eyebrow}><Sparkles size={17} /> Партнёрская программа ORKEN</p>
-          <h1>Технология, которая продолжает вашу работу между сессиями</h1>
-          <p className={styles.heroLead}>Добавьте AI-диагностику и трекер состояний в свою практику, показывайте клиенту прогресс и развивайте новые источники дохода.</p>
+          <p className={styles.eyebrow}><Sparkles size={17} /> {publicContent.heroEyebrow}</p>
+          <h1>{publicContent.heroTitle}</h1>
+          <p className={styles.heroLead}>{publicContent.heroLead}</p>
           <div className={styles.heroActions}>
-            <a className={styles.primaryButton} href="#application">Стать партнёром <ArrowRight size={18} /></a>
-            <a className={styles.secondaryButton} href="#formats">Условия сотрудничества</a>
+            <a className={styles.primaryButton} href="#application">{publicContent.heroPrimaryCta} <ArrowRight size={18} /></a>
+            <a className={styles.secondaryButton} href="#formats">{publicContent.heroSecondaryCta}</a>
           </div>
           <div className={styles.heroProof}>
             <span><BadgeCheck size={18} /> Продукт работает между встречами</span>
@@ -171,6 +174,14 @@ export function CoachesLandingClient() {
           </div>
         </div>
       </section>
+
+      {platformConfig && <section className={styles.pricingBand}>
+        <div className={styles.sectionInner}>
+          <div className={styles.sectionHeading}><p className={styles.eyebrow}>{publicContent.pricingEyebrow}</p><h2>{publicContent.pricingTitle}</h2><p>{publicContent.pricingLead}</p></div>
+          <div className={styles.publicPricingGrid}>{platformConfig.plans.map((plan) => <article key={plan.id} className={styles.publicPriceCard}><span>{plan.includedClients ? `До ${plan.includedClients} клиентов` : "Более 30 клиентов"}</span><h3>{plan.customQuote ? "Индивидуально" : `${formatPrice(plan.amount, plan.currency)} / мес`}</h3><p>{plan.description}</p><a href="#application">Оставить заявку <ArrowRight size={16}/></a></article>)}</div>
+          <div className={styles.sitePriceGrid}>{platformConfig.sitePlans.map((plan) => <article key={plan.id}><Globe2/><div><strong>{plan.name}</strong><span>{formatPrice(plan.setupAmount, plan.currency)} разово + {formatPrice(plan.monthlySupportAmount, plan.currency)}/мес</span></div></article>)}</div>
+        </div>
+      </section>}
 
       <section className={styles.problemBand}>
         <div className={styles.sectionInner}>
@@ -265,9 +276,9 @@ export function CoachesLandingClient() {
       <section className={styles.applicationBand} id="application">
         <div className={styles.applicationInner}>
           <div className={styles.applicationCopy}>
-            <p className={styles.eyebrow}>Заявка на партнёрство</p>
-            <h2>Хочу стать партнёром ORKEN</h2>
-            <p>После отправки мы пришлём закрытый материал с точной экономикой, правилами видимости и партнёрским процессом.</p>
+            <p className={styles.eyebrow}>{publicContent.applicationEyebrow}</p>
+            <h2>{publicContent.applicationTitle}</h2>
+            <p>{publicContent.applicationLead}</p>
             <ul>
               <li><Check /> Никаких публичных обещаний без соглашения</li>
               <li><Check /> Условия под ваш формат и нагрузку</li>
@@ -303,7 +314,7 @@ export function CoachesLandingClient() {
               <label className={styles.honeypot} aria-hidden="true"><span>Ваш сайт</span><input value={form.website} onChange={(event) => setForm({ ...form, website: event.target.value })} tabIndex={-1} autoComplete="off" /></label>
               <label className={styles.consent}><input type="checkbox" checked={form.consent} onChange={(event) => setForm({ ...form, consent: event.target.checked })} /><span>Я согласен(на) на обработку данных для рассмотрения заявки согласно <Link href="/privacy" target="_blank">Политике конфиденциальности</Link>.</span></label>
               {error && <p className={styles.formError} role="alert">{error}</p>}
-              <button className={styles.submitButton} type="submit" disabled={!canSubmit}>{submitting ? "Отправляем..." : "Получить условия сотрудничества"} <ArrowRight size={18} /></button>
+              <button className={styles.submitButton} type="submit" disabled={!canSubmit}>{submitting ? "Отправляем..." : publicContent.applicationSubmitLabel} <ArrowRight size={18} /></button>
               <p className={styles.formNote}>Точные ставки и коммерческие расчёты отправляются только на подтверждённый в заявке e-mail.</p>
             </form>
           )}
@@ -316,4 +327,8 @@ export function CoachesLandingClient() {
       </footer>
     </main>
   );
+}
+
+function formatPrice(amount: number, currency: string) {
+  return new Intl.NumberFormat("ru-RU", { style: "currency", currency: currency.toUpperCase(), maximumFractionDigits: 0 }).format(amount / 100);
 }

@@ -528,6 +528,309 @@ export type PartnerPortalOffer = Record<string, unknown>;
 export type PartnerPortalLedgerResponse = Record<string, unknown>;
 export type PartnerPortalPayoutsResponse = Record<string, unknown>;
 
+export type CoachProfileStatus = "DRAFT" | "PENDING_REVIEW" | "APPROVED" | "REJECTED" | "SUSPENDED";
+export type CoachClientFunding = "COACH_PAID" | "CLIENT_PAID";
+export type CoachRelationshipStatus = "PENDING" | "ACTIVE" | "PAUSED" | "ENDED";
+export type CoachServiceType = "ONGOING_SUPPORT" | "CONSULTATION";
+export type CoachServicePaymentModel = "INCLUDED" | "CLIENT_PAID";
+export type CoachOfferStatus = "DRAFT" | "PENDING_REVIEW" | "APPROVED" | "REJECTED" | "PAUSED";
+export type CoachServiceOrderStatus = "PENDING_PAYMENT" | "AWAITING_BOOKING" | "BOOKED" | "ACTIVE" | "COMPLETED" | "CANCELLED" | "REFUND_PENDING" | "REFUNDED" | "FAILED";
+
+export type CoachPlanSummary = {
+  id: string;
+  code: string;
+  name: string;
+  description?: string | null;
+  includedClients?: number | null;
+  customQuote: boolean;
+  active: boolean;
+  sortOrder: number;
+  amount: number;
+  currency: string;
+  priceVersionId?: string | null;
+  stripePriceId?: string | null;
+  overridden?: boolean;
+};
+
+export type CoachProfileSummary = {
+  id: string;
+  partnerCorePartnerId?: string;
+  slug: string;
+  displayName: string;
+  headline?: string | null;
+  bio?: string | null;
+  city?: string | null;
+  specializations: string[];
+  languages: string[];
+  avatarUrl?: string | null;
+  coverImageUrl?: string | null;
+  status: CoachProfileStatus;
+  acceptingOrders: boolean;
+  featured: boolean;
+  calendlyConnected?: boolean;
+  publicSince?: string | null;
+};
+
+export type CoachServiceOfferSummary = {
+  id: string;
+  coachProfileId: string;
+  type: CoachServiceType;
+  paymentModel: CoachServicePaymentModel;
+  title: string;
+  description: string;
+  amount: number;
+  currency: string;
+  coachShareBps?: number | null;
+  platformShareBps?: number | null;
+  calendlyEventTypeUri?: string | null;
+  calendlySchedulingUrl?: string | null;
+  status: CoachOfferStatus;
+  moderationNote?: string | null;
+};
+
+export type CoachClientSummary = {
+  relationshipId: string;
+  userId: string;
+  name?: string | null;
+  email: string;
+  avatarUrl?: string | null;
+  funding: CoachClientFunding;
+  status: CoachRelationshipStatus;
+  metricsConsent: boolean;
+  journalConsent: boolean;
+  startedAt?: string | null;
+  accessEndsAt?: string | null;
+  lastCheckinAt?: string | null;
+  weeklyAverage?: number | null;
+  latestEnergy?: number | null;
+  latestClarity?: number | null;
+  latestStability?: number | null;
+  attentionReason?: string | null;
+};
+
+export type CoachMessageSummary = {
+  id: string;
+  relationshipId: string;
+  authorRole: "COACH" | "CLIENT";
+  text: string;
+  readAt?: string | null;
+  createdAt: string;
+};
+
+export type CoachAssignmentSummary = {
+  id: string;
+  relationshipId: string;
+  title: string;
+  details: string;
+  dueAt?: string | null;
+  status: "OPEN" | "COMPLETED" | "DISMISSED";
+  completedAt?: string | null;
+  createdAt: string;
+};
+
+export type CoachHabitAssignmentSummary = {
+  id: string;
+  relationshipId: string;
+  habitDefinitionId?: string | null;
+  enrollmentId?: string | null;
+  title: string;
+  focus: string;
+  practice: string;
+  why: string;
+  startsAt: string;
+  endsAt?: string | null;
+  status: "PROPOSED" | "ACTIVE" | "DECLINED" | "COMPLETED" | "CANCELLED";
+};
+
+export type CoachMetricPoint = {
+  date: string;
+  energy: number;
+  clarity: number;
+  stability: number;
+  wellness: number;
+};
+
+export type CoachHabitCorrelation = {
+  habitTitle: string;
+  metric: "energy" | "clarity" | "stability";
+  differencePercent: number;
+  completedDays: number;
+  comparisonDays: number;
+  message: string;
+};
+
+export type CoachClientDetail = {
+  client: CoachClientSummary;
+  metrics: CoachMetricPoint[];
+  insights: HabitInsightSummary[];
+  messages: CoachMessageSummary[];
+  assignments: CoachAssignmentSummary[];
+  habitAssignments: CoachHabitAssignmentSummary[];
+  correlations: CoachHabitCorrelation[];
+};
+
+export type CoachSubscriptionSummary = {
+  id: string;
+  plan: CoachPlanSummary;
+  status: string;
+  clientLimit?: number | null;
+  coachPaidClients: number;
+  clientPaidClients: number;
+  availableSlots?: number | null;
+  currentPeriodEnd?: string | null;
+  graceEndsAt?: string | null;
+  cancelAtPeriodEnd: boolean;
+};
+
+export type CoachWorkspaceResponse = {
+  profile: CoachProfileSummary;
+  plans: CoachPlanSummary[];
+  subscription?: CoachSubscriptionSummary | null;
+  clients: CoachClientSummary[];
+  serviceOffers: CoachServiceOfferSummary[];
+  counts: { coachPaidClients: number; clientPaidClients: number; attention: number; openAssignments: number };
+  integrations: { calendly: { connected: boolean; status: string }; telegramBotUsername?: string | null };
+  sites: CoachSiteSummary[];
+  sitePlans: Array<{ id: string; code: string; name: string; setupAmount: number; monthlySupportAmount: number; currency: string }>;
+  rewards: CoachRewardSummary[];
+};
+
+export type CoachSiteSummary = {
+  id: string;
+  planCode: string;
+  planName: string;
+  setupAmount: number;
+  monthlySupportAmount: number;
+  currency: string;
+  slug: string;
+  customDomain?: string | null;
+  customDomainStatus: string;
+  status: string;
+  supportCurrentPeriodEnd?: string | null;
+  graceEndsAt?: string | null;
+  content?: Record<string, unknown>;
+  theme?: Record<string, unknown>;
+};
+
+export type CoachRewardSummary = {
+  id: string;
+  title: string;
+  description: string;
+  pointsCost: number;
+  entitlementType: string;
+  entitlementValue?: string | null;
+  status: string;
+  moderationNote?: string | null;
+};
+
+export type CoachCatalogResponse = {
+  coaches: Array<CoachProfileSummary & { services: CoachServiceOfferSummary[]; siteUrl?: string | null }>;
+  filters: { cities: string[]; specializations: string[]; languages: string[] };
+};
+
+export type CoachPublicContent = {
+  heroEyebrow: string;
+  heroTitle: string;
+  heroLead: string;
+  heroPrimaryCta: string;
+  heroSecondaryCta: string;
+  pricingEyebrow: string;
+  pricingTitle: string;
+  pricingLead: string;
+  applicationEyebrow: string;
+  applicationTitle: string;
+  applicationLead: string;
+  applicationSubmitLabel: string;
+};
+
+export const DEFAULT_COACH_PUBLIC_CONTENT: CoachPublicContent = {
+  heroEyebrow: "Партнёрская программа ORKEN",
+  heroTitle: "Технология, которая продолжает вашу работу между сессиями",
+  heroLead: "Добавьте AI-диагностику и трекер состояний в свою практику, показывайте клиенту прогресс и развивайте новые источники дохода.",
+  heroPrimaryCta: "Стать партнёром",
+  heroSecondaryCta: "Условия сотрудничества",
+  pricingEyebrow: "Тарифы платформы",
+  pricingTitle: "Пакет под текущую практику",
+  pricingLead: "Цена зависит только от числа клиентов, доступ которым оплачивает коуч. Клиенты с собственной подпиской не занимают места.",
+  applicationEyebrow: "Заявка на партнёрство",
+  applicationTitle: "Хочу стать партнёром ORKEN",
+  applicationLead: "После отправки мы пришлём закрытый материал с точной экономикой, правилами видимости и партнёрским процессом.",
+  applicationSubmitLabel: "Получить условия сотрудничества"
+};
+
+export type PublicCoachPlatformConfig = {
+  plans: CoachPlanSummary[];
+  sitePlans: Array<{ id: string; code: string; name: string; setupAmount: number; monthlySupportAmount: number; currency: string }>;
+  content: CoachPublicContent;
+};
+
+export type HabitProgressResponse = {
+  period: "days" | "weeks" | "month";
+  points: CoachMetricPoint[];
+  averages: { energy: number | null; clarity: number | null; stability: number | null; wellness: number | null };
+  habitCompletionPercent: number;
+  currentStreak: number;
+  correlations: CoachHabitCorrelation[];
+};
+
+export type HabitCoachingHubResponse = {
+  relationships: Array<{
+    coach: CoachProfileSummary;
+    relationshipId: string;
+    status: CoachRelationshipStatus;
+    funding: CoachClientFunding;
+    metricsConsent: boolean;
+    journalConsent: boolean;
+    accessEndsAt?: string | null;
+    messages: CoachMessageSummary[];
+    assignments: CoachAssignmentSummary[];
+    habitAssignments: CoachHabitAssignmentSummary[];
+    rewards: CoachRewardSummary[];
+  }>;
+  orders: Array<{
+    id: string;
+    coachProfileId: string;
+    coachName: string;
+    serviceTitle: string;
+    type: CoachServiceType;
+    status: string;
+    amount: number;
+    currency: string;
+    bookingDeadline?: string | null;
+    bookedAt?: string | null;
+  }>;
+};
+
+export type AdminCoachPlatformSnapshot = {
+  profiles: CoachProfileSummary[];
+  plans: CoachPlanSummary[];
+  sitePlans: Array<{ id: string; code: string; name: string; setupAmount: number; monthlySupportAmount: number; currency: string; active: boolean }>;
+  subscriptions: Array<{
+    id: string;
+    coach: string;
+    plan: string;
+    status: string;
+    amount: number;
+    currency: string;
+    clientLimit?: number | null;
+    currentPeriodEnd?: string | null;
+  }>;
+  orders: Array<{
+    id: string;
+    coach: string;
+    client: string;
+    service: string;
+    status: string;
+    amount: number;
+    currency: string;
+    createdAt: string;
+  }>;
+  offers: CoachServiceOfferSummary[];
+  rewardsPendingReview: CoachRewardSummary[];
+  cancellationPolicy: { hoursBeforeStart: number; refundPercent: number };
+  publicContent: CoachPublicContent;
+};
+
 export type CoachPartnershipInterest = "wholesale" | "referral" | "marketplace" | "white_label" | "personal";
 
 export type CoachPartnershipApplicationInput = {
@@ -946,6 +1249,7 @@ export type HabitMeResponse = {
   program: HabitProgramSummary | null;
   latestReport: HabitLatestReport | null;
   config: HabitConfigResponse;
+  access?: { allowed: boolean; source: "B2C" | "COACH_PACKAGE" | "COACH_SERVICE" | "EXPIRED" | "NONE"; relationshipId?: string | null };
 };
 
 export type HabitProgramResponse = {

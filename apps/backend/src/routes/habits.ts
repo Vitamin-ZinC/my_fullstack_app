@@ -16,6 +16,7 @@ import { advanceCompletedHabitWeeks, capHabitWeekCheckins, HABIT_WEEK_TARGET_CHE
 import { createImageUploadKey, readMediaAssetBuffer, writeUploadBuffer } from "../services/media.js";
 import { validatePhotoBuffer } from "../services/imageValidation.js";
 import { applyPendingReferralBonus } from "../services/partnerCore.js";
+import { resolveHabitAccessForUser } from "../services/coachPlatform.js";
 
 const stripe = env.STRIPE_SECRET_KEY ? new Stripe(env.STRIPE_SECRET_KEY) : null;
 
@@ -135,10 +136,11 @@ export async function habitsRoutes(app: FastifyInstance) {
     const session = await requireSession(request, reply);
     if (!session) return;
 
-    const [program, latestReport, config] = await Promise.all([
+    const [program, latestReport, config, access] = await Promise.all([
       findActiveProgram(session),
       findLatestReport(session),
-      getHabitSubscriptionConfig()
+      getHabitSubscriptionConfig(),
+      session.userId ? resolveHabitAccessForUser(session.userId) : Promise.resolve({ allowed: true, source: "B2C" as const })
     ]);
     const syncedProgram = program ? await ensureProgramEnrollments(program.id, program.weakZone) : null;
     let preparedProgram = syncedProgram ? await ensureProgramRuntimeArtifacts(syncedProgram.id) : null;
@@ -157,7 +159,8 @@ export async function habitsRoutes(app: FastifyInstance) {
     return {
       program: rankedProgram ? serializeProgram(rankedProgram) : null,
       latestReport,
-      config
+      config,
+      access: { allowed: access.allowed, source: access.source, relationshipId: "relationshipId" in access ? access.relationshipId : null }
     };
   });
 
@@ -753,7 +756,7 @@ export async function habitsRoutes(app: FastifyInstance) {
     const session = await requireSession(request, reply);
     if (!session) return;
     const body = subscriptionProgramSchema.parse(request.body ?? {});
-    const programAccess = await requireHabitProgram(session, reply, body.programId);
+    const programAccess = await requireHabitProgram(session, reply, body.programId, false);
     if (!programAccess) return;
 
     const [program, config] = await Promise.all([
@@ -837,7 +840,7 @@ export async function habitsRoutes(app: FastifyInstance) {
     const session = await requireSession(request, reply);
     if (!session) return;
     const body = subscriptionProgramSchema.parse(request.body ?? {});
-    const programAccess = await requireHabitProgram(session, reply, body.programId);
+    const programAccess = await requireHabitProgram(session, reply, body.programId, false);
     if (!programAccess) return;
 
     const program = await prisma.habitProgram.findUniqueOrThrow({
@@ -871,7 +874,7 @@ export async function habitsRoutes(app: FastifyInstance) {
     const session = await requireSession(request, reply);
     if (!session) return;
     const body = subscriptionProgramSchema.parse(request.body ?? {});
-    const programAccess = await requireHabitProgram(session, reply, body.programId);
+    const programAccess = await requireHabitProgram(session, reply, body.programId, false);
     if (!programAccess) return;
 
     const program = await prisma.habitProgram.findUniqueOrThrow({
@@ -1144,7 +1147,7 @@ async function findLatestReport(session: SessionContext) {
   };
 }
 
-async function requireHabitProgram(session: SessionContext, reply: { code: (statusCode: number) => { send: (payload: unknown) => void } }, programId: string) {
+async function requireHabitProgram(session: SessionContext, reply: { code: (statusCode: number) => { send: (payload: unknown) => void } }, programId: string, enforceAccess = true) {
   const program = await prisma.habitProgram.findFirst({
     where: { id: programId, ...habitProgramWhere(session) },
     select: { id: true }
@@ -1152,6 +1155,13 @@ async function requireHabitProgram(session: SessionContext, reply: { code: (stat
   if (!program) {
     reply.code(404).send({ error: "Habit program not found" });
     return null;
+  }
+  if (enforceAccess && session.userId) {
+    const access = await resolveHabitAccessForUser(session.userId);
+    if (!access.allowed) {
+      reply.code(402).send({ error: "Доступ к Навигатору завершён. Продлите подписку или подключите программу коуча." });
+      return null;
+    }
   }
   return program;
 }

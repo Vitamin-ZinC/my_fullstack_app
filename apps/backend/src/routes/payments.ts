@@ -6,6 +6,7 @@ import { requireAnalysisAccess } from "../lib/auth.js";
 import { prisma } from "../lib/prisma.js";
 import { calculatePromoDiscount, normalizePromoCode, validatePromoCode } from "../services/promoCodes.js";
 import { getReportPriceConfig } from "../services/pricing.js";
+import { handleCoachCheckoutCompleted, handleCoachInvoicePaid, handleCoachRefund, handleCoachSubscriptionLifecycle } from "../services/coachCommerce.js";
 import {
   recordPaymentConversionForPayment,
   recordPaymentConversionReversalForPayment,
@@ -462,6 +463,7 @@ export async function paymentRoutes(app: FastifyInstance) {
     }
     if (event.type === "checkout.session.completed") {
       const session = event.data.object as Stripe.Checkout.Session;
+      if (await handleCoachCheckoutCompleted(session)) return { received: true };
       if (session.metadata?.kind === "habit_subscription" && session.metadata.programId) {
         const subscriptionId = typeof session.subscription === "string" ? session.subscription : session.subscription?.id;
         const subscription = subscriptionId && stripe ? await stripe.subscriptions.retrieve(subscriptionId) : null;
@@ -540,6 +542,7 @@ export async function paymentRoutes(app: FastifyInstance) {
     }
     if (event.type === "invoice.paid" || event.type === "invoice.payment_succeeded") {
       const invoice = event.data.object as Stripe.Invoice;
+      if (await handleCoachInvoicePaid(invoice)) return { received: true };
       const invoiceAny = invoice as any;
       const subscriptionId = typeof invoiceAny.subscription === "string" ? invoiceAny.subscription : invoiceAny.subscription?.id;
       const subscription = subscriptionId && stripe ? await stripe.subscriptions.retrieve(subscriptionId).catch(() => null) : null;
@@ -563,6 +566,8 @@ export async function paymentRoutes(app: FastifyInstance) {
         const invoiceId = typeof chargeAny.invoice === "string" ? chargeAny.invoice : chargeAny.invoice?.id;
         const paymentIntentId = typeof chargeAny.payment_intent === "string" ? chargeAny.payment_intent : chargeAny.payment_intent?.id;
 
+        if (await handleCoachRefund({ paymentIntentId, invoiceId, refundId, reason })) return { received: true };
+
         if (invoiceId) {
           const invoice = stripe ? await stripe.invoices.retrieve(invoiceId).catch(() => null) : null;
           const invoiceAny = invoice as any;
@@ -580,6 +585,10 @@ export async function paymentRoutes(app: FastifyInstance) {
         }
 
         if (paymentIntentId) {
+          await prisma.coachServiceOrder.updateMany({
+            where: { stripePaymentIntentId: paymentIntentId },
+            data: { status: "REFUNDED", refundedAt: new Date() }
+          }).catch(() => undefined);
           const payment = await prisma.payment.findFirst({ where: { stripePaymentIntentId: paymentIntentId } });
           if (payment) {
             await prisma.payment.update({ where: { id: payment.id }, data: { status: "REFUNDED" } }).catch(() => undefined);
@@ -611,6 +620,7 @@ export async function paymentRoutes(app: FastifyInstance) {
     }
     if (event.type === "customer.subscription.updated" || event.type === "customer.subscription.deleted") {
       const subscription = event.data.object as Stripe.Subscription;
+      if (await handleCoachSubscriptionLifecycle(subscription, event.type === "customer.subscription.deleted")) return { received: true };
       const programId = subscription.metadata?.programId;
       const stripeSubscriptionId = subscription.id;
       const currentPeriodEnd = (subscription as any).current_period_end

@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState, type CSSProperties } from "react";
 import {
   Archive,
+  Activity,
   Bot,
   CalendarPlus,
   CheckCircle2,
@@ -12,6 +13,7 @@ import {
   Compass,
   ExternalLink,
   Save,
+  MessagesSquare,
   Trophy,
   User
 } from "lucide-react";
@@ -677,6 +679,9 @@ function HabitsContent() {
               </button>
             );
           })}
+          <Link className="habits-nav-link" href="/habits/progress"><Activity size={19} />Прогресс</Link>
+          <Link className="habits-nav-link" href="/habits/coaching"><MessagesSquare size={19} />Мой коуч</Link>
+          <Link className="habits-nav-link" href="/habits/archive"><Archive size={19} />Архив с поиском</Link>
         </nav>
         <div className="habits-sidebar-profile">
           <div className="habits-sidebar-avatar-wrap">
@@ -709,6 +714,9 @@ function HabitsContent() {
         </button>
         {showMobileMore && (
           <div className="habits-mobile-more-menu">
+            <Link className="habits-mobile-more-link" href="/habits/progress"><Activity size={18} /><span>Прогресс</span></Link>
+            <Link className="habits-mobile-more-link" href="/habits/coaching"><MessagesSquare size={18} /><span>Мой коуч</span></Link>
+            <Link className="habits-mobile-more-link" href="/habits/archive"><Archive size={18} /><span>Архив с поиском</span></Link>
             {navItems.filter((item) => !mobileNavItems.some((mobileItem) => mobileItem.id === item.id)).map((item) => (
               <button key={item.id} className={tab === item.id ? "active" : ""} type="button" title={t.habitsUx.tooltips[item.id]} onClick={() => {
                 setTab(item.id);

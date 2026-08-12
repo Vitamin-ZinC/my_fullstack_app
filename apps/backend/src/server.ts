@@ -11,6 +11,7 @@ import { authRoutes } from "./routes/auth.js";
 import { analysisRoutes } from "./routes/analyses.js";
 import { contentRoutes } from "./routes/content.js";
 import { coachRoutes } from "./routes/coaches.js";
+import { coachWorkspaceRoutes, runCoachCalendlyReconciliation } from "./routes/coachWorkspace.js";
 import { docsRoutes } from "./routes/docs.js";
 import { eventRoutes } from "./routes/events.js";
 import { habitsRoutes } from "./routes/habits.js";
@@ -19,6 +20,7 @@ import { partnerRoutes } from "./routes/partners.js";
 import { paymentRoutes } from "./routes/payments.js";
 import { telegramRoutes } from "./routes/telegram.js";
 import { telegramCommunityRoutes } from "./routes/telegramCommunity.js";
+import { runCoachCommerceMaintenance } from "./services/coachCommerce.js";
 
 const app = Fastify({
   logger: true,
@@ -60,6 +62,7 @@ app.addContentTypeParser([
 await app.register(authRoutes);
 await app.register(contentRoutes);
 await app.register(coachRoutes);
+await app.register(coachWorkspaceRoutes);
 await app.register(docsRoutes);
 await app.register(analysisRoutes);
 await app.register(paymentRoutes);
@@ -72,5 +75,13 @@ await app.register(telegramRoutes);
 await app.register(telegramCommunityRoutes);
 
 app.get("/health", async () => ({ ok: true }));
+
+const coachMaintenanceTimer = setInterval(() => {
+  void Promise.all([
+    runCoachCommerceMaintenance(),
+    runCoachCalendlyReconciliation()
+  ]).catch((error) => app.log.error({ error }, "coach platform maintenance failed"));
+}, 30 * 60 * 1000);
+coachMaintenanceTimer.unref();
 
 await app.listen({ port: env.PORT, host: "0.0.0.0" });

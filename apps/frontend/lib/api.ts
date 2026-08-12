@@ -2,6 +2,7 @@ import type {
   AdminGiftDaysResponse,
   AdminCoachPartnershipLead,
   AdminBusinessReport,
+  AdminCoachPlatformSnapshot,
   AdminStats,
   AdminUserSummary,
   AudioSuitabilityResponse,
@@ -9,6 +10,11 @@ import type {
   CoachPartnershipApplicationResponse,
   CoachPartnershipLeadStatus,
   CoachPartnershipMaterial,
+  CoachCatalogResponse,
+  CoachClientDetail,
+  CoachServiceOfferSummary,
+  CoachWorkspaceResponse,
+  PublicCoachPlatformConfig,
   AppSetting,
   AuthResult,
   AuthSessionResponse,
@@ -18,10 +24,12 @@ import type {
   FreeReportResponse,
   FullReportResponse,
   HabitConfigResponse,
+  HabitCoachingHubResponse,
   HabitMeResponse,
   HabitNavigatorResponse,
   HabitNotificationPreferenceSummary,
   HabitProgramResponse,
+  HabitProgressResponse,
   IkigaiAnswers,
   MagicLinkRequestResponse,
   MeReportSummary,
@@ -331,6 +339,30 @@ export const api = {
   habitsMe: async () => {
     await ensureGuestSession();
     return request<HabitMeResponse>("/api/habits/me");
+  },
+  habitProgress: async (period: "days" | "weeks" | "month" = "days") => {
+    await ensureGuestSession();
+    return request<HabitProgressResponse>(`/api/habits/progress?period=${encodeURIComponent(period)}`);
+  },
+  habitCoaching: async () => {
+    await ensureGuestSession();
+    return request<HabitCoachingHubResponse>("/api/habits/coaching");
+  },
+  acceptCoachInvite: async (token: string, journalConsent = false) => {
+    await ensureGuestSession();
+    return request<{ relationshipId: string; status: string }>("/api/habits/coaching/invitations/accept", { method: "POST", body: JSON.stringify({ token, metricsConsent: true, journalConsent }) });
+  },
+  updateCoachConsent: (relationshipId: string, metricsConsent: boolean, journalConsent: boolean) => request<{ relationshipId: string; metricsConsent: boolean; journalConsent: boolean }>(`/api/habits/coaching/${encodeURIComponent(relationshipId)}/consent`, { method: "PATCH", body: JSON.stringify({ metricsConsent, journalConsent }) }),
+  sendCoachMessage: (relationshipId: string, text: string) => request<{ message: unknown }>(`/api/habits/coaching/${encodeURIComponent(relationshipId)}/messages`, { method: "POST", body: JSON.stringify({ text }) }),
+  completeCoachAssignment: (id: string) => request<{ ok: true }>(`/api/habits/coaching/assignments/${encodeURIComponent(id)}/complete`, { method: "POST", body: JSON.stringify({}) }),
+  decideCoachHabit: (id: string, decision: "accept" | "decline") => request<{ ok: true; status: string; enrollmentId?: string }>(`/api/habits/coaching/habits/${encodeURIComponent(id)}/decision`, { method: "POST", body: JSON.stringify({ decision }) }),
+  coachBooking: (orderId: string) => request<{ url: string; bookingDeadline?: string | null }>(`/api/habits/coaching/orders/${encodeURIComponent(orderId)}/booking`),
+  redeemCoachReward: (rewardId: string, relationshipId: string, idempotencyKey: string) => request<{ redemption: unknown }>(`/api/habits/coaching/rewards/${encodeURIComponent(rewardId)}/redeem`, { method: "POST", body: JSON.stringify({ relationshipId, idempotencyKey }) }),
+  searchHabitArchive: async (query: { q?: string; from?: string; to?: string; minEnergy?: number; type?: "all" | "insights" | "metrics"; author?: "all" | "user" | "coach" | "system" }) => {
+    await ensureGuestSession();
+    const params = new URLSearchParams();
+    Object.entries(query).forEach(([key, value]) => { if (value !== undefined && value !== "") params.set(key, String(value)); });
+    return request<{ insights: Array<{ id: string; text: string; source: string; habitTitle?: string | null; createdAt: string }>; metrics: Array<{ date: string; energy: number; clarity: number; stability: number; wellness: number }> }>(`/api/habits/archive/search?${params.toString()}`);
   },
   habitConfig: () => request<HabitConfigResponse>("/api/habits/config"),
   activateHabitsFromReport: async (analysisId: string) => {
@@ -669,6 +701,45 @@ export const coachPartnershipApi = {
   material: (token: string) => request<CoachPartnershipMaterial>(`/api/coaches/material/${encodeURIComponent(token)}`)
 };
 
+export const coachCatalogApi = {
+  config: () => request<PublicCoachPlatformConfig>("/api/coaches/config"),
+  list: (query?: { city?: string; specialization?: string; language?: string; accepting?: boolean }) => {
+    const params = new URLSearchParams();
+    Object.entries(query ?? {}).forEach(([key, value]) => { if (value !== undefined && value !== "") params.set(key, String(value)); });
+    return request<CoachCatalogResponse>(`/api/coaches${params.size ? `?${params.toString()}` : ""}`);
+  },
+  get: (slug: string) => request<{ coach: CoachCatalogResponse["coaches"][number] & { rewards?: unknown[]; site?: unknown } }>(`/api/coaches/${encodeURIComponent(slug)}`),
+  checkout: async (offerId: string, idempotencyKey: string) => {
+    await ensureGuestSession();
+    return request<{ url?: string; order: unknown }>(`/api/coaches/services/${encodeURIComponent(offerId)}/checkout`, { method: "POST", body: JSON.stringify({ idempotencyKey }) });
+  }
+};
+
+export const coachApi = {
+  workspace: () => request<CoachWorkspaceResponse>("/api/coach/workspace"),
+  captureAttribution: (referralCode: string) => request<{ captured: boolean }>("/api/coach/attribution", { method: "POST", headers: partnerPortalWriteHeaders(), body: JSON.stringify({ referralCode }) }),
+  profile: (payload: { displayName: string; slug: string; headline?: string | null; bio?: string | null; city?: string | null; specializations: string[]; languages: string[]; avatarUrl?: string | null; coverImageUrl?: string | null; acceptingOrders: boolean }) => request<{ profile: unknown }>("/api/coach/profile", { method: "PATCH", headers: partnerPortalWriteHeaders(), body: JSON.stringify(payload) }),
+  uploadAvatar: async (file: Blob) => {
+    const res = await fetch(`${API_URL}/api/coach/profile/avatar`, { method: "POST", credentials: "include", headers: { ...partnerPortalWriteHeaders(), "Content-Type": file.type || "application/octet-stream" }, body: file });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json() as Promise<{ avatarUrl: string; profile: unknown }>;
+  },
+  client: (relationshipId: string) => request<CoachClientDetail>(`/api/coach/clients/${encodeURIComponent(relationshipId)}`),
+  invite: (payload: { email?: string; funding: "COACH_PAID" | "CLIENT_PAID" }) => request<{ inviteId: string; connectUrl: string; expiresAt: string }>("/api/coach/invites", { method: "POST", headers: partnerPortalWriteHeaders(), body: JSON.stringify(payload) }),
+  message: (relationshipId: string, text: string) => request<{ message: unknown }>(`/api/coach/clients/${encodeURIComponent(relationshipId)}/messages`, { method: "POST", headers: partnerPortalWriteHeaders(), body: JSON.stringify({ text }) }),
+  assignment: (relationshipId: string, payload: { title: string; details: string; dueAt?: string | null }) => request<{ assignment: unknown }>(`/api/coach/clients/${encodeURIComponent(relationshipId)}/assignments`, { method: "POST", headers: partnerPortalWriteHeaders(), body: JSON.stringify(payload) }),
+  habit: (relationshipId: string, payload: { habitDefinitionId?: string | null; title: string; focus: string; practice: string; why: string; startsAt?: string; endsAt?: string | null }) => request<{ assignment: unknown }>(`/api/coach/clients/${encodeURIComponent(relationshipId)}/habits`, { method: "POST", headers: partnerPortalWriteHeaders(), body: JSON.stringify(payload) }),
+  saveOffer: (payload: Partial<CoachServiceOfferSummary> & Pick<CoachServiceOfferSummary, "type" | "paymentModel" | "title" | "description" | "amount" | "currency">) => request<{ offer: CoachServiceOfferSummary }>("/api/coach/services", { method: "POST", headers: partnerPortalWriteHeaders(), body: JSON.stringify(payload) }),
+  submitOffer: (id: string) => request<{ offer: CoachServiceOfferSummary }>(`/api/coach/services/${encodeURIComponent(id)}/submit-review`, { method: "POST", headers: partnerPortalWriteHeaders(), body: JSON.stringify({}) }),
+  checkoutPlan: (id: string, idempotencyKey: string) => request<{ url?: string }>(`/api/coach/subscription/checkout/${encodeURIComponent(id)}`, { method: "POST", headers: partnerPortalWriteHeaders(), body: JSON.stringify({ idempotencyKey }) }),
+  checkoutSite: (id: string, slug: string) => request<{ url?: string }>(`/api/coach/sites/checkout/${encodeURIComponent(id)}`, { method: "POST", headers: partnerPortalWriteHeaders(), body: JSON.stringify({ slug }) }),
+  updateSite: (id: string, payload: { content?: Record<string, unknown>; theme?: Record<string, unknown>; customDomain?: string | null }) => request<{ site: unknown; verification?: { record: string; type: string; value: string } | null }>(`/api/coach/sites/${encodeURIComponent(id)}`, { method: "PATCH", headers: partnerPortalWriteHeaders(), body: JSON.stringify(payload) }),
+  verifySiteDomain: (id: string) => request<{ site: unknown }>(`/api/coach/sites/${encodeURIComponent(id)}/verify-domain`, { method: "POST", headers: partnerPortalWriteHeaders(), body: JSON.stringify({}) }),
+  createReward: (payload: { title: string; description: string; pointsCost: number; entitlementType: string; entitlementValue?: string | null }) => request<{ reward: unknown }>("/api/coach/rewards", { method: "POST", headers: partnerPortalWriteHeaders(), body: JSON.stringify(payload) }),
+  connectCalendly: () => request<{ url: string }>("/api/coach/calendly/connect", { method: "POST", headers: partnerPortalWriteHeaders(), body: JSON.stringify({}) }),
+  calendlyEventTypes: () => request<{ eventTypes: Array<{ uri: string; name: string; duration: number; schedulingUrl: string; active: boolean }> }>("/api/coach/calendly/event-types")
+};
+
 export async function uploadMedia(uploadUrl: string, blob: Blob) {
   const res = await fetch(uploadUrl, {
     method: "PUT",
@@ -804,6 +875,13 @@ export const adminApi = {
   }),
   partnerPrograms: () => adminRequest<PartnerAffiliateProgramSummary[]>("/api/admin/partner-programs"),
   coachApplications: () => adminRequest<AdminCoachPartnershipLead[]>("/api/admin/coach-applications"),
+  coachPlatform: () => adminRequest<AdminCoachPlatformSnapshot>("/api/admin/coaches/platform"),
+  setCoachProfileStatus: (id: string, payload: { status: string; moderationNote?: string | null; featured?: boolean }) => adminRequest<{ profile: unknown }>(`/api/admin/coaches/${encodeURIComponent(id)}/status`, { method: "PATCH", body: JSON.stringify(payload) }),
+  createCoachPlanPrice: (id: string, payload: { amount: number; currency: string; migrationMode: "NEW_ONLY" | "NEXT_RENEWAL" }) => adminRequest<{ version: unknown }>(`/api/admin/coaches/plans/${encodeURIComponent(id)}/prices`, { method: "POST", body: JSON.stringify(payload) }),
+  setCoachPlanOverride: (coachId: string, planId: string, payload: { amount: number; currency: string; active: boolean }) => adminRequest<{ override: unknown }>(`/api/admin/coaches/${encodeURIComponent(coachId)}/plan-overrides/${encodeURIComponent(planId)}`, { method: "PUT", body: JSON.stringify(payload) }),
+  setCoachOfferStatus: (id: string, payload: { status: string; coachShareBps?: number; platformShareBps?: number; moderationNote?: string | null }) => adminRequest<{ offer: unknown }>(`/api/admin/coaches/offers/${encodeURIComponent(id)}/status`, { method: "PATCH", body: JSON.stringify(payload) }),
+  setCoachRewardStatus: (id: string, payload: { status: string; moderationNote?: string | null }) => adminRequest<{ reward: unknown }>(`/api/admin/coaches/rewards/${encodeURIComponent(id)}/status`, { method: "PATCH", body: JSON.stringify(payload) }),
+  updateCoachSitePlan: (id: string, payload: { setupAmount: number; monthlySupportAmount: number; currency: string; active: boolean }) => adminRequest<{ plan: unknown }>(`/api/admin/coaches/site-plans/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(payload) }),
   setCoachApplicationStatus: (id: string, status: CoachPartnershipLeadStatus) => adminRequest<AdminCoachPartnershipLead>(`/api/admin/coach-applications/${encodeURIComponent(id)}/status`, {
     method: "PATCH",
     body: JSON.stringify({ status })

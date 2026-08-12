@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   BarChart3,
   BadgeDollarSign,
+  GraduationCap,
   Bot,
   BrainCircuit,
   FileText,
@@ -20,11 +21,13 @@ import {
 import type {
   AdminBusinessReport,
   AdminCoachPartnershipLead,
+  AdminCoachPlatformSnapshot,
   AdminReportBreakdown,
   AdminStats,
   AdminUserSummary,
   AdminTelegramCommunityChat,
   AppSetting,
+  CoachPublicContent,
   FeatureFlag,
   PartnerAffiliateProgramSummary,
   PartnerCoreAdminSnapshot,
@@ -65,7 +68,7 @@ import {
 } from "@/lib/api";
 import { defaultSiteText } from "@/lib/messages";
 
-export type AdminSection = "overview" | "reports" | "users" | "commercial" | "ai" | "content" | "integrations" | "partners" | "system";
+export type AdminSection = "overview" | "reports" | "users" | "commercial" | "ai" | "content" | "integrations" | "coaches" | "partners" | "system";
 type PartnerAdminView = "overview" | "applications" | "partners" | "program" | "offers" | "operations";
 
 type AdminSectionDefinition = {
@@ -85,6 +88,7 @@ export const adminSections: AdminSectionDefinition[] = [
   { id: "ai", href: "/admin/ai", label: "AI и промпты", title: "AI и промпты", description: "Режим генерации, модели и версионируемые системные промпты.", icon: BrainCircuit },
   { id: "content", href: "/admin/content", label: "Контент", title: "Контент и локализация", description: "Доступные языки и тексты пользовательского интерфейса.", icon: FileText },
   { id: "integrations", href: "/admin/integrations", label: "Интеграции", title: "Интеграции", description: "Telegram, шаблоны сообщений и системные ограничения.", icon: Bot },
+  { id: "coaches", href: "/admin/coaches", label: "Коучи", title: "Коучи и сопровождение", description: "Профили, пакеты клиентов, услуги, сайты, заказы и награды.", icon: GraduationCap },
   { id: "partners", href: "/admin/partners", label: "Партнёры", title: "Партнёрская программа", description: "Условия программы, партнёры, предложения и начисления Orken.", icon: Handshake },
   { id: "system", href: "/admin/system", label: "Система", title: "Система", description: "Feature flags, технические настройки и последние операции.", icon: Settings }
 ];
@@ -244,6 +248,7 @@ export function AdminConsole({ section }: { section: AdminSection }) {
   const [promoCodes, setPromoCodes] = useState<PromoCode[]>([]);
   const [partnerPrograms, setPartnerPrograms] = useState<PartnerAffiliateProgramSummary[]>([]);
   const [coachApplications, setCoachApplications] = useState<AdminCoachPartnershipLead[]>([]);
+  const [coachPlatform, setCoachPlatform] = useState<AdminCoachPlatformSnapshot | null>(null);
   const [partnerOffers, setPartnerOffers] = useState<PartnerOfferSummary[]>([]);
   const [partnerRedemptions, setPartnerRedemptions] = useState<PartnerRedemptionSummary[]>([]);
   const [partnerCoreSnapshot, setPartnerCoreSnapshot] = useState<PartnerCoreAdminSnapshot>(emptyPartnerCoreSnapshot);
@@ -443,6 +448,10 @@ export function AdminConsole({ section }: { section: AdminSection }) {
         setPartnerRedemptions(nextPartnerRedemptions);
         setPartnerCoreSnapshot(nextPartnerCoreSnapshot);
         setCoachApplications(nextCoachApplications);
+      }
+
+      if (section === "coaches") {
+        setCoachPlatform(await adminApi.coachPlatform());
       }
 
       if (section === "system") {
@@ -2142,6 +2151,8 @@ export function AdminConsole({ section }: { section: AdminSection }) {
             </>}
           </section>}
 
+          {section === "coaches" && coachPlatform && <AdminCoachesPanel snapshot={coachPlatform} refresh={refresh} setMessage={setMessage} />}
+
           {section === "system" && <section id="admin-system" className="grid grid-2 admin-system-grid">
             <div className="admin-system-actions">
               <div>
@@ -2483,4 +2494,62 @@ function splitAdminListItem(item: string) {
   const index = item.indexOf(":");
   if (index <= 0) return [item.slice(0, 80), item.slice(80)] as const;
   return [item.slice(0, index), item.slice(index + 1).trim()] as const;
+}
+
+const coachPublicContentFields: Array<{ key: keyof CoachPublicContent; label: string; multiline?: boolean }> = [
+  { key: "heroEyebrow", label: "Надпись над главным заголовком" },
+  { key: "heroTitle", label: "Главный заголовок" },
+  { key: "heroLead", label: "Описание в первом экране", multiline: true },
+  { key: "heroPrimaryCta", label: "Основная кнопка" },
+  { key: "heroSecondaryCta", label: "Вторая кнопка" },
+  { key: "pricingEyebrow", label: "Надпись над тарифами" },
+  { key: "pricingTitle", label: "Заголовок тарифов" },
+  { key: "pricingLead", label: "Пояснение тарифов", multiline: true },
+  { key: "applicationEyebrow", label: "Надпись над заявкой" },
+  { key: "applicationTitle", label: "Заголовок заявки" },
+  { key: "applicationLead", label: "Пояснение заявки", multiline: true },
+  { key: "applicationSubmitLabel", label: "Кнопка отправки заявки" }
+];
+
+function AdminCoachesPanel({ snapshot, refresh, setMessage }: { snapshot: AdminCoachPlatformSnapshot; refresh: () => Promise<void>; setMessage: (value: string) => void }) {
+  const [view, setView] = useState<"profiles" | "plans" | "subscriptions" | "offers" | "sites" | "orders" | "rewards" | "content" | "settings">("profiles");
+  const [drafts, setDrafts] = useState<Record<string, { amount: string; support?: string; coachShare?: string; platformShare?: string }>>({});
+  const [overridePlan, setOverridePlan] = useState<Record<string, string>>({});
+  const [overrideAmount, setOverrideAmount] = useState<Record<string, string>>({});
+  const [cancelHours, setCancelHours] = useState(String(snapshot.cancellationPolicy.hoursBeforeStart));
+  const [refundPercent, setRefundPercent] = useState(String(snapshot.cancellationPolicy.refundPercent));
+  const [publicContent, setPublicContent] = useState<CoachPublicContent>(snapshot.publicContent);
+  const [page, setPage] = useState(0);
+  const pageSize = 20;
+  useEffect(() => setPage(0), [view]);
+  const profileRows = snapshot.profiles.slice(page * pageSize, (page + 1) * pageSize);
+  const subscriptionRows = snapshot.subscriptions.slice(page * pageSize, (page + 1) * pageSize);
+  const orderRows = snapshot.orders.slice(page * pageSize, (page + 1) * pageSize);
+  async function action(run: () => Promise<unknown>, success: string) {
+    try { await run(); setMessage(success); await refresh(); } catch (reason) { setMessage(reason instanceof Error ? reason.message : "Операция не выполнена"); }
+  }
+  return <section className="card stack admin-section-card">
+    <div className="admin-partner-subnav">
+      {([['profiles','Профили'],['plans','Пакеты'],['subscriptions','Подписки'],['offers','Услуги'],['sites','Сайты'],['orders','Заказы'],['rewards','Награды'],['content','Публичная страница'],['settings','Правила']] as const).map(([id,label])=><button key={id} className={view===id?"active":""} onClick={()=>setView(id)}>{label}</button>)}
+    </div>
+    {view==="profiles"&&<><div className="admin-table-wrap"><table className="admin-data-table"><thead><tr><th>Коуч</th><th>Статус</th><th>Заказы</th><th>Адрес</th><th>Действия и цена</th></tr></thead><tbody>{profileRows.map(profile=>{const planId=overridePlan[profile.id]||snapshot.plans[0]?.id||"";const amount=overrideAmount[profile.id]||"";return <tr key={profile.id}><td><strong>{profile.displayName}</strong><small>{profile.city||"Город не указан"}</small></td><td><span className="admin-status-pill">{profile.status}</span></td><td>{profile.acceptingOrders?"Принимает":"Закрыты"}</td><td>/coaches/{profile.slug}</td><td><div className="row wrap"><button className="button compact" disabled={profile.status==="APPROVED"} onClick={()=>action(()=>adminApi.setCoachProfileStatus(profile.id,{status:"APPROVED"}),"Профиль одобрен")}>Одобрить</button><button className="button secondary compact" onClick={()=>action(()=>adminApi.setCoachProfileStatus(profile.id,{status:"SUSPENDED"}),"Профиль приостановлен")}>Приостановить</button></div><details className="admin-inline-details"><summary>Индивидуальная цена пакета</summary><select className="input" value={planId} onChange={e=>setOverridePlan(v=>({...v,[profile.id]:e.target.value}))}>{snapshot.plans.map(plan=><option value={plan.id} key={plan.id}>{plan.name}</option>)}</select><input className="input" type="number" min="0" step="0.01" placeholder="Цена, $" value={amount} onChange={e=>setOverrideAmount(v=>({...v,[profile.id]:e.target.value}))}/><button className="button compact" disabled={!planId||Number(amount)<=0} onClick={()=>action(()=>adminApi.setCoachPlanOverride(profile.id,planId,{amount:Math.round(Number(amount)*100),currency:"usd",active:true}),"Индивидуальная цена сохранена")}>Сохранить цену</button></details></td></tr>})}</tbody></table></div><AdminPager page={page} total={snapshot.profiles.length} pageSize={pageSize} setPage={setPage}/></>}
+    {view==="plans"&&<div className="admin-card-grid">{snapshot.plans.map(plan=>{const draft=drafts[plan.id]?.amount??String(plan.amount/100);return <article className="admin-subcard" key={plan.id}><span className="admin-status-pill">{plan.includedClients??"Custom"} мест</span><h3>{plan.name}</h3><p>{plan.description}</p><label>Цена, $<input className="input" type="number" min="0" step="0.01" value={draft} onChange={e=>setDrafts(v=>({...v,[plan.id]:{...v[plan.id],amount:e.target.value}}))}/></label><div className="row wrap"><button className="button compact" onClick={()=>action(()=>adminApi.createCoachPlanPrice(plan.id,{amount:Math.round(Number(draft)*100),currency:plan.currency,migrationMode:"NEW_ONLY"}),"Цена для новых продаж сохранена")}>Только новые</button><button className="button secondary compact" onClick={()=>action(()=>adminApi.createCoachPlanPrice(plan.id,{amount:Math.round(Number(draft)*100),currency:plan.currency,migrationMode:"NEXT_RENEWAL"}),"Цена обновится при продлении")}>Со следующего продления</button></div></article>})}</div>}
+    {view==="subscriptions"&&<><div className="admin-table-wrap"><table className="admin-data-table"><thead><tr><th>Коуч</th><th>Пакет</th><th>Статус</th><th>Лимит</th><th>Сумма</th><th>Следующее продление</th></tr></thead><tbody>{subscriptionRows.map(row=><tr key={row.id}><td><strong>{row.coach}</strong></td><td>{row.plan}</td><td><span className="admin-status-pill">{row.status}</span></td><td>{row.clientLimit ?? "Индивидуально"}</td><td>{formatAdminMoney(row.amount,row.currency)}</td><td>{row.currentPeriodEnd ? new Intl.DateTimeFormat("ru-RU",{dateStyle:"medium"}).format(new Date(row.currentPeriodEnd)) : "—"}</td></tr>)}</tbody></table></div><AdminPager page={page} total={snapshot.subscriptions.length} pageSize={pageSize} setPage={setPage}/></>}
+    {view==="offers"&&<div className="admin-card-grid">{snapshot.offers.map(offer=>{const d=drafts[offer.id]??{amount:String(offer.amount/100),coachShare:offer.coachShareBps==null?"":String(offer.coachShareBps/100),platformShare:offer.platformShareBps==null?"":String(offer.platformShareBps/100)};const splitValid=Number(d.coachShare)>=0&&Number(d.platformShare)>=0&&Number(d.coachShare)+Number(d.platformShare)===100;return <article className="admin-subcard" key={offer.id}><span className="admin-status-pill">{offer.status}</span><h3>{offer.title}</h3><p>{offer.description}</p><div className="grid grid-2"><label>Доля коуча, %<input className="input" type="number" min="0" max="100" step="0.01" value={d.coachShare} onChange={e=>setDrafts(v=>({...v,[offer.id]:{...d,coachShare:e.target.value}}))}/></label><label>Доля платформы, %<input className="input" type="number" min="0" max="100" step="0.01" value={d.platformShare} onChange={e=>setDrafts(v=>({...v,[offer.id]:{...d,platformShare:e.target.value}}))}/></label></div>{!splitValid&&<p>Сумма долей должна быть ровно 100%.</p>}<button className="button compact" disabled={!splitValid} onClick={()=>action(()=>adminApi.setCoachOfferStatus(offer.id,{status:"APPROVED",coachShareBps:Math.round(Number(d.coachShare)*100),platformShareBps:Math.round(Number(d.platformShare)*100)}),"Услуга опубликована")}>Настроить и одобрить</button></article>})}</div>}
+    {view==="sites"&&<div className="admin-card-grid">{snapshot.sitePlans.map(plan=>{const d=drafts[plan.id]??{amount:String(plan.setupAmount/100),support:String(plan.monthlySupportAmount/100)};return <article className="admin-subcard" key={plan.id}><h3>{plan.name}</h3><label>Подключение, $<input className="input" type="number" min="0" step="0.01" value={d.amount} onChange={e=>setDrafts(v=>({...v,[plan.id]:{...d,amount:e.target.value}}))}/></label><label>Поддержка в месяц, $<input className="input" type="number" min="0" step="0.01" value={d.support} onChange={e=>setDrafts(v=>({...v,[plan.id]:{...d,support:e.target.value}}))}/></label><button className="button compact" onClick={()=>action(()=>adminApi.updateCoachSitePlan(plan.id,{setupAmount:Math.round(Number(d.amount)*100),monthlySupportAmount:Math.round(Number(d.support)*100),currency:plan.currency,active:plan.active}),"Цена сайта сохранена")}>Сохранить</button></article>})}</div>}
+    {view==="orders"&&<><div className="admin-table-wrap"><table className="admin-data-table"><thead><tr><th>Коуч</th><th>Клиент</th><th>Услуга</th><th>Статус</th><th>Сумма</th></tr></thead><tbody>{orderRows.map(row=><tr key={row.id}><td>{row.coach}</td><td>{row.client}</td><td>{row.service}</td><td>{row.status}</td><td>{formatAdminMoney(row.amount,row.currency)}</td></tr>)}</tbody></table></div><AdminPager page={page} total={snapshot.orders.length} pageSize={pageSize} setPage={setPage}/></>}
+    {view==="rewards"&&<div className="admin-card-grid">{snapshot.rewardsPendingReview.map(reward=><article className="admin-subcard" key={reward.id}><h3>{reward.title}</h3><p>{reward.description}</p><strong>{reward.pointsCost} ORKEN Points</strong><div className="row wrap"><button className="button compact" onClick={()=>action(()=>adminApi.setCoachRewardStatus(reward.id,{status:"APPROVED"}),"Награда одобрена")}>Одобрить</button><button className="button secondary compact" onClick={()=>action(()=>adminApi.setCoachRewardStatus(reward.id,{status:"REJECTED"}),"Награда отклонена")}>Отклонить</button></div></article>)}</div>}
+    {view==="content"&&<div className="admin-card-grid"><article className="admin-subcard admin-content-editor"><h3>Публичная страница /for-coaches</h3><p>Тексты применяются после сохранения. Цены и описания пакетов меняются во вкладках «Пакеты» и «Сайты».</p>{coachPublicContentFields.map(field=><label key={field.key}>{field.label}{field.multiline?<textarea className="input" rows={4} value={publicContent[field.key]} onChange={e=>setPublicContent(value=>({...value,[field.key]:e.target.value}))}/>:<input className="input" value={publicContent[field.key]} onChange={e=>setPublicContent(value=>({...value,[field.key]:e.target.value}))}/>}</label>)}<button className="button compact" onClick={()=>action(()=>adminApi.upsertSetting("coach_public_content_ru",publicContent),"Публичные тексты сохранены")}>Сохранить тексты</button></article></div>}
+    {view==="settings"&&<div className="admin-card-grid"><article className="admin-subcard"><h3>Отмена консультации</h3><p>Правило применяется одинаково ко всем забронированным консультациям.</p><label>Не позднее чем за, часов<input className="input" type="number" min="0" max="720" value={cancelHours} onChange={e=>setCancelHours(e.target.value)}/></label><label>Размер возврата, %<input className="input" type="number" min="0" max="100" value={refundPercent} onChange={e=>setRefundPercent(e.target.value)}/></label><button className="button compact" onClick={()=>action(async()=>{await adminApi.upsertSetting("coach_consultation_cancel_hours",Number(cancelHours));await adminApi.upsertSetting("coach_consultation_refund_percent",Number(refundPercent))},"Правила отмены сохранены")}>Сохранить правила</button></article></div>}
+  </section>;
+}
+
+function AdminPager({ page, total, pageSize, setPage }: { page: number; total: number; pageSize: number; setPage: (value: number) => void }) {
+  const pages = Math.max(1, Math.ceil(total / pageSize));
+  if (pages <= 1) return null;
+  return <div className="admin-pagination"><button className="button secondary compact" disabled={page <= 0} onClick={() => setPage(Math.max(0, page - 1))}>Назад</button><span>Страница {page + 1} из {pages}</span><button className="button secondary compact" disabled={page >= pages - 1} onClick={() => setPage(Math.min(pages - 1, page + 1))}>Далее</button></div>;
+}
+
+function formatAdminMoney(amount: number, currency: string) {
+  return new Intl.NumberFormat("ru-RU", { style: "currency", currency: currency.toUpperCase(), maximumFractionDigits: 0 }).format(amount / 100);
 }

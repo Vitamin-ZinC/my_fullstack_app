@@ -52,6 +52,7 @@ const statusUpdateSchema = requestSchema.extend({
 const technicalDocs = [
   { title: "Project Map", file: "project-map.md" },
   { title: "Backend API And Schema", file: "backend-api-and-schema.md" },
+  { title: "Coach Platform", file: "coach-platform.md" },
   { title: "Habits And Telegram Roadmap", file: "habits-telegram-bot-roadmap.md" },
   { title: "Founder Codex Intake Guide", file: "founder-codex-intake-guide.md" },
   { title: "Codex Documentation Access Instructions", file: "codex-docs-access-instructions.md" }

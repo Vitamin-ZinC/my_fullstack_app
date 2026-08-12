@@ -1,6 +1,6 @@
 # ORKEN.LIFE Technical Project Map
 
-Last updated: 2026-07-12
+Last updated: 2026-08-12
 
 This document describes the current implemented architecture. It is intended to prevent future agents from inventing nonexistent tables, endpoints, or flows.
 
@@ -181,6 +181,26 @@ Environment variables:
 - `PARTNER_PORTAL_COOKIE_DOMAIN`
 
 Partner Core secrets are backend-only. Do not expose `PARTNER_CORE_KEY_ID`, `PARTNER_CORE_SERVICE_SECRET`, or `PARTNER_CORE_PRIVACY_SECRET` through frontend code, public env vars, docs pages, or client-side JSON.
+
+### Coach Platform
+
+The coach and client coaching contour is implemented on top of habits and the Partner Core BFF. Its canonical technical contract is:
+
+- `docs/technical/coach-platform.md`
+
+Primary code:
+
+- `apps/backend/src/routes/coachWorkspace.ts`
+- `apps/backend/src/services/coachPlatform.ts`
+- `apps/backend/src/services/coachCommerce.ts`
+- `apps/backend/src/services/coachRules.ts`
+- `apps/frontend/app/coach`
+- `apps/frontend/app/coaches`
+- `apps/frontend/app/habits/progress`
+- `apps/frontend/app/habits/archive`
+- `apps/frontend/app/habits/coaching`
+
+Do not create a second coach authentication system or duplicate Partner Core passwords, KYC, payout details, or global ledger data in ORKEN.
 
 `PARTNER_CORE_SERVICE_KEYS_JSON` is preferred when the Core issues scoped service
 credentials. ORKEN accepts only a key with `sessions:write`, `partners:read`,

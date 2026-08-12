@@ -69,7 +69,14 @@ const schema = z.object({
   PARTNER_CORE_PRIVACY_SECRET: z.string().optional(),
   PARTNER_PORTAL_ORIGIN: optionalUrlEnv,
   PARTNER_PORTAL_SESSION_ENCRYPTION_SECRET: z.string().optional(),
-  PARTNER_PORTAL_COOKIE_DOMAIN: z.preprocess(emptyToUndefined, z.string().trim().min(1).optional())
+  PARTNER_PORTAL_COOKIE_DOMAIN: z.preprocess(emptyToUndefined, z.string().trim().min(1).optional()),
+  CALENDLY_CLIENT_ID: z.string().optional(),
+  CALENDLY_CLIENT_SECRET: z.string().optional(),
+  CALENDLY_REDIRECT_URI: optionalUrlEnv,
+  CALENDLY_WEBHOOK_SECRET: z.string().optional(),
+  CALENDLY_TOKEN_ENCRYPTION_SECRET: z.string().optional(),
+  COACH_SITE_BASE_DOMAIN: z.string().default("orken.life"),
+  COACH_PAYOUT_PARTNER_CORE_PROGRAM_ID: z.string().optional()
 });
 
 export const env = schema.parse(process.env);

@@ -30,13 +30,36 @@ async function fulfillJson(route, json, status = 200) {
 
 test("public coaches page keeps rates private and submits a partnership lead", async ({ page }) => {
   let applicationBody = null;
+  await page.route(`${apiBase}/api/coaches/config`, async (route) => {
+    await fulfillJson(route, {
+      plans: [
+        { id: "plan-5", code: "starter", name: "До 5 клиентов", description: "Для частной практики", includedClients: 5, amount: 3900, currency: "usd", customQuote: false },
+        { id: "plan-15", code: "team", name: "До 15 клиентов", description: "Для растущей практики", includedClients: 15, amount: 10900, currency: "usd", customQuote: false }
+      ],
+      sitePlans: [{ id: "site-standard", code: "standard", name: "Стандартный сайт", setupAmount: 7500, monthlySupportAmount: 500, currency: "usd" }],
+      content: {
+        heroEyebrow: "Партнёрская программа ORKEN",
+        heroTitle: "Технология, которая продолжает вашу работу между сессиями",
+        heroLead: "Добавьте AI-диагностику и трекер состояний в свою практику.",
+        heroPrimaryCta: "Стать партнёром",
+        heroSecondaryCta: "Условия сотрудничества",
+        pricingEyebrow: "Тарифы платформы",
+        pricingTitle: "Пакет под текущую практику",
+        pricingLead: "Клиенты с собственной подпиской не занимают места.",
+        applicationEyebrow: "Заявка на партнёрство",
+        applicationTitle: "Хочу стать партнёром ORKEN",
+        applicationLead: "После отправки мы пришлём закрытый материал.",
+        applicationSubmitLabel: "Получить условия сотрудничества"
+      }
+    });
+  });
   await page.route(`${apiBase}/api/coaches/applications`, async (route) => {
     applicationBody = route.request().postDataJSON();
     await fulfillJson(route, { applicationId: "lead-1", status: "received", materialDelivery: "sent" }, 201);
   });
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto(`${appBase}/coaches`);
+  await page.goto(`${appBase}/for-coaches`);
   await expect(page.getByRole("heading", { level: 1 })).toContainText("между сессиями");
   await expect(page.getByRole("heading", { name: "Экономика для коуча" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Реферальная программа" })).toBeVisible();

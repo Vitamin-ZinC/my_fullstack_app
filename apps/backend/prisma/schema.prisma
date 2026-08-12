@@ -32,6 +32,11 @@ model User {
   partnerEvents PartnerEvent[]
   partnerOfferRedemptions PartnerOfferRedemption[]
   walletTransactions InternalWalletTransaction[]
+  coachRelationships CoachClientRelationship[]
+  coachServiceOrders CoachServiceOrder[]
+  coachMessages CoachMessage[] @relation("CoachMessageUser")
+  coachAssignments CoachAssignment[] @relation("CoachAssignmentUser")
+  coachRewardRedemptions CoachRewardRedemption[]
 }
 
 model LoginToken {
@@ -214,6 +219,376 @@ model CoachPartnershipLead {
   @@index([email, createdAt])
 }
 
+model CoachProfile {
+  id                   String             @id @default(cuid())
+  partnerCorePartnerId String             @unique
+  partnerCorePayoutReferralCode String?
+  referredByReferralCode String?
+  slug                 String             @unique
+  displayName          String
+  headline             String?
+  bio                  String?
+  city                 String?
+  specializations      Json?
+  languages            Json?
+  avatarUrl            String?
+  coverImageUrl        String?
+  status               CoachProfileStatus @default(DRAFT)
+  acceptingOrders      Boolean            @default(false)
+  featured             Boolean            @default(false)
+  moderationNote       String?
+  publicSince          DateTime?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  planOverrides        CoachPriceOverride[]
+  subscriptions        CoachSubscription[]
+  invites              CoachClientInvite[]
+  clients              CoachClientRelationship[]
+  serviceOffers        CoachServiceOffer[]
+  messages             CoachMessage[]
+  assignments          CoachAssignment[]
+  habitAssignments     CoachHabitAssignment[]
+  sites                CoachSite[]
+  calendlyConnection   CoachCalendlyConnection?
+  rewards              CoachReward[]
+
+  @@index([status, acceptingOrders, featured])
+}
+
+model CoachPlan {
+  id              String                  @id @default(cuid())
+  code            String                  @unique
+  stripeProductId String?                 @unique
+  name            String
+  description     String?
+  includedClients Int?
+  customQuote     Boolean                 @default(false)
+  active          Boolean                 @default(true)
+  sortOrder       Int                     @default(0)
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+  priceVersions   CoachPlanPriceVersion[]
+  overrides       CoachPriceOverride[]
+  subscriptions   CoachSubscription[]
+}
+
+model CoachPlanPriceVersion {
+  id            String                  @id @default(cuid())
+  planId        String
+  plan          CoachPlan               @relation(fields: [planId], references: [id], onDelete: Cascade)
+  amount        Int
+  currency      String                  @default("usd")
+  stripePriceId String?                 @unique
+  effectiveFrom DateTime                @default(now())
+  effectiveTo   DateTime?
+  migrationMode CoachPriceMigrationMode @default(NEW_ONLY)
+  active        Boolean                 @default(true)
+  createdAt     DateTime                @default(now())
+  subscriptions CoachSubscription[]
+
+  @@index([planId, active, effectiveFrom])
+}
+
+model CoachPriceOverride {
+  id             String       @id @default(cuid())
+  coachProfileId String
+  coachProfile   CoachProfile @relation(fields: [coachProfileId], references: [id], onDelete: Cascade)
+  planId         String
+  plan           CoachPlan    @relation(fields: [planId], references: [id], onDelete: Cascade)
+  amount         Int
+  currency       String       @default("usd")
+  active         Boolean      @default(true)
+  effectiveFrom  DateTime     @default(now())
+  effectiveTo    DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([coachProfileId, planId, active])
+}
+
+model CoachSubscription {
+  id                          String                  @id @default(cuid())
+  coachProfileId              String
+  coachProfile                CoachProfile            @relation(fields: [coachProfileId], references: [id], onDelete: Cascade)
+  planId                      String
+  plan                        CoachPlan               @relation(fields: [planId], references: [id])
+  priceVersionId              String?
+  priceVersion                CoachPlanPriceVersion?  @relation(fields: [priceVersionId], references: [id])
+  status                      CoachSubscriptionStatus @default(PENDING)
+  amount                      Int
+  currency                    String                  @default("usd")
+  clientLimit                 Int?
+  stripeCustomerId            String?
+  stripeSubscriptionId        String?                 @unique
+  stripeCheckoutSessionId     String?                 @unique
+  currentPeriodStart          DateTime?
+  currentPeriodEnd            DateTime?
+  graceEndsAt                 DateTime?
+  cancelAtPeriodEnd           Boolean                 @default(false)
+  idempotencyKey              String                  @unique
+  createdAt                   DateTime                @default(now())
+  updatedAt                   DateTime                @updatedAt
+
+  @@index([coachProfileId, status, currentPeriodEnd])
+}
+
+model CoachClientInvite {
+  id                String             @id @default(cuid())
+  coachProfileId    String
+  coachProfile      CoachProfile       @relation(fields: [coachProfileId], references: [id], onDelete: Cascade)
+  email             String?
+  tokenHash         String             @unique
+  funding           CoachClientFunding @default(COACH_PAID)
+  metricsConsent    Boolean            @default(true)
+  journalConsent    Boolean            @default(false)
+  expiresAt         DateTime
+  acceptedAt        DateTime?
+  relationshipId    String?            @unique
+  relationship      CoachClientRelationship? @relation(fields: [relationshipId], references: [id], onDelete: SetNull)
+  createdAt         DateTime           @default(now())
+
+  @@index([coachProfileId, expiresAt])
+}
+
+model CoachClientRelationship {
+  id                String                  @id @default(cuid())
+  coachProfileId    String
+  coachProfile      CoachProfile            @relation(fields: [coachProfileId], references: [id], onDelete: Cascade)
+  userId            String
+  user              User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  habitProgramId    String?
+  habitProgram      HabitProgram?           @relation(fields: [habitProgramId], references: [id], onDelete: SetNull)
+  funding           CoachClientFunding      @default(COACH_PAID)
+  status            CoachRelationshipStatus @default(PENDING)
+  metricsConsentAt  DateTime?
+  journalConsentAt  DateTime?
+  consentRevokedAt  DateTime?
+  startedAt         DateTime?
+  accessEndsAt      DateTime?
+  endedAt           DateTime?
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+  invites           CoachClientInvite[]
+  serviceOrders     CoachServiceOrder[]
+  messages          CoachMessage[]
+  assignments       CoachAssignment[]
+  habitAssignments  CoachHabitAssignment[]
+  rewardRedemptions CoachRewardRedemption[]
+
+  @@index([coachProfileId, status, funding])
+  @@index([userId, status])
+  @@index([habitProgramId])
+}
+
+model CoachServiceOffer {
+  id                   String                  @id @default(cuid())
+  coachProfileId       String
+  coachProfile         CoachProfile            @relation(fields: [coachProfileId], references: [id], onDelete: Cascade)
+  type                 CoachServiceType
+  paymentModel         CoachServicePaymentModel @default(CLIENT_PAID)
+  title                String
+  description          String
+  amount               Int
+  currency             String                  @default("usd")
+  coachShareBps        Int?
+  platformShareBps     Int?
+  calendlyEventTypeUri String?
+  calendlySchedulingUrl String?
+  status               CoachOfferStatus        @default(DRAFT)
+  moderationNote       String?
+  publishedAt          DateTime?
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+  orders               CoachServiceOrder[]
+
+  @@index([coachProfileId, status, type])
+}
+
+model CoachServiceOrder {
+  id                      String                  @id @default(cuid())
+  offerId                 String
+  offer                   CoachServiceOffer       @relation(fields: [offerId], references: [id])
+  userId                  String
+  user                    User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  relationshipId          String?
+  relationship            CoachClientRelationship? @relation(fields: [relationshipId], references: [id], onDelete: SetNull)
+  status                  CoachServiceOrderStatus @default(PENDING_PAYMENT)
+  amount                  Int
+  currency                String                  @default("usd")
+  coachShareBpsSnapshot   Int
+  platformShareBpsSnapshot Int
+  stripeCheckoutSessionId String?                 @unique
+  stripePaymentIntentId   String?                 @unique
+  stripeSubscriptionId    String?                 @unique
+  calendlyEventUri        String?
+  calendlyInviteeUri      String?
+  scheduledFor            DateTime?
+  bookingDeadline         DateTime?
+  bookedAt                DateTime?
+  cancelledAt             DateTime?
+  refundRequestedAt       DateTime?
+  refundAmount            Int?
+  refundedAt              DateTime?
+  idempotencyKey          String                  @unique
+  createdAt               DateTime                @default(now())
+  updatedAt               DateTime                @updatedAt
+
+  @@index([userId, status, createdAt])
+  @@index([offerId, status, createdAt])
+  @@index([bookingDeadline, status])
+}
+
+model CoachMessage {
+  id                         String                  @id @default(cuid())
+  relationshipId             String
+  relationship               CoachClientRelationship @relation(fields: [relationshipId], references: [id], onDelete: Cascade)
+  coachProfileId             String
+  coachProfile               CoachProfile            @relation(fields: [coachProfileId], references: [id], onDelete: Cascade)
+  userId                     String
+  user                       User                    @relation("CoachMessageUser", fields: [userId], references: [id], onDelete: Cascade)
+  authorRole                 CoachMessageAuthorRole
+  text                       String
+  readAt                     DateTime?
+  createdAt                  DateTime                @default(now())
+
+  @@index([relationshipId, createdAt])
+}
+
+model CoachAssignment {
+  id                         String                  @id @default(cuid())
+  relationshipId             String
+  relationship               CoachClientRelationship @relation(fields: [relationshipId], references: [id], onDelete: Cascade)
+  coachProfileId             String
+  coachProfile               CoachProfile            @relation(fields: [coachProfileId], references: [id], onDelete: Cascade)
+  userId                     String
+  user                       User                    @relation("CoachAssignmentUser", fields: [userId], references: [id], onDelete: Cascade)
+  title                      String
+  details                    String
+  dueAt                      DateTime?
+  status                     CoachAssignmentStatus   @default(OPEN)
+  completedAt                DateTime?
+  createdAt                  DateTime                @default(now())
+  updatedAt                  DateTime                @updatedAt
+
+  @@index([relationshipId, status, dueAt])
+}
+
+model CoachHabitAssignment {
+  id                         String                  @id @default(cuid())
+  relationshipId             String
+  relationship               CoachClientRelationship @relation(fields: [relationshipId], references: [id], onDelete: Cascade)
+  coachProfileId             String
+  coachProfile               CoachProfile            @relation(fields: [coachProfileId], references: [id], onDelete: Cascade)
+  habitDefinitionId          String?
+  habitDefinition            HabitDefinition?        @relation(fields: [habitDefinitionId], references: [id], onDelete: SetNull)
+  enrollmentId               String?
+  enrollment                 HabitEnrollment?        @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
+  title                      String
+  focus                      String
+  practice                   String
+  why                        String
+  startsAt                   DateTime                @default(now())
+  endsAt                     DateTime?
+  status                     CoachHabitAssignmentStatus @default(PROPOSED)
+  clientAcceptedAt           DateTime?
+  clientDeclinedAt           DateTime?
+  createdAt                  DateTime                @default(now())
+  updatedAt                  DateTime                @updatedAt
+
+  @@index([relationshipId, status, startsAt])
+}
+
+model CoachSitePlan {
+  id                   String      @id @default(cuid())
+  code                 String      @unique
+  name                 String
+  setupAmount          Int
+  monthlySupportAmount Int
+  currency             String      @default("usd")
+  features             Json?
+  active               Boolean     @default(true)
+  sortOrder            Int         @default(0)
+  createdAt            DateTime    @default(now())
+  updatedAt            DateTime    @updatedAt
+  sites                CoachSite[]
+}
+
+model CoachSite {
+  id                       String          @id @default(cuid())
+  coachProfileId           String
+  coachProfile             CoachProfile    @relation(fields: [coachProfileId], references: [id], onDelete: Cascade)
+  planId                   String
+  plan                     CoachSitePlan   @relation(fields: [planId], references: [id])
+  slug                     String          @unique
+  customDomain             String?         @unique
+  customDomainVerificationTokenHash String?
+  customDomainStatus       CoachDomainStatus @default(NOT_CONFIGURED)
+  status                   CoachSiteStatus @default(DRAFT)
+  content                  Json?
+  theme                    Json?
+  stripeCheckoutSessionId  String?         @unique
+  stripeSubscriptionId     String?         @unique
+  supportCurrentPeriodEnd  DateTime?
+  graceEndsAt              DateTime?
+  publishedAt              DateTime?
+  createdAt                DateTime        @default(now())
+  updatedAt                DateTime        @updatedAt
+
+  @@index([coachProfileId, status])
+}
+
+model CoachCalendlyConnection {
+  id                       String       @id @default(cuid())
+  coachProfileId           String       @unique
+  coachProfile             CoachProfile @relation(fields: [coachProfileId], references: [id], onDelete: Cascade)
+  accessTokenCiphertext    String
+  refreshTokenCiphertext   String?
+  tokenExpiresAt           DateTime?
+  calendlyUserUri          String?
+  calendlyOrganizationUri  String?
+  webhookSubscriptionUri   String?
+  scopes                   Json?
+  status                   CoachIntegrationStatus @default(ACTIVE)
+  lastSyncedAt             DateTime?
+  createdAt                DateTime     @default(now())
+  updatedAt                DateTime     @updatedAt
+}
+
+model CoachReward {
+  id               String            @id @default(cuid())
+  coachProfileId   String
+  coachProfile     CoachProfile      @relation(fields: [coachProfileId], references: [id], onDelete: Cascade)
+  title            String
+  description      String
+  pointsCost       Int
+  entitlementType  String            @default("manual")
+  entitlementValue String?
+  status           CoachRewardStatus @default(DRAFT)
+  moderationNote   String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  redemptions      CoachRewardRedemption[]
+
+  @@index([coachProfileId, status])
+}
+
+model CoachRewardRedemption {
+  id                  String                  @id @default(cuid())
+  rewardId            String
+  reward              CoachReward             @relation(fields: [rewardId], references: [id])
+  relationshipId      String
+  relationship        CoachClientRelationship @relation(fields: [relationshipId], references: [id], onDelete: Cascade)
+  userId              String
+  user                User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pointsCost          Int
+  walletTransactionId String                  @unique
+  status              CoachRewardRedemptionStatus @default(FULFILLED)
+  createdAt           DateTime                @default(now())
+
+  @@index([userId, createdAt])
+  @@index([rewardId, createdAt])
+}
+
 model FeatureFlag {
   key       String   @id
   enabled   Boolean  @default(false)
@@ -314,6 +689,7 @@ model HabitDefinition {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   enrollments HabitEnrollment[]
+  coachAssignments CoachHabitAssignment[]
 
   @@index([active, cycle, week])
 }
@@ -365,6 +741,7 @@ model HabitProgram {
   notificationPreference HabitNotificationPreference?
   partnerBonusAttributions PartnerAttribution[] @relation("PartnerBonusProgram")
   walletTransactions InternalWalletTransaction[]
+  coachRelationships CoachClientRelationship[]
 
   @@index([userId, status, createdAt])
   @@index([sessionId, status, createdAt])
@@ -606,6 +983,7 @@ model HabitEnrollment {
   dailyTasks         HabitDailyTask[]
   calendarEvents     HabitCalendarEvent[]
   weekSummaries      HabitWeekSummary[]
+  coachAssignments   CoachHabitAssignment[]
 
   @@index([programId, status, sortOrder])
 }
@@ -1086,4 +1464,123 @@ enum CoachPartnershipLeadStatus {
   CONTACTED
   APPROVED
   REJECTED
+}
+
+enum CoachProfileStatus {
+  DRAFT
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum CoachPriceMigrationMode {
+  NEW_ONLY
+  NEXT_RENEWAL
+}
+
+enum CoachSubscriptionStatus {
+  PENDING
+  ACTIVE
+  CANCEL_AT_PERIOD_END
+  PAST_DUE
+  GRACE
+  CANCELLED
+}
+
+enum CoachClientFunding {
+  COACH_PAID
+  CLIENT_PAID
+}
+
+enum CoachRelationshipStatus {
+  PENDING
+  ACTIVE
+  PAUSED
+  ENDED
+}
+
+enum CoachServiceType {
+  ONGOING_SUPPORT
+  CONSULTATION
+}
+
+enum CoachServicePaymentModel {
+  INCLUDED
+  CLIENT_PAID
+}
+
+enum CoachOfferStatus {
+  DRAFT
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  PAUSED
+}
+
+enum CoachServiceOrderStatus {
+  PENDING_PAYMENT
+  AWAITING_BOOKING
+  BOOKED
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  REFUND_PENDING
+  REFUNDED
+  FAILED
+}
+
+enum CoachMessageAuthorRole {
+  COACH
+  CLIENT
+}
+
+enum CoachAssignmentStatus {
+  OPEN
+  COMPLETED
+  DISMISSED
+}
+
+enum CoachHabitAssignmentStatus {
+  PROPOSED
+  ACTIVE
+  DECLINED
+  COMPLETED
+  CANCELLED
+}
+
+enum CoachSiteStatus {
+  DRAFT
+  PENDING_PAYMENT
+  ACTIVE
+  GRACE
+  UNPUBLISHED
+  SUSPENDED
+}
+
+enum CoachDomainStatus {
+  NOT_CONFIGURED
+  PENDING_VERIFICATION
+  VERIFIED
+  FAILED
+}
+
+enum CoachIntegrationStatus {
+  ACTIVE
+  DISCONNECTED
+  ERROR
+}
+
+enum CoachRewardStatus {
+  DRAFT
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  PAUSED
+}
+
+enum CoachRewardRedemptionStatus {
+  FULFILLED
+  REFUNDED
+  FAILED
 }

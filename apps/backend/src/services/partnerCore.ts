@@ -366,8 +366,8 @@ export class PartnerCoreServiceClient {
     return this.request<unknown>("GET", partnerPortalPath("payouts"), undefined, portalAuthorization(sessionToken));
   }
 
-  createPartnerPortalReferralLink(input: { sessionToken: string; channel: string; idempotencyKey: string }) {
-    return this.request<unknown>("POST", partnerPortalPath("referral-links"), { channel: input.channel }, {
+  createPartnerPortalReferralLink(input: { sessionToken: string; channel: string; programId?: string; idempotencyKey: string }) {
+    return this.request<unknown>("POST", partnerPortalPath("referral-links"), { channel: input.channel, ...(input.programId ? { programId: input.programId } : {}) }, {
       ...portalAuthorization(input.sessionToken),
       "Idempotency-Key": input.idempotencyKey
     });
@@ -577,7 +577,7 @@ export function getPartnerCorePortalPayouts(sessionToken: string) {
   return requirePartnerCoreClient().getPartnerPortalPayouts(sessionToken);
 }
 
-export function createPartnerCorePortalReferralLink(input: { sessionToken: string; channel: string; idempotencyKey: string }) {
+export function createPartnerCorePortalReferralLink(input: { sessionToken: string; channel: string; programId?: string; idempotencyKey: string }) {
   return requirePartnerCoreClient().createPartnerPortalReferralLink(input);
 }
 
@@ -1274,6 +1274,62 @@ export async function recordSubscriptionInvoiceConversion(input: {
     programConfigId: activeProgram?.id ?? attribution.programConfigId,
     userId: input.userId,
     externalId: payload.externalId,
+    payload
+  })).status;
+}
+
+export async function recordCoachCommerceConversion(input: {
+  externalId: string;
+  partnerCorePartnerId?: string;
+  referralCode?: string | null;
+  programId?: string | null;
+  customerRef?: string;
+  amountPaidCents: number;
+  eventType: "coach_signup" | "coach_package_payment" | "coach_service_payment" | "coach_site_payment";
+  idempotencyKey: string;
+}) {
+  if (input.amountPaidCents < 0 || (input.amountPaidCents === 0 && input.eventType !== "coach_signup")) return "SKIPPED";
+  const activeProgram = await getActivePartnerProgram();
+  const programId = input.programId ?? activeProgram?.partnerCoreProgramId ?? env.PARTNER_CORE_DEFAULT_PROGRAM_ID;
+  if (!programId) return "SKIPPED";
+  const payload: PartnerCoreConversionRequest = {
+    programId,
+    eventType: input.eventType === "coach_signup" ? "signup" : "payment",
+    externalId: input.externalId,
+    ...(input.referralCode ? { referralCode: input.referralCode } : {}),
+    customerRef: input.customerRef ?? hashSubject(`coach:${input.partnerCorePartnerId ?? "unknown"}`),
+    paymentAmountCents: input.amountPaidCents,
+    actor: "Orken coach commerce",
+    idempotencyKey: input.idempotencyKey
+  };
+  return (await recordPartnerConversionEvent({
+    type: input.eventType === "coach_signup" ? "SIGNUP" : "PAYMENT",
+    programConfigId: activeProgram?.id,
+    externalId: input.externalId,
+    payload
+  })).status;
+}
+
+export async function recordCoachCommerceConversionReversal(input: {
+  originalExternalId: string;
+  refundId: string;
+  reason: string;
+  idempotencyKey: string;
+  programId?: string | null;
+}) {
+  const activeProgram = await getActivePartnerProgram();
+  const programId = input.programId ?? activeProgram?.partnerCoreProgramId ?? env.PARTNER_CORE_DEFAULT_PROGRAM_ID;
+  if (!programId) return "SKIPPED";
+  const payload: PartnerCoreConversionReversalRequest = {
+    programId,
+    originalExternalId: input.originalExternalId,
+    eventType: "refund",
+    reason: input.reason,
+    actor: "Orken coach commerce",
+    idempotencyKey: input.idempotencyKey
+  };
+  return (await recordPartnerConversionReversalEvent({
+    programConfigId: activeProgram?.id,
     payload
   })).status;
 }

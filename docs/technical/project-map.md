@@ -232,6 +232,7 @@ The admin UI currently manages:
 - habits week summary mode: rule-based or LLM-based;
 - habits week summary model;
 - Pingvi navigator temperature;
+- business reports at `/admin/reports`: period filters, users and diagnostics, payments and promo usage, subscription status/access-source classification, estimated MRR/ARR, coach and partner metrics, bounded detail tables, and CSV export;
 - Telegram reminder template;
 - Telegram rate limit window and max messages;
 - Telegram short-lived web-login toggle.

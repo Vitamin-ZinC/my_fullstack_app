@@ -3,12 +3,14 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
+  BarChart3,
   BadgeDollarSign,
   Bot,
   BrainCircuit,
   FileText,
   Handshake,
   LayoutDashboard,
+  Download,
   LogOut,
   RefreshCw,
   Settings,
@@ -16,7 +18,9 @@ import {
   type LucideIcon
 } from "lucide-react";
 import type {
+  AdminBusinessReport,
   AdminCoachPartnershipLead,
+  AdminReportBreakdown,
   AdminStats,
   AdminUserSummary,
   AdminTelegramCommunityChat,
@@ -61,7 +65,7 @@ import {
 } from "@/lib/api";
 import { defaultSiteText } from "@/lib/messages";
 
-export type AdminSection = "overview" | "users" | "commercial" | "ai" | "content" | "integrations" | "partners" | "system";
+export type AdminSection = "overview" | "reports" | "users" | "commercial" | "ai" | "content" | "integrations" | "partners" | "system";
 type PartnerAdminView = "overview" | "applications" | "partners" | "program" | "offers" | "operations";
 
 type AdminSectionDefinition = {
@@ -75,6 +79,7 @@ type AdminSectionDefinition = {
 
 export const adminSections: AdminSectionDefinition[] = [
   { id: "overview", href: "/admin", label: "Обзор", title: "Обзор продукта", description: "Ключевые показатели диагностики и Навигатора привычек.", icon: LayoutDashboard },
+  { id: "reports", href: "/admin/reports", label: "Отчёты", title: "Отчёты и аналитика", description: "Пользователи, подписки, платежи, коучи и партнёрская воронка.", icon: BarChart3 },
   { id: "users", href: "/admin/users", label: "Пользователи", title: "Пользователи", description: "Активность, диагностики, привычки, Telegram и подаренные дни.", icon: Users },
   { id: "commercial", href: "/admin/commercial", label: "Коммерция", title: "Цены и промокоды", description: "Стоимость отчёта, подписка, trial и промокоды.", icon: BadgeDollarSign },
   { id: "ai", href: "/admin/ai", label: "AI и промпты", title: "AI и промпты", description: "Режим генерации, модели и версионируемые системные промпты.", icon: BrainCircuit },
@@ -227,6 +232,8 @@ export function AdminConsole({ section }: { section: AdminSection }) {
   const [password, setPassword] = useState("");
   const [authenticated, setAuthenticated] = useState(false);
   const [stats, setStats] = useState<AdminStats | null>(null);
+  const [businessReport, setBusinessReport] = useState<AdminBusinessReport | null>(null);
+  const [reportDays, setReportDays] = useState("30");
   const [analyses, setAnalyses] = useState<unknown[]>([]);
   const [users, setUsers] = useState<AdminUserSummary[]>([]);
   const [settings, setSettings] = useState<AppSetting[]>([]);
@@ -361,6 +368,19 @@ export function AdminConsole({ section }: { section: AdminSection }) {
         const [nextStats, nextAnalyses] = await Promise.all([adminApi.stats(), adminApi.analyses()]);
         setStats(nextStats);
         setAnalyses(nextAnalyses);
+      }
+
+      if (section === "reports") {
+        const [nextReport, nextPartnerCoreSnapshot] = await Promise.all([
+          adminApi.businessReport(Number(reportDays)),
+          adminApi.partnerCore().catch((reason) => ({
+            ...emptyPartnerCoreSnapshot,
+            configured: true,
+            error: reason instanceof Error ? reason.message : "Partner Core недоступен"
+          }))
+        ]);
+        setBusinessReport(nextReport);
+        setPartnerCoreSnapshot(nextPartnerCoreSnapshot);
       }
 
       if (section === "users") {
@@ -1223,6 +1243,151 @@ export function AdminConsole({ section }: { section: AdminSection }) {
               })}
             </section>
           )}
+
+          {section === "reports" && businessReport && <>
+            <section className="admin-report-toolbar">
+              <div>
+                <strong>Период отчёта</strong>
+                <span>{formatReportDateRange(businessReport.range.from, businessReport.range.to)}</span>
+              </div>
+              <label>
+                <span className="sr-only">Период</span>
+                <select className="input" value={reportDays} onChange={(event) => setReportDays(event.target.value)}>
+                  <option value="7">7 дней</option>
+                  <option value="30">30 дней</option>
+                  <option value="90">90 дней</option>
+                  <option value="365">12 месяцев</option>
+                </select>
+              </label>
+              <button className="button secondary" onClick={() => void refresh()} disabled={loading}>Применить</button>
+              <button className="button secondary" onClick={() => downloadAdminBusinessReport(businessReport, partnerCoreSnapshot)}>
+                <Download size={17} aria-hidden="true" /> CSV
+              </button>
+            </section>
+
+            <section className="admin-report-kpis" data-testid="admin-report-kpis">
+              <AdminMiniMetric label="Всего пользователей" value={businessReport.users.total} />
+              <AdminMiniMetric label="Новые за период" value={businessReport.users.newInPeriod} />
+              <AdminMiniMetric label="Активные за период" value={businessReport.users.activeInPeriod} />
+              <AdminMiniMetric label="Платные подписки" value={businessReport.subscriptions.paidCurrent} />
+              <AdminMiniMetric label="Расчётный MRR" value={formatReportMoney(businessReport.subscriptions.estimatedMrr)} />
+              <AdminMiniMetric label="Выручка отчётов" value={formatReportMoneyList(businessReport.payments.revenue)} />
+              <AdminMiniMetric label="Новые заявки коучей" value={businessReport.coaches.applicationsInPeriod} />
+              <AdminMiniMetric label="Партнёры Orken" value={partnerCoreSnapshot.partners.length} />
+            </section>
+
+            <section className="admin-report-grid">
+              <div className="admin-report-panel">
+                <div className="admin-report-panel-heading">
+                  <div><span className="eyebrow">Воронка</span><h2>Пользователи и диагностики</h2></div>
+                  <strong>{percentOf(businessReport.diagnostics.completedInPeriod, businessReport.diagnostics.createdInPeriod)}%</strong>
+                </div>
+                <p className="muted">Доля завершённых диагностик среди созданных за выбранный период.</p>
+                <div className="admin-report-inline-metrics">
+                  <AdminMiniMetric label="Создано диагностик" value={businessReport.diagnostics.createdInPeriod} />
+                  <AdminMiniMetric label="Завершено" value={businessReport.diagnostics.completedInPeriod} />
+                  <AdminMiniMetric label="Ошибки" value={businessReport.diagnostics.failedInPeriod} />
+                </div>
+                <AdminReportBreakdownList items={businessReport.diagnostics.byStatus} total={businessReport.diagnostics.createdInPeriod} />
+              </div>
+
+              <div className="admin-report-panel">
+                <div className="admin-report-panel-heading">
+                  <div><span className="eyebrow">Навигатор привычек</span><h2>Подписки и типы доступа</h2></div>
+                  <strong>{businessReport.subscriptions.totalPrograms}</strong>
+                </div>
+                <div className="admin-report-inline-metrics">
+                  <AdminMiniMetric label="Новые программы" value={businessReport.subscriptions.createdInPeriod} />
+                  <AdminMiniMetric label="Trial начат" value={businessReport.subscriptions.trialStartedInPeriod} />
+                  <AdminMiniMetric label="Trial → paid" value={`${businessReport.subscriptions.cohortTrialToPaidPercent}%`} />
+                  <AdminMiniMetric label="Истекают за 7 дней" value={businessReport.subscriptions.trialsEndingWithin7Days} />
+                </div>
+                <div className="admin-report-breakdown-columns">
+                  <div><h3>По статусу</h3><AdminReportBreakdownList items={businessReport.subscriptions.byStatus} total={businessReport.subscriptions.totalPrograms} /></div>
+                  <div><h3>По источнику доступа</h3><AdminReportBreakdownList items={businessReport.subscriptions.byAccessType} total={businessReport.subscriptions.totalPrograms} /></div>
+                </div>
+                <p className="admin-report-note">MRR и ARR расчётные: активные Stripe-подписки умножаются на текущую цену Навигатора. Фактические invoice-платежи подписки пока не сохраняются отдельным ledger в Orken.</p>
+              </div>
+
+              <div className="admin-report-panel">
+                <div className="admin-report-panel-heading">
+                  <div><span className="eyebrow">Коммерция</span><h2>Платежи за диагностику</h2></div>
+                  <strong>{formatReportMoneyList(businessReport.payments.revenue)}</strong>
+                </div>
+                <div className="admin-report-inline-metrics">
+                  <AdminMiniMetric label="Создано платежей" value={businessReport.payments.createdInPeriod} />
+                  <AdminMiniMetric label="Успешно" value={businessReport.payments.succeededInPeriod} />
+                  <AdminMiniMetric label="С промокодом" value={businessReport.payments.promoUsesInPeriod} />
+                  <AdminMiniMetric label="Скидки" value={formatReportMoneyList(businessReport.payments.discounts)} />
+                </div>
+                <AdminReportBreakdownList items={businessReport.payments.byStatus} total={businessReport.payments.createdInPeriod} />
+              </div>
+
+              <div className="admin-report-panel">
+                <div className="admin-report-panel-heading">
+                  <div><span className="eyebrow">B2B</span><h2>Коучи и партнёры</h2></div>
+                  <strong>{businessReport.coaches.applicationsTotal}</strong>
+                </div>
+                <div className="admin-report-inline-metrics">
+                  <AdminMiniMetric label="Заявки за период" value={businessReport.coaches.applicationsInPeriod} />
+                  <AdminMiniMetric label="Атрибуции за период" value={businessReport.partners.attributionsInPeriod} />
+                  <AdminMiniMetric label="Партнёрские события" value={businessReport.partners.eventsInPeriod} />
+                  <AdminMiniMetric label="Активации офферов" value={businessReport.partners.redemptionsInPeriod} />
+                </div>
+                <div className="admin-report-breakdown-columns">
+                  <div><h3>Статусы заявок</h3><AdminReportBreakdownList items={businessReport.coaches.byStatus} total={businessReport.coaches.applicationsTotal} /></div>
+                  <div><h3>Интересы коучей</h3><AdminReportBreakdownList items={businessReport.coaches.byInterest} total={businessReport.coaches.byInterest.reduce((sum, item) => sum + item.count, 0)} /></div>
+                </div>
+                {partnerCoreSnapshot.error ? <p className="admin-report-note error">Partner Core недоступен: {partnerCoreSnapshot.error}</p> : (
+                  <p className="admin-report-note">Partner Core: партнёров {partnerCoreSnapshot.partners.length}, конверсий {partnerConversions}, начислений {formatPartnerMoney(partnerLedgerRevenueCents)}.</p>
+                )}
+              </div>
+            </section>
+
+            <section className="admin-report-table-panel">
+              <div className="admin-report-panel-heading">
+                <div><span className="eyebrow">Текущий срез</span><h2>Подписки и доступы пользователей</h2></div>
+                <span>{businessReport.subscriptions.rows.length} строк</span>
+              </div>
+              <div className="admin-report-table-scroll">
+                <table className="admin-report-table">
+                  <thead><tr><th>Пользователь</th><th>Продукт</th><th>Тип доступа</th><th>Статус</th><th>Срок</th><th>Обновлено</th></tr></thead>
+                  <tbody>{businessReport.subscriptions.rows.map((row) => (
+                    <tr key={row.id}>
+                      <td><strong>{row.userEmail ?? "Без аккаунта"}</strong><small>{row.userId ?? row.id}</small></td>
+                      <td>Навигатор, помесячно<small>{row.source}</small></td>
+                      <td>{reportLabel(row.accessType)}</td>
+                      <td>{reportLabel(row.status)}{row.cancelAtPeriodEnd && <small>Отмена в конце периода</small>}</td>
+                      <td>{formatOptionalReportDate(row.currentPeriodEnd ?? row.trialEndsAt)}</td>
+                      <td>{formatAdminDate(row.updatedAt)}</td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </div>
+            </section>
+
+            <section className="admin-report-table-panel">
+              <div className="admin-report-panel-heading">
+                <div><span className="eyebrow">За выбранный период</span><h2>Платежи</h2></div>
+                <span>{businessReport.payments.recent.length} строк</span>
+              </div>
+              <div className="admin-report-table-scroll">
+                <table className="admin-report-table">
+                  <thead><tr><th>Дата</th><th>Пользователь</th><th>Продукт</th><th>Статус</th><th>Сумма</th><th>Промокод</th></tr></thead>
+                  <tbody>{businessReport.payments.recent.length === 0 ? <tr><td colSpan={6}>Платежей за период нет</td></tr> : businessReport.payments.recent.map((payment) => (
+                    <tr key={payment.id}>
+                      <td>{formatAdminDate(payment.paidAt ?? payment.createdAt)}</td>
+                      <td>{payment.userEmail ?? "Без аккаунта"}</td>
+                      <td>Платный отчёт</td>
+                      <td>{reportLabel(payment.status)}</td>
+                      <td>{formatReportMoney({ amount: payment.amount, currency: payment.currency })}{payment.discountAmount > 0 && <small>Скидка {formatReportMoney({ amount: payment.discountAmount, currency: payment.currency })}</small>}</td>
+                      <td>{payment.promoCode ?? "—"}</td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </div>
+            </section>
+          </>}
 
           {section === "users" && <section id="admin-users" className="card stack admin-section-card">
             <div>
@@ -2126,6 +2291,167 @@ function moneyInputToCents(value: string) {
     throw new Error("Укажите сумму в евро, например 25 или 25,50");
   }
   return Math.round(amount * 100);
+}
+
+function reportLabel(value: string) {
+  const labels: Record<string, string> = {
+    PAID_SUBSCRIPTION: "Платная подписка",
+    STANDARD_TRIAL: "Обычный trial",
+    GIFTED_DAYS: "Подаренные дни",
+    PARTNER_BONUS: "Партнёрский бонус",
+    FREE_ACCESS: "Бесплатный доступ",
+    ACTIVE: "Активна",
+    TRIAL: "Trial",
+    EXPIRED_TRIAL: "Trial истёк",
+    PAUSED: "Приостановлена",
+    CANCEL_AT_PERIOD_END: "Отмена в конце периода",
+    CANCELED: "Отменена",
+    SUCCEEDED: "Успешно",
+    FAILED: "Ошибка",
+    PENDING: "Ожидает",
+    REFUNDED: "Возврат",
+    DONE: "Готово",
+    PROCESSING: "Обрабатывается",
+    QUEUED: "В очереди",
+    NEW: "Новая",
+    CONTACTED: "Связались",
+    APPROVED: "Одобрена",
+    REJECTED: "Отклонена",
+    wholesale: "Пакеты",
+    referral: "Реферальная программа",
+    marketplace: "Витрина",
+    white_label: "White Label",
+    personal: "Личное сопровождение",
+    individual: "Индивидуальная работа",
+    groups: "Группы",
+    corporate: "Корпоративный формат",
+    education: "Обучение",
+    mixed: "Смешанный формат",
+    SIGNUP: "Регистрации",
+    PAYMENT: "Платежи",
+    REDEMPTION: "Активации",
+    REFUND: "Возвраты",
+    CUSTOMER_BONUS: "Бонусы"
+  };
+  return labels[value] ?? value;
+}
+
+function formatReportMoney(total: { amount: number; currency: string }) {
+  try {
+    return new Intl.NumberFormat("ru-RU", {
+      style: "currency",
+      currency: total.currency.toUpperCase(),
+      maximumFractionDigits: 2
+    }).format(total.amount / 100);
+  } catch {
+    return `${(total.amount / 100).toFixed(2)} ${total.currency.toUpperCase()}`;
+  }
+}
+
+function formatReportMoneyList(totals: Array<{ amount: number; currency: string }>) {
+  return totals.length ? totals.map(formatReportMoney).join(" · ") : "—";
+}
+
+function percentOf(value: number, total: number) {
+  return total > 0 ? Math.round((value / total) * 1000) / 10 : 0;
+}
+
+function formatReportDateRange(from: string, to: string) {
+  const formatter = new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "short", year: "numeric" });
+  return `${formatter.format(new Date(from))} — ${formatter.format(new Date(to))}`;
+}
+
+function formatOptionalReportDate(value?: string | null) {
+  return value ? formatAdminDate(value) : "Без ограничения";
+}
+
+function AdminReportBreakdownList({ items, total }: { items: AdminReportBreakdown[]; total: number }) {
+  if (items.length === 0) return <p className="muted">Данных за период нет</p>;
+  return (
+    <div className="admin-report-breakdown">
+      {items.map((item) => {
+        const percent = percentOf(item.count, total);
+        return (
+          <div className="admin-report-breakdown-row" key={item.key}>
+            <div><span>{reportLabel(item.key)}</span><strong>{item.count} · {percent}%</strong></div>
+            <div className="admin-report-breakdown-track"><span style={{ width: `${percent}%` }} /></div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function csvCell(value: unknown) {
+  const text = value === null || value === undefined ? "" : String(value);
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+function downloadAdminBusinessReport(report: AdminBusinessReport, partnerCore: PartnerCoreAdminSnapshot) {
+  const rows: unknown[][] = [
+    ["ORKEN.LIFE — управленческий отчёт"],
+    ["Период", report.range.from, report.range.to],
+    ["Сформирован", report.generatedAt],
+    [],
+    ["Сводка", "Значение"],
+    ["Всего пользователей", report.users.total],
+    ["Новые пользователи", report.users.newInPeriod],
+    ["Активные пользователи", report.users.activeInPeriod],
+    ["Диагностики", report.diagnostics.createdInPeriod],
+    ["Успешные платежи", report.payments.succeededInPeriod],
+    ["Выручка отчётов", formatReportMoneyList(report.payments.revenue)],
+    ["Платные подписки", report.subscriptions.paidCurrent],
+    ["Расчётный MRR", formatReportMoney(report.subscriptions.estimatedMrr)],
+    ["Расчётный ARR", formatReportMoney(report.subscriptions.estimatedArr)],
+    ["Заявки коучей", report.coaches.applicationsTotal],
+    ["Партнёры Orken", partnerCore.partners.length],
+    [],
+    ["Подписки", "Email", "План", "Тип доступа", "Статус", "Trial до", "Оплаченный период до", "Обновлено"],
+    ...report.subscriptions.rows.map((row) => [
+      row.id,
+      row.userEmail,
+      "Навигатор привычек — помесячно",
+      reportLabel(row.accessType),
+      reportLabel(row.status),
+      row.trialEndsAt,
+      row.currentPeriodEnd,
+      row.updatedAt
+    ]),
+    [],
+    ["Платежи", "Email", "Продукт", "Статус", "Сумма", "Валюта", "Скидка", "Промокод", "Дата"],
+    ...report.payments.recent.map((payment) => [
+      payment.id,
+      payment.userEmail,
+      "Платный диагностический отчёт",
+      reportLabel(payment.status),
+      payment.amount,
+      payment.currency,
+      payment.discountAmount,
+      payment.promoCode,
+      payment.paidAt ?? payment.createdAt
+    ]),
+    [],
+    ["Коучи — статусы", "Количество"],
+    ...report.coaches.byStatus.map((item) => [reportLabel(item.key), item.count]),
+    [],
+    ["Партнёры", "Email", "Тип", "Статус", "Ссылки", "Конверсии", "Начислено, центы"],
+    ...partnerCore.partners.map((partner) => [
+      partner.id,
+      partner.email,
+      partner.account_type,
+      partner.project_status,
+      partner.referral_links_count,
+      partner.conversions_count,
+      partner.payable_cents
+    ])
+  ];
+  const csv = `\uFEFF${rows.map((row) => row.map(csvCell).join(";")).join("\r\n")}`;
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `orken-report-${report.generatedAt.slice(0, 10)}.csv`;
+  link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 function List({ title, items }: { title: string; items: string[] }) {

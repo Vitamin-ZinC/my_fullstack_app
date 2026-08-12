@@ -1,6 +1,7 @@
 import type {
   AdminGiftDaysResponse,
   AdminCoachPartnershipLead,
+  AdminBusinessReport,
   AdminStats,
   AdminUserSummary,
   AudioSuitabilityResponse,
@@ -738,6 +739,7 @@ export const adminApi = {
     body: JSON.stringify({ password })
   }),
   stats: () => adminRequest<AdminStats>("/api/admin/stats"),
+  businessReport: (days = 30) => adminRequest<AdminBusinessReport>(`/api/admin/reports/business?days=${encodeURIComponent(String(days))}`),
   analyses: () => adminRequest<unknown[]>("/api/admin/analyses"),
   users: (query?: { q?: string; limit?: number; offset?: number }) => {
     const params = new URLSearchParams();

@@ -529,6 +529,7 @@ Local watcher for this workstation:
 
 - `POST /api/admin/login`
 - `GET /api/admin/stats`
+- `GET /api/admin/reports/business?days=30` - protected management report for users, diagnostics, one-time report payments, habits subscriptions/access types, coach applications, and local partner events. `days` accepts `1..3650`.
 - `GET /api/admin/analyses`
 - `GET /api/admin/settings`
 - `PUT /api/admin/settings/:key`
@@ -552,6 +553,8 @@ Local watcher for this workstation:
 - `PATCH /api/admin/partner-core/partners/:id/status`
 - `GET /api/admin/audit-log`
 
+The business report classifies habits access from persisted evidence instead of inventing plan records: Stripe subscription, applied Partner Core bonus, `user.gift_days` admin audit, standard trial, or free access. The current paid product is reported as `HABITS_MONTHLY`. MRR/ARR are estimates based on active Stripe-linked programs multiplied by the current `habit_subscription_price_amount`; Orken does not yet persist a separate subscription invoice ledger, so these values must not be treated as recognized revenue.
+
 ## Shared Contracts
 
 Shared API types live in:
@@ -560,6 +563,7 @@ Shared API types live in:
 
 Important habit contracts:
 
+- `AdminBusinessReport`
 - `HabitConfigResponse`
 - `HabitDefinitionSummary`
 - `HabitCycleSummary`

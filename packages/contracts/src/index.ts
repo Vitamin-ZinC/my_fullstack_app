@@ -223,6 +223,109 @@ export type AdminStats = {
   habitInsightsTotal: number;
 };
 
+export type AdminReportBreakdown = {
+  key: string;
+  count: number;
+};
+
+export type AdminMoneyTotal = {
+  currency: string;
+  amount: number;
+};
+
+export type AdminSubscriptionAccessType =
+  | "PAID_SUBSCRIPTION"
+  | "STANDARD_TRIAL"
+  | "GIFTED_DAYS"
+  | "PARTNER_BONUS"
+  | "FREE_ACCESS";
+
+export type AdminBusinessReport = {
+  generatedAt: string;
+  range: {
+    days: number;
+    from: string;
+    to: string;
+  };
+  users: {
+    total: number;
+    newInPeriod: number;
+    activeInPeriod: number;
+  };
+  diagnostics: {
+    createdInPeriod: number;
+    completedInPeriod: number;
+    failedInPeriod: number;
+    byStatus: AdminReportBreakdown[];
+  };
+  payments: {
+    createdInPeriod: number;
+    succeededInPeriod: number;
+    promoUsesInPeriod: number;
+    byStatus: AdminReportBreakdown[];
+    revenue: AdminMoneyTotal[];
+    discounts: AdminMoneyTotal[];
+    recent: Array<{
+      id: string;
+      userEmail?: string | null;
+      productType: "DIAGNOSTIC_REPORT";
+      status: string;
+      amount: number;
+      originalAmount?: number | null;
+      discountAmount: number;
+      currency: string;
+      promoCode?: string | null;
+      createdAt: string;
+      paidAt?: string | null;
+    }>;
+  };
+  subscriptions: {
+    totalPrograms: number;
+    createdInPeriod: number;
+    trialStartedInPeriod: number;
+    paidCurrent: number;
+    cancellingCurrent: number;
+    trialsEndingWithin7Days: number;
+    cohortTrialToPaidPercent: number;
+    byStatus: AdminReportBreakdown[];
+    byAccessType: AdminReportBreakdown[];
+    estimatedMrr: AdminMoneyTotal;
+    estimatedArr: AdminMoneyTotal;
+    rows: Array<{
+      id: string;
+      userId?: string | null;
+      userEmail?: string | null;
+      title: string;
+      planType: "HABITS_MONTHLY";
+      accessType: AdminSubscriptionAccessType;
+      status: string;
+      source: string;
+      trialStartedAt?: string | null;
+      trialEndsAt?: string | null;
+      currentPeriodEnd?: string | null;
+      cancelAtPeriodEnd: boolean;
+      createdAt: string;
+      updatedAt: string;
+    }>;
+  };
+  coaches: {
+    applicationsTotal: number;
+    applicationsInPeriod: number;
+    byStatus: AdminReportBreakdown[];
+    byPracticeFormat: AdminReportBreakdown[];
+    byInterest: AdminReportBreakdown[];
+  };
+  partners: {
+    attributedUsersTotal: number;
+    attributionsInPeriod: number;
+    bonusesAppliedTotal: number;
+    eventsInPeriod: number;
+    eventsByType: AdminReportBreakdown[];
+    redemptionsInPeriod: number;
+    redemptionsByStatus: AdminReportBreakdown[];
+  };
+};
+
 export type AppSettingValue = string | number | boolean | null | AppSettingValue[] | { [key: string]: AppSettingValue };
 
 export type AppSetting = {

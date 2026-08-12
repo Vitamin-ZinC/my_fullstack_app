@@ -172,6 +172,118 @@ test("voice flow renews an expired guest session before recording", async ({ pag
   expect(guestRequests).toBe(1);
 });
 
+test("admin business reports show subscription types and export CSV on mobile", async ({ page }) => {
+  let requestedDays = "";
+  await page.addInitScript(() => window.sessionStorage.setItem("levelup_admin_session", "admin-report-session"));
+  await page.route(`${apiBase}/api/admin/reports/business**`, async (route) => {
+    requestedDays = new URL(route.request().url()).searchParams.get("days") ?? "";
+    await fulfillJson(route, {
+      generatedAt: "2026-08-12T08:00:00.000Z",
+      range: { days: Number(requestedDays), from: "2026-07-13T08:00:00.000Z", to: "2026-08-12T08:00:00.000Z" },
+      users: { total: 120, newInPeriod: 18, activeInPeriod: 44 },
+      diagnostics: {
+        createdInPeriod: 30,
+        completedInPeriod: 24,
+        failedInPeriod: 2,
+        byStatus: [{ key: "DONE", count: 24 }, { key: "FAILED", count: 2 }, { key: "PROCESSING", count: 4 }]
+      },
+      payments: {
+        createdInPeriod: 12,
+        succeededInPeriod: 10,
+        promoUsesInPeriod: 3,
+        byStatus: [{ key: "SUCCEEDED", count: 10 }, { key: "PENDING", count: 2 }],
+        revenue: [{ amount: 3000, currency: "usd" }],
+        discounts: [{ amount: 450, currency: "usd" }],
+        recent: [{
+          id: "payment-report-1",
+          userEmail: "report@example.com",
+          productType: "DIAGNOSTIC_REPORT",
+          status: "SUCCEEDED",
+          amount: 300,
+          originalAmount: 500,
+          discountAmount: 200,
+          currency: "usd",
+          promoCode: "WELCOME",
+          createdAt: "2026-08-11T08:00:00.000Z",
+          paidAt: "2026-08-11T08:01:00.000Z"
+        }]
+      },
+      subscriptions: {
+        totalPrograms: 70,
+        createdInPeriod: 14,
+        trialStartedInPeriod: 12,
+        paidCurrent: 9,
+        cancellingCurrent: 1,
+        trialsEndingWithin7Days: 4,
+        cohortTrialToPaidPercent: 25,
+        byStatus: [{ key: "TRIAL", count: 50 }, { key: "ACTIVE", count: 9 }, { key: "EXPIRED_TRIAL", count: 11 }],
+        byAccessType: [{ key: "STANDARD_TRIAL", count: 50 }, { key: "PAID_SUBSCRIPTION", count: 9 }, { key: "GIFTED_DAYS", count: 6 }, { key: "PARTNER_BONUS", count: 5 }],
+        estimatedMrr: { amount: 7200, currency: "usd" },
+        estimatedArr: { amount: 86400, currency: "usd" },
+        rows: [{
+          id: "program-report-1",
+          userId: "user-report-1",
+          userEmail: "subscriber@example.com",
+          title: "Навигатор привычек ORKEN.LIFE",
+          planType: "HABITS_MONTHLY",
+          accessType: "GIFTED_DAYS",
+          status: "TRIAL",
+          source: "analysis-report",
+          trialStartedAt: "2026-08-01T00:00:00.000Z",
+          trialEndsAt: "2026-09-01T00:00:00.000Z",
+          currentPeriodEnd: null,
+          cancelAtPeriodEnd: false,
+          createdAt: "2026-08-01T00:00:00.000Z",
+          updatedAt: "2026-08-11T00:00:00.000Z"
+        }]
+      },
+      coaches: {
+        applicationsTotal: 8,
+        applicationsInPeriod: 3,
+        byStatus: [{ key: "NEW", count: 3 }, { key: "APPROVED", count: 5 }],
+        byPracticeFormat: [{ key: "individual", count: 6 }, { key: "groups", count: 2 }],
+        byInterest: [{ key: "referral", count: 5 }, { key: "marketplace", count: 3 }]
+      },
+      partners: {
+        attributedUsersTotal: 20,
+        attributionsInPeriod: 6,
+        bonusesAppliedTotal: 18,
+        eventsInPeriod: 16,
+        eventsByType: [{ key: "SIGNUP", count: 6 }, { key: "PAYMENT", count: 10 }],
+        redemptionsInPeriod: 2,
+        redemptionsByStatus: [{ key: "FULFILLED", count: 2 }]
+      }
+    });
+  });
+  await page.route(`${apiBase}/api/admin/partner-core`, async (route) => fulfillJson(route, {
+    configured: true,
+    project: { name: "Orken" },
+    programs: [],
+    referralLinks: [],
+    placements: [],
+    partners: [{ id: "partner-1", email: "coach@example.com", account_type: "coach", project_status: "approved", referral_links_count: 2, conversions_count: 4, payable_cents: 1200 }],
+    redemptions: [],
+    walletOperations: [],
+    ledgerEntries: [],
+    reviewTasks: []
+  }));
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${appBase}/admin/reports`);
+  await expect(page.getByRole("heading", { name: "Отчёты и аналитика" })).toBeVisible();
+  await expect(page.getByText("Подаренные дни").first()).toBeVisible();
+  await expect(page.getByText("subscriber@example.com")).toBeVisible();
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "CSV" }).click();
+  await expect((await download).suggestedFilename()).toBe("orken-report-2026-08-12.csv");
+
+  await page.getByRole("combobox", { name: "Период" }).selectOption("7");
+  await page.getByRole("button", { name: "Применить" }).click();
+  await expect.poll(() => requestedDays).toBe("7");
+});
+
 test("ORKEN.LIFE frontend flow works with mocked backend", async ({ page }) => {
   let contactRequests = 0;
   await page.route(`${apiBase}/api/content/ru`, async (route) => fulfillJson(route, { locale: "ru", value: null }));

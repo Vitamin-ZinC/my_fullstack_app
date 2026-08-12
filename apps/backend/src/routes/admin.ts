@@ -8,6 +8,7 @@ import { createImageUploadKey, writeUploadBuffer } from "../services/media.js";
 import { HABIT_ASSISTANT_AVATAR_URL_KEY } from "../services/pricing.js";
 import { defaultReportPromptTemplates } from "../services/reportPrompts.js";
 import { calculateGiftedTrialEnd, calculateTrialDaysLeft } from "../services/adminUsers.js";
+import { getAdminBusinessReport } from "../services/adminReports.js";
 
 const jsonValueSchema: z.ZodType<unknown> = z.lazy(() =>
   z.union([
@@ -59,6 +60,10 @@ const adminUsersQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(30),
   offset: z.coerce.number().int().min(0).max(100_000).default(0),
   q: z.string().trim().max(200).optional()
+});
+
+const adminReportQuerySchema = z.object({
+  days: z.coerce.number().int().min(1).max(3650).default(30)
 });
 
 const giftDaysSchema = z.object({
@@ -240,6 +245,11 @@ export async function adminRoutes(app: FastifyInstance) {
       habitCheckinsTotal,
       habitInsightsTotal
     };
+  });
+
+  app.get("/api/admin/reports/business", async (request) => {
+    const query = adminReportQuerySchema.parse(request.query);
+    return getAdminBusinessReport(query.days);
   });
 
   app.get("/api/admin/analyses", async (request) => {

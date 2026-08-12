@@ -1,7 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { resolveTxt } from "node:dns/promises";
 import { Prisma } from "@prisma/client";
-import { DEFAULT_COACH_PUBLIC_CONTENT } from "@levelup/contracts";
+import type { CoachPublicContent } from "@levelup/contracts";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { SignJWT, jwtVerify } from "jose";
 import { z } from "zod";
@@ -47,6 +47,21 @@ import {
 import { getOpenAiClient, hasOpenAiClient } from "../services/openaiClient.js";
 import { availableCoachSlots, hasValidCoachRevenueSplit, shouldMigrateCoachSubscriptions } from "../services/coachRules.js";
 import { createPartnerCorePortalReferralLink, getPartnerCorePortalDashboard, normalizeReferralCode, recordCoachCommerceConversion } from "../services/partnerCore.js";
+
+const DEFAULT_COACH_PUBLIC_CONTENT: CoachPublicContent = {
+  heroEyebrow: "Партнёрская программа ORKEN",
+  heroTitle: "Технология, которая продолжает вашу работу между сессиями",
+  heroLead: "Добавьте AI-диагностику и трекер состояний в свою практику, показывайте клиенту прогресс и развивайте новые источники дохода.",
+  heroPrimaryCta: "Стать партнёром",
+  heroSecondaryCta: "Условия сотрудничества",
+  pricingEyebrow: "Тарифы платформы",
+  pricingTitle: "Пакет под текущую практику",
+  pricingLead: "Цена зависит только от числа клиентов, доступ которым оплачивает коуч. Клиенты с собственной подпиской не занимают места.",
+  applicationEyebrow: "Заявка на партнёрство",
+  applicationTitle: "Хочу стать партнёром ORKEN",
+  applicationLead: "После отправки мы пришлём закрытый материал с точной экономикой, правилами видимости и партнёрским процессом.",
+  applicationSubmitLabel: "Получить условия сотрудничества"
+};
 
 const profileSchema = z.object({
   displayName: z.string().trim().min(2).max(120),

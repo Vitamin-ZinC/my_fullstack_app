@@ -128,6 +128,50 @@ test("partner referral is captured before leaving the landing", async ({ page })
   await expect.poll(() => page.evaluate(() => window.localStorage.getItem("orken_referral_code"))).toBe("COACH-AUDIT-2026");
 });
 
+test("voice flow renews an expired guest session before recording", async ({ page }) => {
+  let analysisRequests = 0;
+  let guestRequests = 0;
+  await page.addInitScript(() => {
+    window.localStorage.setItem("levelup_session_id", "expired-session");
+    window.localStorage.setItem("levelup_guest_token", "expired-token");
+  });
+  await page.route(`${apiBase}/api/content/ru`, async (route) => fulfillJson(route, { locale: "ru", value: null }));
+  await page.route(`${apiBase}/api/auth/guest`, async (route) => {
+    guestRequests += 1;
+    await fulfillJson(route, { sessionId: "fresh-session", guestToken: "fresh-token" });
+  });
+  await page.route(`${apiBase}/api/analyses`, async (route) => {
+    analysisRequests += 1;
+    const headers = route.request().headers();
+    if (analysisRequests === 1) {
+      expect(headers["x-session-id"]).toBe("expired-session");
+      expect(headers["x-guest-token"]).toBe("expired-token");
+      await route.fulfill({
+        status: 401,
+        json: { error: "Invalid or expired session" },
+        headers: corsHeaders
+      });
+      return;
+    }
+    expect(headers["x-session-id"]).toBe("fresh-session");
+    expect(headers["x-guest-token"]).toBe("fresh-token");
+    await fulfillJson(route, {
+      analysisId: "renewed-analysis",
+      audioUploadUrl: `${apiBase}/uploads/renewed-audio`,
+      photoUploadUrl: `${apiBase}/uploads/renewed-photo`
+    });
+  });
+
+  await page.goto(`${appBase}/flow/voice`);
+  await page.getByTestId("voice-consent").getByRole("checkbox").check();
+  await page.getByTestId("voice-record-button").click();
+
+  await expect.poll(() => page.evaluate(() => window.localStorage.getItem("levelup_session_id"))).toBe("fresh-session");
+  await expect(page.getByText("Invalid or expired session")).toHaveCount(0);
+  expect(analysisRequests).toBe(2);
+  expect(guestRequests).toBe(1);
+});
+
 test("ORKEN.LIFE frontend flow works with mocked backend", async ({ page }) => {
   let contactRequests = 0;
   await page.route(`${apiBase}/api/content/ru`, async (route) => fulfillJson(route, { locale: "ru", value: null }));

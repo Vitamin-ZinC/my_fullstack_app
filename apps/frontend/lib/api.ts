@@ -114,6 +114,13 @@ export type FounderIntakeListResponse = {
   items: FounderIntakeItem[];
 };
 
+class ApiRequestError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = "ApiRequestError";
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     ...init,
@@ -134,7 +141,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     } catch {
       // Keep the original response text when the API did not return JSON.
     }
-    throw new Error(message);
+    throw new ApiRequestError(message, res.status);
   }
   return res.json();
 }
@@ -229,6 +236,24 @@ export async function ensureGuestSession() {
   });
   storeSession(session);
   return session;
+}
+
+function isExpiredSessionError(reason: unknown) {
+  return reason instanceof ApiRequestError
+    && reason.status === 401
+    && (reason.message === "Invalid or expired session" || reason.message === "Session required");
+}
+
+async function withFreshGuestSessionRetry<T>(operation: () => Promise<T>) {
+  await ensureGuestSession();
+  try {
+    return await operation();
+  } catch (reason) {
+    if (!isExpiredSessionError(reason)) throw reason;
+    clearSession();
+    await ensureGuestSession();
+    return operation();
+  }
 }
 
 export const contentSettingKey = (locale: string) => `site_texts_${locale}`;
@@ -524,13 +549,14 @@ export const api = {
     storeSession(result);
     return result;
   },
-  createAnalysis: async () => {
-    await ensureGuestSession();
-    return request<{ analysisId: string; audioUploadUrl: string; photoUploadUrl: string }>("/api/analyses", {
+  createAnalysis: () => withFreshGuestSessionRetry(() => request<{
+    analysisId: string;
+    audioUploadUrl: string;
+    photoUploadUrl: string;
+  }>("/api/analyses", {
       method: "POST",
       body: JSON.stringify({ locale: getStoredLocale(), audioConsent: true })
-    });
-  },
+    })),
   confirmAnalysis: (analysisId: string, ikigaiAnswers: IkigaiAnswers, clientMetrics?: AnalysisClientMetrics) => request<{ status: string; jobId: string }>(`/api/analyses/${analysisId}/confirm`, {
     method: "POST",
     body: JSON.stringify({ ikigaiAnswers, ...(clientMetrics ? { clientMetrics } : {}) })

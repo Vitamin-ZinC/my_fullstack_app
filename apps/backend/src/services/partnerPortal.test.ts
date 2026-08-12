@@ -211,6 +211,27 @@ test("Partner portal auth identity fills display fields that Core omits", () => 
   assert.equal(result.identity.email, "jane@example.com");
 });
 
+test("Partner portal keeps cached display fields while Core remains authoritative for status", () => {
+  const identity = partnerPortalIdentity({
+    partner: {
+      id: "partner_123",
+      status: "suspended",
+      displayName: "Practice name"
+    }
+  }, {
+    partnerCorePartnerId: "partner_123",
+    status: "approved",
+    displayName: "Jane Coach",
+    accountName: "Jane Practice",
+    email: "jane@example.com"
+  });
+
+  assert.equal(identity?.status, "suspended");
+  assert.equal(identity?.displayName, "Jane Coach");
+  assert.equal(identity?.accountName, "Jane Practice");
+  assert.equal(identity?.email, "jane@example.com");
+});
+
 test("Partner portal payload never returns Core credentials or payout details", () => {
   const payload = sanitizePartnerCorePayload({
     partner: { id: "partner_123", displayName: "Jane" },

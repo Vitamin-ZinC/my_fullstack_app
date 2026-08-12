@@ -98,9 +98,9 @@ export function partnerPortalIdentity(value: unknown, fallback?: Partial<Partner
   return {
     partnerCorePartnerId,
     status: firstString(root?.status, nested?.status, fallback?.status) ?? "PENDING_REVIEW",
-    displayName: firstString(root?.displayName, root?.display_name, nested?.displayName, nested?.display_name, fallback?.displayName) ?? null,
-    accountName: firstString(root?.accountName, root?.account_name, nested?.accountName, nested?.account_name, nested?.name, fallback?.accountName) ?? null,
-    email: firstString(root?.email, nested?.email, fallback?.email) ?? null
+    displayName: firstString(fallback?.displayName, root?.displayName, root?.display_name, nested?.displayName, nested?.display_name) ?? null,
+    accountName: firstString(fallback?.accountName, root?.accountName, root?.account_name, nested?.accountName, nested?.account_name, nested?.name) ?? null,
+    email: firstString(fallback?.email, root?.email, nested?.email) ?? null
   };
 }
 

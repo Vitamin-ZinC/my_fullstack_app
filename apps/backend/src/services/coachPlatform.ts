@@ -315,14 +315,14 @@ export function hashCoachToken(value: string) {
   return createHash("sha256").update(value).digest("hex");
 }
 
-function integrationKey() {
-  const secret = env.CALENDLY_TOKEN_ENCRYPTION_SECRET || env.PARTNER_PORTAL_SESSION_ENCRYPTION_SECRET || env.JWT_ACCESS_SECRET;
-  return createHash("sha256").update(`orken-calendly:${secret}`).digest();
+function integrationKeys() {
+  const secrets = [env.COACH_INTEGRATION_TOKEN_ENCRYPTION_SECRET, env.CALENDLY_TOKEN_ENCRYPTION_SECRET, env.PARTNER_PORTAL_SESSION_ENCRYPTION_SECRET, env.JWT_ACCESS_SECRET].filter((value): value is string => Boolean(value));
+  return [...new Set(secrets)].map((secret) => createHash("sha256").update(`orken-calendly:${secret}`).digest());
 }
 
 export function encryptCoachIntegrationToken(token: string) {
   const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", integrationKey(), iv);
+  const cipher = createCipheriv("aes-256-gcm", integrationKeys()[0], iv);
   const encrypted = Buffer.concat([cipher.update(token, "utf8"), cipher.final()]);
   return ["v1", iv.toString("base64url"), cipher.getAuthTag().toString("base64url"), encrypted.toString("base64url")].join(".");
 }
@@ -330,9 +330,16 @@ export function encryptCoachIntegrationToken(token: string) {
 export function decryptCoachIntegrationToken(value: string) {
   const [version, iv, tag, encrypted] = value.split(".");
   if (version !== "v1" || !iv || !tag || !encrypted) throw new Error("Invalid encrypted integration token");
-  const decipher = createDecipheriv("aes-256-gcm", integrationKey(), Buffer.from(iv, "base64url"));
-  decipher.setAuthTag(Buffer.from(tag, "base64url"));
-  return Buffer.concat([decipher.update(Buffer.from(encrypted, "base64url")), decipher.final()]).toString("utf8");
+  for (const key of integrationKeys()) {
+    try {
+      const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(iv, "base64url"));
+      decipher.setAuthTag(Buffer.from(tag, "base64url"));
+      return Buffer.concat([decipher.update(Buffer.from(encrypted, "base64url")), decipher.final()]).toString("utf8");
+    } catch {
+      // Try the previous integration secret so existing Calendly tokens survive key naming migration.
+    }
+  }
+  throw new Error("Invalid encrypted integration token");
 }
 
 export function createOpaqueCoachToken() {

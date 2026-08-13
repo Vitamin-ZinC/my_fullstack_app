@@ -12,6 +12,8 @@ import type {
   CoachPartnershipMaterial,
   CoachCatalogResponse,
   CoachClientDetail,
+  CoachAppointmentSummary,
+  CoachScheduleSummary,
   CoachServiceOfferSummary,
   CoachWorkspaceResponse,
   PublicCoachPlatformConfig,
@@ -356,7 +358,8 @@ export const api = {
   sendCoachMessage: (relationshipId: string, text: string) => request<{ message: unknown }>(`/api/habits/coaching/${encodeURIComponent(relationshipId)}/messages`, { method: "POST", body: JSON.stringify({ text }) }),
   completeCoachAssignment: (id: string) => request<{ ok: true }>(`/api/habits/coaching/assignments/${encodeURIComponent(id)}/complete`, { method: "POST", body: JSON.stringify({}) }),
   decideCoachHabit: (id: string, decision: "accept" | "decline") => request<{ ok: true; status: string; enrollmentId?: string }>(`/api/habits/coaching/habits/${encodeURIComponent(id)}/decision`, { method: "POST", body: JSON.stringify({ decision }) }),
-  coachBooking: (orderId: string) => request<{ url: string; bookingDeadline?: string | null }>(`/api/habits/coaching/orders/${encodeURIComponent(orderId)}/booking`),
+  coachBooking: (orderId: string) => request<{ provider: "ORKEN" | "GOOGLE" | "CALENDLY"; timezone: string; slots: Array<{ startsAt: string; endsAt: string }>; externalUrl?: string | null; bookingDeadline?: string | null }>(`/api/habits/coaching/orders/${encodeURIComponent(orderId)}/booking`),
+  bookCoachOrder: (orderId: string, startsAt: string) => request<{ appointment: CoachAppointmentSummary }>(`/api/habits/coaching/orders/${encodeURIComponent(orderId)}/book`, { method: "POST", body: JSON.stringify({ startsAt }) }),
   redeemCoachReward: (rewardId: string, relationshipId: string, idempotencyKey: string) => request<{ redemption: unknown }>(`/api/habits/coaching/rewards/${encodeURIComponent(rewardId)}/redeem`, { method: "POST", body: JSON.stringify({ relationshipId, idempotencyKey }) }),
   searchHabitArchive: async (query: { q?: string; from?: string; to?: string; minEnergy?: number; type?: "all" | "insights" | "metrics"; author?: "all" | "user" | "coach" | "system" }) => {
     await ensureGuestSession();
@@ -736,6 +739,14 @@ export const coachApi = {
   updateSite: (id: string, payload: { content?: Record<string, unknown>; theme?: Record<string, unknown>; customDomain?: string | null }) => request<{ site: unknown; verification?: { record: string; type: string; value: string } | null }>(`/api/coach/sites/${encodeURIComponent(id)}`, { method: "PATCH", headers: partnerPortalWriteHeaders(), body: JSON.stringify(payload) }),
   verifySiteDomain: (id: string) => request<{ site: unknown }>(`/api/coach/sites/${encodeURIComponent(id)}/verify-domain`, { method: "POST", headers: partnerPortalWriteHeaders(), body: JSON.stringify({}) }),
   createReward: (payload: { title: string; description: string; pointsCost: number; entitlementType: string; entitlementValue?: string | null }) => request<{ reward: unknown }>("/api/coach/rewards", { method: "POST", headers: partnerPortalWriteHeaders(), body: JSON.stringify(payload) }),
+  scheduling: () => request<{ schedule: CoachScheduleSummary; appointments: CoachAppointmentSummary[] }>("/api/coach/scheduling"),
+  updateScheduling: (payload: Omit<CoachScheduleSummary, "availabilityRules" | "availabilityExceptions" | "integrations">) => request<{ schedule: CoachScheduleSummary }>("/api/coach/scheduling/settings", { method: "PUT", headers: partnerPortalWriteHeaders(), body: JSON.stringify(payload) }),
+  updateAvailability: (rules: CoachScheduleSummary["availabilityRules"]) => request<{ schedule: CoachScheduleSummary }>("/api/coach/scheduling/availability", { method: "PUT", headers: partnerPortalWriteHeaders(), body: JSON.stringify({ rules }) }),
+  addScheduleException: (payload: { date: string; isAvailable: boolean; startMinute?: number | null; endMinute?: number | null; note?: string | null }) => request<{ exception: unknown }>("/api/coach/scheduling/exceptions", { method: "POST", headers: partnerPortalWriteHeaders(), body: JSON.stringify(payload) }),
+  deleteScheduleException: (id: string) => request<{ ok: boolean }>(`/api/coach/scheduling/exceptions/${encodeURIComponent(id)}`, { method: "DELETE", headers: partnerPortalWriteHeaders() }),
+  updateAppointment: (id: string, status: "COMPLETED" | "NO_SHOW" | "CANCELLED") => request<{ appointment: CoachAppointmentSummary }>(`/api/coach/scheduling/appointments/${encodeURIComponent(id)}`, { method: "PATCH", headers: partnerPortalWriteHeaders(), body: JSON.stringify({ status }) }),
+  connectGoogleCalendar: () => request<{ url: string }>("/api/coach/google-calendar/connect", { method: "POST", headers: partnerPortalWriteHeaders(), body: JSON.stringify({}) }),
+  disconnectGoogleCalendar: () => request<{ ok: boolean }>("/api/coach/google-calendar", { method: "DELETE", headers: partnerPortalWriteHeaders() }),
   connectCalendly: () => request<{ url: string }>("/api/coach/calendly/connect", { method: "POST", headers: partnerPortalWriteHeaders(), body: JSON.stringify({}) }),
   calendlyEventTypes: () => request<{ eventTypes: Array<{ uri: string; name: string; duration: number; schedulingUrl: string; active: boolean }> }>("/api/coach/calendly/event-types")
 };

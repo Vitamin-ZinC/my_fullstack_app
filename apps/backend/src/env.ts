@@ -75,6 +75,10 @@ const schema = z.object({
   CALENDLY_REDIRECT_URI: optionalUrlEnv,
   CALENDLY_WEBHOOK_SECRET: z.string().optional(),
   CALENDLY_TOKEN_ENCRYPTION_SECRET: z.string().optional(),
+  COACH_INTEGRATION_TOKEN_ENCRYPTION_SECRET: z.string().optional(),
+  GOOGLE_CALENDAR_CLIENT_ID: z.string().optional(),
+  GOOGLE_CALENDAR_CLIENT_SECRET: z.string().optional(),
+  GOOGLE_CALENDAR_REDIRECT_URI: optionalUrlEnv,
   COACH_SITE_BASE_DOMAIN: z.string().default("orken.life"),
   COACH_PAYOUT_PARTNER_CORE_PROGRAM_ID: z.string().optional()
 });

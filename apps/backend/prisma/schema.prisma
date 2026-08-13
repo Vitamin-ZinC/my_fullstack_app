@@ -37,6 +37,7 @@ model User {
   coachMessages CoachMessage[] @relation("CoachMessageUser")
   coachAssignments CoachAssignment[] @relation("CoachAssignmentUser")
   coachRewardRedemptions CoachRewardRedemption[]
+  coachAppointments CoachAppointment[]
 }
 
 model LoginToken {
@@ -250,6 +251,9 @@ model CoachProfile {
   habitAssignments     CoachHabitAssignment[]
   sites                CoachSite[]
   calendlyConnection   CoachCalendlyConnection?
+  googleCalendarConnection CoachGoogleCalendarConnection?
+  scheduleSettings     CoachScheduleSettings?
+  appointments         CoachAppointment[]
   rewards              CoachReward[]
 
   @@index([status, acceptingOrders, featured])
@@ -432,6 +436,7 @@ model CoachServiceOrder {
   idempotencyKey          String                  @unique
   createdAt               DateTime                @default(now())
   updatedAt               DateTime                @updatedAt
+  appointment             CoachAppointment?
 
   @@index([userId, status, createdAt])
   @@index([offerId, status, createdAt])
@@ -552,6 +557,95 @@ model CoachCalendlyConnection {
   lastSyncedAt             DateTime?
   createdAt                DateTime     @default(now())
   updatedAt                DateTime     @updatedAt
+}
+
+model CoachGoogleCalendarConnection {
+  id                     String                 @id @default(cuid())
+  coachProfileId         String                 @unique
+  coachProfile           CoachProfile           @relation(fields: [coachProfileId], references: [id], onDelete: Cascade)
+  accessTokenCiphertext  String
+  refreshTokenCiphertext String?
+  tokenExpiresAt         DateTime?
+  calendarId             String                 @default("primary")
+  calendarName           String?
+  scopes                 Json?
+  status                 CoachIntegrationStatus @default(ACTIVE)
+  lastSyncedAt           DateTime?
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
+}
+
+model CoachScheduleSettings {
+  id                    String                  @id @default(cuid())
+  coachProfileId        String                  @unique
+  coachProfile          CoachProfile            @relation(fields: [coachProfileId], references: [id], onDelete: Cascade)
+  provider              CoachSchedulingProvider @default(ORKEN)
+  timezone              String                  @default("Europe/Moscow")
+  slotDurationMinutes   Int                     @default(60)
+  bufferBeforeMinutes   Int                     @default(0)
+  bufferAfterMinutes    Int                     @default(15)
+  minNoticeMinutes      Int                     @default(720)
+  bookingHorizonDays    Int                     @default(30)
+  active                Boolean                 @default(true)
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  availabilityRules     CoachAvailabilityRule[]
+  availabilityExceptions CoachAvailabilityException[]
+}
+
+model CoachAvailabilityRule {
+  id             String                @id @default(cuid())
+  settingsId     String
+  settings       CoachScheduleSettings @relation(fields: [settingsId], references: [id], onDelete: Cascade)
+  weekday        Int
+  startMinute    Int
+  endMinute      Int
+  active         Boolean               @default(true)
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  @@index([settingsId, weekday, active])
+}
+
+model CoachAvailabilityException {
+  id             String                @id @default(cuid())
+  settingsId     String
+  settings       CoachScheduleSettings @relation(fields: [settingsId], references: [id], onDelete: Cascade)
+  date           DateTime              @db.Date
+  isAvailable    Boolean               @default(false)
+  startMinute    Int?
+  endMinute      Int?
+  note           String?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  @@index([settingsId, date])
+}
+
+model CoachAppointment {
+  id              String                  @id @default(cuid())
+  orderId         String                  @unique
+  order           CoachServiceOrder       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  coachProfileId  String
+  coachProfile    CoachProfile            @relation(fields: [coachProfileId], references: [id], onDelete: Cascade)
+  userId          String
+  user             User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  startsAt         DateTime
+  endsAt           DateTime
+  timezone         String
+  provider         CoachSchedulingProvider
+  status           CoachAppointmentStatus  @default(CONFIRMED)
+  externalEventId  String?
+  externalEventUrl String?
+  meetingUrl       String?
+  syncError        String?
+  cancelledAt      DateTime?
+  completedAt      DateTime?
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
+
+  @@index([coachProfileId, startsAt, status])
+  @@index([userId, startsAt, status])
 }
 
 model CoachReward {
@@ -1569,6 +1663,21 @@ enum CoachIntegrationStatus {
   ACTIVE
   DISCONNECTED
   ERROR
+}
+
+enum CoachSchedulingProvider {
+  ORKEN
+  GOOGLE
+  CALENDLY
+}
+
+enum CoachAppointmentStatus {
+  SYNC_PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+  NO_SHOW
+  SYNC_ERROR
 }
 
 enum CoachRewardStatus {

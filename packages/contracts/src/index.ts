@@ -535,6 +535,39 @@ export type CoachServiceType = "ONGOING_SUPPORT" | "CONSULTATION";
 export type CoachServicePaymentModel = "INCLUDED" | "CLIENT_PAID";
 export type CoachOfferStatus = "DRAFT" | "PENDING_REVIEW" | "APPROVED" | "REJECTED" | "PAUSED";
 export type CoachServiceOrderStatus = "PENDING_PAYMENT" | "AWAITING_BOOKING" | "BOOKED" | "ACTIVE" | "COMPLETED" | "CANCELLED" | "REFUND_PENDING" | "REFUNDED" | "FAILED";
+export type CoachSchedulingProvider = "ORKEN" | "GOOGLE" | "CALENDLY";
+export type CoachAppointmentStatus = "SYNC_PENDING" | "CONFIRMED" | "CANCELLED" | "COMPLETED" | "NO_SHOW" | "SYNC_ERROR";
+
+export type CoachScheduleSummary = {
+  provider: CoachSchedulingProvider;
+  timezone: string;
+  slotDurationMinutes: number;
+  bufferBeforeMinutes: number;
+  bufferAfterMinutes: number;
+  minNoticeMinutes: number;
+  bookingHorizonDays: number;
+  active: boolean;
+  availabilityRules: Array<{ id?: string; weekday: number; startMinute: number; endMinute: number; active: boolean }>;
+  availabilityExceptions: Array<{ id: string; date: string; isAvailable: boolean; startMinute?: number | null; endMinute?: number | null; note?: string | null }>;
+  integrations: {
+    google: { connected: boolean; status: string; calendarName?: string | null };
+    calendly: { connected: boolean; status: string };
+  };
+};
+
+export type CoachAppointmentSummary = {
+  id: string;
+  orderId: string;
+  startsAt: string;
+  endsAt: string;
+  timezone: string;
+  provider: CoachSchedulingProvider;
+  status: CoachAppointmentStatus;
+  externalEventUrl?: string | null;
+  meetingUrl?: string | null;
+  client?: { name?: string | null; email: string };
+  serviceTitle?: string;
+};
 
 export type CoachPlanSummary = {
   id: string;
@@ -690,6 +723,8 @@ export type CoachWorkspaceResponse = {
   serviceOffers: CoachServiceOfferSummary[];
   counts: { coachPaidClients: number; clientPaidClients: number; attention: number; openAssignments: number };
   integrations: { calendly: { connected: boolean; status: string }; telegramBotUsername?: string | null };
+  scheduling: CoachScheduleSummary;
+  appointments: CoachAppointmentSummary[];
   sites: CoachSiteSummary[];
   sitePlans: Array<{ id: string; code: string; name: string; setupAmount: number; monthlySupportAmount: number; currency: string }>;
   rewards: CoachRewardSummary[];
@@ -806,6 +841,8 @@ export type HabitCoachingHubResponse = {
     currency: string;
     bookingDeadline?: string | null;
     bookedAt?: string | null;
+    scheduledFor?: string | null;
+    appointment?: CoachAppointmentSummary | null;
   }>;
 };
 

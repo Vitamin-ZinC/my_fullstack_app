@@ -70,16 +70,17 @@ export async function createCoachServiceCheckout(input: { offerId: string; userI
   }
   const offer = await prisma.coachServiceOffer.findFirst({
     where: { id: input.offerId, status: "APPROVED", paymentModel: "CLIENT_PAID", coachProfile: { status: "APPROVED", acceptingOrders: true } },
-    include: { coachProfile: { include: { calendlyConnection: true } } }
+    include: { coachProfile: { include: { calendlyConnection: true, googleCalendarConnection: true, scheduleSettings: true } } }
   });
   if (!offer) throw new Error("Услуга сейчас недоступна");
   if (!env.COACH_PAYOUT_PARTNER_CORE_PROGRAM_ID || !offer.coachProfile.partnerCorePayoutReferralCode) throw new Error("Выплаты коучу ещё не настроены");
   if (!hasValidCoachRevenueSplit(offer.coachShareBps, offer.platformShareBps)) throw new Error("Для услуги не настроено распределение оплаты");
-  if (offer.coachProfile.calendlyConnection?.status !== "ACTIVE") {
-    throw new Error("Коуч ещё не подключил календарь");
+  const schedulingProvider = offer.coachProfile.scheduleSettings?.provider ?? "ORKEN";
+  if (offer.type === "CONSULTATION" && schedulingProvider === "GOOGLE" && offer.coachProfile.googleCalendarConnection?.status !== "ACTIVE") {
+    throw new Error("Коуч ещё не подключил Google Calendar");
   }
-  if (offer.type === "CONSULTATION" && (!offer.calendlyEventTypeUri || !offer.calendlySchedulingUrl)) {
-    throw new Error("Календарь коуча пока не подключён");
+  if (offer.type === "CONSULTATION" && schedulingProvider === "CALENDLY" && (offer.coachProfile.calendlyConnection?.status !== "ACTIVE" || !offer.calendlyEventTypeUri || !offer.calendlySchedulingUrl)) {
+    throw new Error("Calendly коуча пока не настроен");
   }
   const order = existing ?? await prisma.coachServiceOrder.create({
     data: {

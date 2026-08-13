@@ -28,7 +28,19 @@
 .badge { display: inline-flex; padding: 4px 8px; border: 1px solid #29506b; color: #53def0; border-radius: 999px; font-size: 12px; }
 .message { max-width: 82%; padding: 12px 14px; background: #0d2636; border-radius: 6px; margin-right: auto; }
 .message.mine { margin-left: auto; margin-right: 0; background: #28203c; }
+.message.fromCoach { border-left: 3px solid #16d2eb; }
+.message strong { display: block; color: #eaf6ff; font-size: 13px; }
+.message p { margin: 7px 0 0; line-height: 1.55; color: #d2e1f0; }
 .message small { display: block; color: #7c91aa; margin-top: 5px; }
+.hubNav { display: flex; gap: 8px; margin: 18px 0; overflow-x: auto; padding-bottom: 2px; }
+.hubNav button { min-height: 46px; border: 1px solid #263b55; background: #08131f; color: #9cafc6; border-radius: 6px; padding: 0 15px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; white-space: nowrap; }
+.hubNav button.active { color: #061019; background: #17d4ec; border-color: #17d4ec; font-weight: 800; }
+.hubNav b { min-width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; background: #23364b; color: #dff8ff; font-size: 11px; }
+.hubNav button.active b { background: #083541; color: #c8f8ff; }
+.feedbackHead { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.feedbackHead p { margin: 3px 0 0; color: #90a3ba; }
+.feedbackHead > svg { color: #1dd6ee; flex: 0 0 auto; }
+.replyComposer { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; padding-top: 4px; }
 .task { padding: 14px; border: 1px solid #23374f; border-radius: 6px; }
 .taskTop { display: flex; justify-content: space-between; gap: 14px; }
 .task h3 { margin: 8px 0 6px; font-size: 16px; }
@@ -54,4 +66,4 @@
 .reward p { margin-top: 5px; color: #8ea2b9; }
 .reward strong { color: #f4c65f; }
 @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } .metrics { grid-template-columns: repeat(2, 1fr); } .filters { grid-template-columns: 1fr 1fr; } .filters > *:first-child { grid-column: 1 / -1; } }
-@media (max-width: 560px) { .page { padding: 0 16px 40px; } .metrics, .filters { grid-template-columns: 1fr; } .filters > *:first-child { grid-column: auto; } .chart { height: 280px; } .message { max-width: 95%; } .consentPanel { grid-template-columns: 1fr; } .consentPanel > label, .consentPanel > button { grid-column: 1; } .programMeta { display: grid; } .reward { grid-template-columns: 1fr; } .reward .button { width: 100%; } .coachHead { align-items: flex-start; flex-wrap: wrap; } }
+@media (max-width: 560px) { .page { padding: 0 16px 40px; } .metrics, .filters { grid-template-columns: 1fr; } .filters > *:first-child { grid-column: auto; } .chart { height: 280px; } .message { max-width: 95%; } .consentPanel { grid-template-columns: 1fr; } .consentPanel > label, .consentPanel > button { grid-column: 1; } .programMeta { display: grid; } .reward { grid-template-columns: 1fr; } .reward .button { width: 100%; } .coachHead { align-items: flex-start; flex-wrap: wrap; } .hubNav button { min-width: 190px; } .replyComposer { grid-template-columns: 1fr; } .replyComposer .button { width: 100%; } }

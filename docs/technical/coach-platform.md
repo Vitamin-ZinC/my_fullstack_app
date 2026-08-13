@@ -108,9 +108,15 @@ Stripe webhook events used by the shared payment endpoint:
 - `charge.refunded`
 - `customer.subscription.updated` / `customer.subscription.deleted`
 
-## Calendly And Telegram
+## Scheduling, Calendars, And Telegram
 
-Calendly uses OAuth. Access and refresh tokens are AES-256-GCM encrypted on the backend. The integration attempts a user-scoped webhook first, then organization scope. If neither is available, the 30-minute reconciliation job checks both active and canceled events.
+`CoachScheduleSettings` is the source of truth for the selected provider, timezone, slot duration, buffers, minimum notice, booking horizon, weekly rules, and date exceptions. `CoachAppointment` is the product-owned booking record for every provider.
+
+- `ORKEN` requires no external account. The client picks an available slot inside Coaching Hub.
+- `GOOGLE` reads busy intervals through FreeBusy and creates an attendee event with a Google Meet link. OAuth tokens are encrypted on the backend. ORKEN remains the source of truth; calendar writes are an adapter.
+- `CALENDLY` redirects the client to the approved event type. Webhooks and the existing 30-minute reconciliation job write the resulting meeting into `CoachAppointment`.
+
+Google OAuth needs `GOOGLE_CALENDAR_CLIENT_ID`, `GOOGLE_CALENDAR_CLIENT_SECRET`, and `GOOGLE_CALENDAR_REDIRECT_URI`. Calendly uses its existing OAuth variables. Both integrations use the high-entropy backend-only `COACH_INTEGRATION_TOKEN_ENCRYPTION_SECRET`; `CALENDLY_TOKEN_ENCRYPTION_SECRET` remains a compatibility fallback for existing installations.
 
 The existing ORKEN Telegram bot handles `start=coach_<slug>`. It exposes only the approved public coach profile and services until a user is authenticated through the existing account-link flow. No per-coach bot tokens are used.
 
@@ -128,16 +134,16 @@ The existing ORKEN Telegram bot handles `start=coach_<slug>`. It exposes only th
 - `coach_workspace` enables the workspace release.
 - `coach_packages_commerce` gates monthly coach package checkout and is enabled after Stripe subscription webhooks are verified.
 - `coach_sites_commerce` gates coach-site setup and support checkout and is enabled after Stripe subscription webhooks are verified.
-- `coach_services_commerce` gates client purchases of coaching and consultations. It remains disabled until Partner Core payout routing and Calendly are configured.
+- `coach_services_commerce` gates client purchases of coaching and consultations. It remains disabled until Partner Core payout routing and the selected booking provider are production-tested.
 
-Do not use the legacy `coach_commerce` flag for new routes. Do not enable `coach_services_commerce` until Stripe, Partner Core payouts, and Calendly production smoke tests pass.
+Do not use the legacy `coach_commerce` flag for new routes. Do not enable `coach_services_commerce` until Stripe, Partner Core payouts, and ORKEN/Google/Calendly booking smoke tests pass.
 
 The main `/for-coaches` positioning fields are stored in `AppSetting.coach_public_content_ru` and edited under `/admin/coaches` -> `Публичная страница`. Package and site prices are always read from the active backend price records, never from the public page bundle.
 
 ## Production Checklist
 
-1. Apply `20260812190000_coach_platform` and `20260813090000_split_coach_commerce_flags` with `prisma migrate deploy`, then run `prisma generate`.
-2. Configure backend-only Calendly credentials and a high-entropy token encryption secret.
+1. Apply `20260812190000_coach_platform`, `20260813090000_split_coach_commerce_flags`, and `20260813153000_coach_scheduling` with `prisma migrate deploy`, then run `prisma generate`.
+2. Keep ORKEN scheduling available by default. Configure backend-only Google and/or Calendly OAuth credentials only for providers offered in production, plus a high-entropy integration token encryption secret.
 3. Configure a published 100% coach-payout program in Partner Core and set `COACH_PAYOUT_PARTNER_CORE_PROGRAM_ID`.
 4. Subscribe the existing Stripe webhook to the events listed above.
 5. Configure wildcard DNS and TLS for `*.orken.life` at the reverse proxy/CDN.
@@ -147,4 +153,4 @@ The main `/for-coaches` positioning fields are stored in `AppSetting.coach_publi
 9. Run unit tests, frontend production build, and smoke the full coach purchase/booking/refund path.
 10. Enable `coach_workspace`, package and site commerce first. Enable service commerce only after the payout and booking checks pass.
 
-External DNS, CDN, custom-domain TLS issuance, Stripe credentials, and Calendly app credentials are infrastructure operations and are not created by the application migration.
+External DNS, CDN, custom-domain TLS issuance, Stripe credentials, and Google/Calendly OAuth applications are infrastructure operations and are not created by the application migration.

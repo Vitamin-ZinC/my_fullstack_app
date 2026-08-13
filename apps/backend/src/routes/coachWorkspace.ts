@@ -47,6 +47,16 @@ import {
 import { getOpenAiClient, hasOpenAiClient } from "../services/openaiClient.js";
 import { availableCoachSlots, hasValidCoachRevenueSplit, shouldMigrateCoachSubscriptions } from "../services/coachRules.js";
 import { createPartnerCorePortalReferralLink, getPartnerCorePortalDashboard, normalizeReferralCode, recordCoachCommerceConversion } from "../services/partnerCore.js";
+import {
+  activeGoogleAccessToken,
+  assertTimeZone,
+  availabilityForCoachOrder,
+  bookCoachOrder,
+  cancelGoogleCalendarEvent,
+  ensureCoachScheduleSettings,
+  serializeCoachAppointment,
+  serializeCoachSchedule
+} from "../services/coachScheduling.js";
 
 const DEFAULT_COACH_PUBLIC_CONTENT: CoachPublicContent = {
   heroEyebrow: "Партнёрская программа ORKEN",
@@ -104,6 +114,22 @@ const habitAssignmentSchema = z.object({
   endsAt: z.coerce.date().optional().nullable()
 });
 const checkoutSchema = z.object({ idempotencyKey: z.string().trim().min(12).max(220) });
+const scheduleSettingsSchema = z.object({
+  provider: z.enum(["ORKEN", "GOOGLE", "CALENDLY"]),
+  timezone: z.string().trim().min(3).max(80),
+  slotDurationMinutes: z.coerce.number().int().min(15).max(240),
+  bufferBeforeMinutes: z.coerce.number().int().min(0).max(120),
+  bufferAfterMinutes: z.coerce.number().int().min(0).max(120),
+  minNoticeMinutes: z.coerce.number().int().min(0).max(43_200),
+  bookingHorizonDays: z.coerce.number().int().min(1).max(180),
+  active: z.boolean()
+});
+const availabilityRulesSchema = z.object({ rules: z.array(z.object({
+  weekday: z.coerce.number().int().min(1).max(7),
+  startMinute: z.coerce.number().int().min(0).max(1439),
+  endMinute: z.coerce.number().int().min(1).max(1440),
+  active: z.boolean().default(true)
+}).refine((item) => item.endMinute > item.startMinute, "Время окончания должно быть позже начала")).max(28) });
 const coachPublicContentSchema = z.object({
   heroEyebrow: z.string().trim().min(2).max(120),
   heroTitle: z.string().trim().min(5).max(240),
@@ -300,6 +326,15 @@ export async function coachWorkspaceRoutes(app: FastifyInstance) {
     const offer = await prisma.coachServiceOffer.findFirst({ where: { id, coachProfileId: context.profile.id } });
     if (!offer) return reply.code(404).send({ error: "Услуга не найдена" });
     if (offer.paymentModel === "CLIENT_PAID" && !hasValidCoachRevenueSplit(offer.coachShareBps, offer.platformShareBps)) return reply.code(409).send({ error: "Администратор должен настроить распределение оплаты" });
+    if (offer.type === "CONSULTATION") {
+      const [schedule, profile] = await Promise.all([
+        ensureCoachScheduleSettings(context.profile.id),
+        prisma.coachProfile.findUniqueOrThrow({ where: { id: context.profile.id }, include: { googleCalendarConnection: true, calendlyConnection: true } })
+      ]);
+      if (!schedule.active || (schedule.provider !== "CALENDLY" && !schedule.availabilityRules.some((rule) => rule.active))) return reply.code(409).send({ error: "Сначала настройте рабочие часы во вкладке «Расписание»" });
+      if (schedule.provider === "GOOGLE" && profile.googleCalendarConnection?.status !== "ACTIVE") return reply.code(409).send({ error: "Google Calendar не подключён" });
+      if (schedule.provider === "CALENDLY" && (profile.calendlyConnection?.status !== "ACTIVE" || !offer.calendlyEventTypeUri || !offer.calendlySchedulingUrl)) return reply.code(409).send({ error: "Выберите тип встречи Calendly" });
+    }
     const updated = await prisma.coachServiceOffer.update({ where: { id }, data: { status: "PENDING_REVIEW" } });
     return { offer: serializeCoachOffer(updated) };
   });
@@ -392,6 +427,148 @@ export async function coachWorkspaceRoutes(app: FastifyInstance) {
     return reply.code(201).send({ reward: serializeReward(reward) });
   });
 
+  app.get("/api/coach/scheduling", async (request, reply) => {
+    const context = await requireCoach(request, reply);
+    if (!context) return;
+    const [settings, profile, appointments] = await Promise.all([
+      ensureCoachScheduleSettings(context.profile.id),
+      prisma.coachProfile.findUniqueOrThrow({ where: { id: context.profile.id }, include: { googleCalendarConnection: true, calendlyConnection: true } }),
+      prisma.coachAppointment.findMany({
+        where: { coachProfileId: context.profile.id, startsAt: { gte: new Date(Date.now() - 7 * 86_400_000) } },
+        orderBy: { startsAt: "asc" },
+        take: 200,
+        include: { user: { select: { email: true, name: true } }, order: { include: { offer: { select: { title: true } } } } }
+      })
+    ]);
+    return { schedule: serializeCoachSchedule(settings, { google: profile.googleCalendarConnection, calendly: profile.calendlyConnection }), appointments: appointments.map(serializeCoachAppointment) };
+  });
+
+  app.put("/api/coach/scheduling/settings", async (request, reply) => {
+    const context = await requireCoachWrite(request, reply);
+    if (!context) return;
+    const body = scheduleSettingsSchema.parse(request.body ?? {});
+    assertTimeZone(body.timezone);
+    const profile = await prisma.coachProfile.findUniqueOrThrow({ where: { id: context.profile.id }, include: { googleCalendarConnection: true, calendlyConnection: true } });
+    if (body.provider === "GOOGLE" && profile.googleCalendarConnection?.status !== "ACTIVE") return reply.code(409).send({ error: "Сначала подключите Google Calendar" });
+    if (body.provider === "CALENDLY" && profile.calendlyConnection?.status !== "ACTIVE") return reply.code(409).send({ error: "Сначала подключите Calendly" });
+    await ensureCoachScheduleSettings(context.profile.id);
+    const settings = await prisma.coachScheduleSettings.update({
+      where: { coachProfileId: context.profile.id },
+      data: body,
+      include: { availabilityRules: { orderBy: [{ weekday: "asc" }, { startMinute: "asc" }] }, availabilityExceptions: { orderBy: { date: "asc" } } }
+    });
+    return { schedule: serializeCoachSchedule(settings, { google: profile.googleCalendarConnection, calendly: profile.calendlyConnection }) };
+  });
+
+  app.put("/api/coach/scheduling/availability", async (request, reply) => {
+    const context = await requireCoachWrite(request, reply);
+    if (!context) return;
+    const body = availabilityRulesSchema.parse(request.body ?? {});
+    const settings = await ensureCoachScheduleSettings(context.profile.id);
+    await prisma.$transaction(async (tx) => {
+      await tx.coachAvailabilityRule.deleteMany({ where: { settingsId: settings.id } });
+      if (body.rules.length) await tx.coachAvailabilityRule.createMany({ data: body.rules.map((rule) => ({ settingsId: settings.id, ...rule })) });
+    });
+    const updated = await prisma.coachScheduleSettings.findUniqueOrThrow({ where: { id: settings.id }, include: { availabilityRules: { orderBy: [{ weekday: "asc" }, { startMinute: "asc" }] }, availabilityExceptions: { orderBy: { date: "asc" } } } });
+    return { schedule: serializeCoachSchedule(updated) };
+  });
+
+  app.post("/api/coach/scheduling/exceptions", async (request, reply) => {
+    const context = await requireCoachWrite(request, reply);
+    if (!context) return;
+    const body = z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), isAvailable: z.boolean().default(false), startMinute: z.coerce.number().int().min(0).max(1439).optional().nullable(), endMinute: z.coerce.number().int().min(1).max(1440).optional().nullable(), note: z.string().trim().max(300).optional().nullable() }).parse(request.body ?? {});
+    if (body.isAvailable && (body.startMinute == null || body.endMinute == null || body.endMinute <= body.startMinute)) return reply.code(400).send({ error: "Для рабочего исключения укажите корректный интервал" });
+    const settings = await ensureCoachScheduleSettings(context.profile.id);
+    const exception = await prisma.coachAvailabilityException.create({ data: { settingsId: settings.id, ...body, date: new Date(`${body.date}T00:00:00Z`) } });
+    return reply.code(201).send({ exception: { ...exception, date: exception.date.toISOString().slice(0, 10) } });
+  });
+
+  app.delete("/api/coach/scheduling/exceptions/:id", async (request, reply) => {
+    const context = await requireCoachWrite(request, reply);
+    if (!context) return;
+    const { id } = idSchema.parse(request.params);
+    const result = await prisma.coachAvailabilityException.deleteMany({ where: { id, settings: { coachProfileId: context.profile.id } } });
+    if (!result.count) return reply.code(404).send({ error: "Исключение не найдено" });
+    return { ok: true };
+  });
+
+  app.patch("/api/coach/scheduling/appointments/:id", async (request, reply) => {
+    const context = await requireCoachWrite(request, reply);
+    if (!context) return;
+    const { id } = idSchema.parse(request.params);
+    const body = z.object({ status: z.enum(["COMPLETED", "NO_SHOW", "CANCELLED"]) }).parse(request.body ?? {});
+    const appointment = await prisma.coachAppointment.findFirst({ where: { id, coachProfileId: context.profile.id }, include: { coachProfile: { include: { googleCalendarConnection: true } } } });
+    if (!appointment) return reply.code(404).send({ error: "Встреча не найдена" });
+    if (body.status === "CANCELLED" && appointment.provider === "GOOGLE" && appointment.externalEventId) {
+      try { await cancelGoogleCalendarEvent(appointment.coachProfile.googleCalendarConnection, appointment.externalEventId); }
+      catch { return reply.code(502).send({ error: "Не удалось отменить событие в Google Calendar" }); }
+    }
+    const updated = await prisma.coachAppointment.update({ where: { id }, data: { status: body.status, completedAt: body.status === "COMPLETED" ? new Date() : null, cancelledAt: body.status === "CANCELLED" ? new Date() : null } });
+    if (body.status === "COMPLETED") await prisma.coachServiceOrder.updateMany({ where: { id: appointment.orderId, status: "BOOKED" }, data: { status: "COMPLETED" } });
+    if (body.status === "CANCELLED") await prisma.coachServiceOrder.updateMany({ where: { id: appointment.orderId, status: "BOOKED" }, data: { status: "CANCELLED", cancelledAt: new Date() } });
+    return { appointment: serializeCoachAppointment(updated) };
+  });
+
+  app.post("/api/coach/google-calendar/connect", async (request, reply) => {
+    const context = await requireCoachWrite(request, reply);
+    if (!context) return;
+    if (!env.GOOGLE_CALENDAR_CLIENT_ID || !env.GOOGLE_CALENDAR_REDIRECT_URI) return reply.code(501).send({ error: "Google Calendar OAuth не настроен" });
+    const state = await new SignJWT({ coachProfileId: context.profile.id })
+      .setProtectedHeader({ alg: "HS256" }).setSubject("google-calendar-connect").setIssuedAt().setExpirationTime("10m")
+      .sign(googleCalendarStateSecret());
+    const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+    url.searchParams.set("client_id", env.GOOGLE_CALENDAR_CLIENT_ID);
+    url.searchParams.set("redirect_uri", env.GOOGLE_CALENDAR_REDIRECT_URI);
+    url.searchParams.set("response_type", "code");
+    url.searchParams.set("access_type", "offline");
+    url.searchParams.set("prompt", "consent");
+    url.searchParams.set("scope", "https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.freebusy https://www.googleapis.com/auth/calendar.calendarlist.readonly");
+    url.searchParams.set("state", state);
+    return { url: url.toString() };
+  });
+
+  app.get("/api/coach/google-calendar/callback", async (request, reply) => {
+    const query = z.object({ code: z.string().min(4), state: z.string().min(20) }).safeParse(request.query);
+    if (!query.success || !env.GOOGLE_CALENDAR_CLIENT_ID || !env.GOOGLE_CALENDAR_CLIENT_SECRET || !env.GOOGLE_CALENDAR_REDIRECT_URI) return reply.redirect(`${env.APP_ORIGIN}/coach?google=error`);
+    try {
+      const { payload } = await jwtVerify(query.data.state, googleCalendarStateSecret(), { subject: "google-calendar-connect" });
+      const coachProfileId = String(payload.coachProfileId || "");
+      if (!coachProfileId) throw new Error("Missing coach profile");
+      const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ grant_type: "authorization_code", code: query.data.code, redirect_uri: env.GOOGLE_CALENDAR_REDIRECT_URI, client_id: env.GOOGLE_CALENDAR_CLIENT_ID, client_secret: env.GOOGLE_CALENDAR_CLIENT_SECRET })
+      });
+      if (!tokenResponse.ok) throw new Error(`Google OAuth ${tokenResponse.status}`);
+      const token = await tokenResponse.json() as any;
+      const existing = await prisma.coachGoogleCalendarConnection.findUnique({ where: { coachProfileId } });
+      const metadataResponse = await fetch("https://www.googleapis.com/calendar/v3/users/me/calendarList/primary", { headers: { Authorization: `Bearer ${token.access_token}` } });
+      const metadata = metadataResponse.ok ? await metadataResponse.json() as any : null;
+      await prisma.coachGoogleCalendarConnection.upsert({
+        where: { coachProfileId },
+        update: { accessTokenCiphertext: encryptCoachIntegrationToken(token.access_token), refreshTokenCiphertext: token.refresh_token ? encryptCoachIntegrationToken(token.refresh_token) : existing?.refreshTokenCiphertext, tokenExpiresAt: token.expires_in ? new Date(Date.now() + Number(token.expires_in) * 1000) : null, calendarId: metadata?.id || "primary", calendarName: metadata?.summary || null, scopes: String(token.scope || "").split(" "), status: "ACTIVE", lastSyncedAt: new Date() },
+        create: { coachProfileId, accessTokenCiphertext: encryptCoachIntegrationToken(token.access_token), refreshTokenCiphertext: token.refresh_token ? encryptCoachIntegrationToken(token.refresh_token) : null, tokenExpiresAt: token.expires_in ? new Date(Date.now() + Number(token.expires_in) * 1000) : null, calendarId: metadata?.id || "primary", calendarName: metadata?.summary || null, scopes: String(token.scope || "").split(" "), status: "ACTIVE", lastSyncedAt: new Date() }
+      });
+      await ensureCoachScheduleSettings(coachProfileId);
+      return reply.redirect(`${env.APP_ORIGIN}/coach?google=connected`);
+    } catch {
+      return reply.redirect(`${env.APP_ORIGIN}/coach?google=error`);
+    }
+  });
+
+  app.delete("/api/coach/google-calendar", async (request, reply) => {
+    const context = await requireCoachWrite(request, reply);
+    if (!context) return;
+    const connection = await prisma.coachGoogleCalendarConnection.findUnique({ where: { coachProfileId: context.profile.id } });
+    if (connection) {
+      const token = await activeGoogleAccessToken(connection).catch(() => null);
+      if (token) await fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(token)}`, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" } }).catch(() => undefined);
+      await prisma.coachGoogleCalendarConnection.update({ where: { id: connection.id }, data: { status: "DISCONNECTED" } });
+    }
+    await prisma.coachScheduleSettings.updateMany({ where: { coachProfileId: context.profile.id, provider: "GOOGLE" }, data: { provider: "ORKEN" } });
+    return { ok: true };
+  });
+
   app.post("/api/coach/calendly/connect", async (request, reply) => {
     const context = await requireCoachWrite(request, reply);
     if (!context) return;
@@ -460,11 +637,13 @@ export async function coachWorkspaceRoutes(app: FastifyInstance) {
     if (!orderId) return { received: true };
     const eventUri = typeof body?.payload?.event === "string" ? body.payload.event : body?.payload?.event?.uri ?? body?.payload?.scheduled_event?.uri ?? null;
     const scheduledForRaw = body?.payload?.scheduled_event?.start_time ?? body?.payload?.event?.start_time ?? null;
+    const scheduledEndRaw = body?.payload?.scheduled_event?.end_time ?? body?.payload?.event?.end_time ?? null;
     const scheduledFor = scheduledForRaw ? new Date(scheduledForRaw) : null;
     if (body?.event === "invitee.created") {
-      await prisma.coachServiceOrder.updateMany({ where: { id: orderId, status: "AWAITING_BOOKING" }, data: { status: "BOOKED", calendlyEventUri: eventUri, calendlyInviteeUri: body.payload?.uri, scheduledFor: scheduledFor && !Number.isNaN(scheduledFor.getTime()) ? scheduledFor : null, bookedAt: new Date() } });
+      if (scheduledFor && !Number.isNaN(scheduledFor.getTime())) await upsertCalendlyAppointment(orderId, eventUri, body.payload?.uri ?? null, scheduledFor, scheduledEndRaw ? new Date(scheduledEndRaw) : null);
     } else if (body?.event === "invitee.canceled") {
       await handleCoachConsultationCancelled(orderId, scheduledFor && !Number.isNaN(scheduledFor.getTime()) ? scheduledFor : null);
+      await prisma.coachAppointment.updateMany({ where: { orderId }, data: { status: "CANCELLED", cancelledAt: new Date() } });
     }
     return { received: true };
   });
@@ -487,13 +666,13 @@ function registerClientCoachingRoutes(app: FastifyInstance) {
       prisma.coachServiceOrder.findMany({
         where: { userId: session.userId, status: { in: ["AWAITING_BOOKING", "BOOKED", "ACTIVE"] } },
         orderBy: { createdAt: "desc" },
-        include: { offer: { include: { coachProfile: { select: { id: true, displayName: true } } } } },
+        include: { appointment: true, offer: { include: { coachProfile: { select: { id: true, displayName: true } } } } },
         take: 50
       })
     ]);
     return {
       relationships: relationships.map((relationship) => ({ coach: serializeCoachProfile(relationship.coachProfile), relationshipId: relationship.id, status: relationship.status, funding: relationship.funding, metricsConsent: Boolean(relationship.metricsConsentAt), journalConsent: Boolean(relationship.journalConsentAt), accessEndsAt: relationship.accessEndsAt?.toISOString() ?? null, messages: relationship.messages.map(serializeCoachMessage), assignments: relationship.assignments.map(serializeCoachAssignment), habitAssignments: relationship.habitAssignments.map(serializeCoachHabitAssignment), rewards: relationship.coachProfile.rewards.map(serializeReward) })),
-      orders: orders.map((order) => ({ id: order.id, coachProfileId: order.offer.coachProfile.id, coachName: order.offer.coachProfile.displayName, serviceTitle: order.offer.title, type: order.offer.type, status: order.status, amount: order.amount, currency: order.currency, bookingDeadline: order.bookingDeadline?.toISOString() ?? null, bookedAt: order.bookedAt?.toISOString() ?? null }))
+      orders: orders.map((order) => ({ id: order.id, coachProfileId: order.offer.coachProfile.id, coachName: order.offer.coachProfile.displayName, serviceTitle: order.offer.title, type: order.offer.type, status: order.status, amount: order.amount, currency: order.currency, bookingDeadline: order.bookingDeadline?.toISOString() ?? null, bookedAt: order.bookedAt?.toISOString() ?? null, scheduledFor: order.scheduledFor?.toISOString() ?? null, appointment: order.appointment ? serializeCoachAppointment(order.appointment) : null }))
     };
   });
 
@@ -647,13 +826,25 @@ function registerClientCoachingRoutes(app: FastifyInstance) {
     const session = await requireUserSession(request, reply);
     if (!session?.userId) return;
     const { id } = idSchema.parse(request.params);
-    const order = await prisma.coachServiceOrder.findFirst({ where: { id, userId: session.userId, status: "AWAITING_BOOKING" }, include: { offer: true } });
-    if (!order?.offer.calendlySchedulingUrl) return reply.code(404).send({ error: "Ссылка для записи недоступна" });
-    const url = new URL(order.offer.calendlySchedulingUrl);
-    url.searchParams.set("utm_source", "orken");
-    url.searchParams.set("utm_campaign", "coach-consultation");
-    url.searchParams.set("utm_content", order.id);
-    return { url: url.toString(), bookingDeadline: order.bookingDeadline?.toISOString() ?? null };
+    const query = z.object({ from: z.coerce.date().optional(), to: z.coerce.date().optional() }).parse(request.query ?? {});
+    try {
+      return await availabilityForCoachOrder({ orderId: id, userId: session.userId, from: query.from, to: query.to });
+    } catch (error) {
+      return reply.code(409).send({ error: error instanceof Error ? error.message : "Не удалось загрузить расписание" });
+    }
+  });
+
+  app.post("/api/habits/coaching/orders/:id/book", async (request, reply) => {
+    const session = await requireUserSession(request, reply);
+    if (!session?.userId) return;
+    const { id } = idSchema.parse(request.params);
+    const body = z.object({ startsAt: z.coerce.date() }).parse(request.body ?? {});
+    try {
+      const appointment = await bookCoachOrder({ orderId: id, userId: session.userId, startsAt: body.startsAt });
+      return reply.code(201).send({ appointment });
+    } catch (error) {
+      return reply.code(409).send({ error: error instanceof Error ? error.message : "Не удалось записаться" });
+    }
   });
 
   app.post("/api/habits/coaching/rewards/:id/redeem", async (request, reply) => {
@@ -952,8 +1143,8 @@ async function loadCoachClient(coachProfileId: string, relationshipId: string) {
 }
 
 async function workspaceSnapshot(coachProfileId: string) {
-  const [profile, plans, subscription, relationships, offers, sites, sitePlans, rewards, openAssignments, commerce] = await Promise.all([
-    prisma.coachProfile.findUniqueOrThrow({ where: { id: coachProfileId }, include: { calendlyConnection: true } }),
+  const [profile, plans, subscription, relationships, offers, sites, sitePlans, rewards, openAssignments, commerce, schedule, appointments] = await Promise.all([
+    prisma.coachProfile.findUniqueOrThrow({ where: { id: coachProfileId }, include: { calendlyConnection: true, googleCalendarConnection: true } }),
     listCoachPlans(coachProfileId),
     getActiveCoachSubscription(coachProfileId),
     prisma.coachClientRelationship.findMany({ where: { coachProfileId, status: { in: ["PENDING", "ACTIVE", "PAUSED"] } }, orderBy: { createdAt: "desc" }, include: { user: { select: { id: true, email: true, name: true, avatarUrl: true } }, habitProgram: { include: { dailyMetrics: { orderBy: { date: "desc" }, take: 10 }, enrollments: { include: { checkins: { orderBy: { date: "desc" }, take: 3 } } } } } } }),
@@ -962,7 +1153,9 @@ async function workspaceSnapshot(coachProfileId: string) {
     prisma.coachSitePlan.findMany({ where: { active: true }, orderBy: { sortOrder: "asc" } }),
     prisma.coachReward.findMany({ where: { coachProfileId }, orderBy: { createdAt: "desc" } }),
     prisma.coachAssignment.count({ where: { coachProfileId, status: "OPEN" } }),
-    coachCommerceFlags()
+    coachCommerceFlags(),
+    ensureCoachScheduleSettings(coachProfileId),
+    prisma.coachAppointment.findMany({ where: { coachProfileId, startsAt: { gte: new Date(Date.now() - 7 * 86_400_000) } }, orderBy: { startsAt: "asc" }, take: 100, include: { user: { select: { email: true, name: true } }, order: { include: { offer: { select: { title: true } } } } } })
   ]);
   const clients = relationships.map(serializeCoachClient);
   const coachPaidClients = clients.filter((client) => client.funding === "COACH_PAID" && client.status === "ACTIVE").length;
@@ -976,6 +1169,8 @@ async function workspaceSnapshot(coachProfileId: string) {
     serviceOffers: offers.map(serializeCoachOffer),
     counts: { coachPaidClients, clientPaidClients, attention: clients.filter((client) => client.attentionReason).length, openAssignments },
     integrations: { calendly: { connected: profile.calendlyConnection?.status === "ACTIVE", status: profile.calendlyConnection?.status ?? "DISCONNECTED" }, telegramBotUsername: env.TELEGRAM_BOT_USERNAME ?? null },
+    scheduling: serializeCoachSchedule(schedule, { google: profile.googleCalendarConnection, calendly: profile.calendlyConnection }),
+    appointments: appointments.map(serializeCoachAppointment),
     sites: sites.map(serializeSite),
     sitePlans: sitePlans.map((plan) => ({ id: plan.id, code: plan.code, name: plan.name, setupAmount: plan.setupAmount, monthlySupportAmount: plan.monthlySupportAmount, currency: plan.currency })),
     rewards: rewards.map(serializeReward),
@@ -1032,7 +1227,11 @@ function calculateDateStreak(dates: string[]) {
 }
 
 function calendlyStateSecret() {
-  return new TextEncoder().encode(env.CALENDLY_TOKEN_ENCRYPTION_SECRET || env.PARTNER_PORTAL_SESSION_ENCRYPTION_SECRET || env.JWT_ACCESS_SECRET);
+  return new TextEncoder().encode(env.COACH_INTEGRATION_TOKEN_ENCRYPTION_SECRET || env.CALENDLY_TOKEN_ENCRYPTION_SECRET || env.PARTNER_PORTAL_SESSION_ENCRYPTION_SECRET || env.JWT_ACCESS_SECRET);
+}
+
+function googleCalendarStateSecret() {
+  return new TextEncoder().encode(env.COACH_INTEGRATION_TOKEN_ENCRYPTION_SECRET || env.CALENDLY_TOKEN_ENCRYPTION_SECRET || env.PARTNER_PORTAL_SESSION_ENCRYPTION_SECRET || env.JWT_ACCESS_SECRET);
 }
 
 async function activeCalendlyAccessToken(connection: any) {
@@ -1126,13 +1325,10 @@ export async function runCoachCalendlyReconciliation() {
             if (!orderId) continue;
             if (status === "canceled" || invitee.status === "canceled") {
               if (await handleCoachConsultationCancelled(orderId, event.start_time ? new Date(event.start_time) : null)) matched += 1;
+              await prisma.coachAppointment.updateMany({ where: { orderId }, data: { status: "CANCELLED", cancelledAt: new Date() } });
               continue;
             }
-            const result = await prisma.coachServiceOrder.updateMany({
-              where: { id: orderId, status: "AWAITING_BOOKING" },
-              data: { status: "BOOKED", calendlyEventUri: event.uri, calendlyInviteeUri: invitee.uri, scheduledFor: event.start_time ? new Date(event.start_time) : null, bookedAt: new Date(invitee.created_at ?? Date.now()) }
-            });
-            matched += result.count;
+            if (event.start_time && await upsertCalendlyAppointment(orderId, event.uri, invitee.uri, new Date(event.start_time), event.end_time ? new Date(event.end_time) : null, new Date(invitee.created_at ?? Date.now()))) matched += 1;
           }
         }
       }
@@ -1142,6 +1338,21 @@ export async function runCoachCalendlyReconciliation() {
     }
   }
   return { checked: connections.length, matched };
+}
+
+async function upsertCalendlyAppointment(orderId: string, eventUri: string | null, inviteeUri: string | null, startsAt: Date, requestedEndsAt: Date | null, bookedAt = new Date()) {
+  const order = await prisma.coachServiceOrder.findFirst({ where: { id: orderId, status: { in: ["AWAITING_BOOKING", "BOOKED"] } }, include: { offer: true } });
+  if (!order) return null;
+  const settings = await ensureCoachScheduleSettings(order.offer.coachProfileId);
+  const endsAt = requestedEndsAt && !Number.isNaN(requestedEndsAt.getTime()) ? requestedEndsAt : new Date(startsAt.getTime() + settings.slotDurationMinutes * 60_000);
+  return prisma.$transaction(async (tx) => {
+    await tx.coachServiceOrder.update({ where: { id: order.id }, data: { status: "BOOKED", calendlyEventUri: eventUri, calendlyInviteeUri: inviteeUri, scheduledFor: startsAt, bookedAt } });
+    return tx.coachAppointment.upsert({
+      where: { orderId: order.id },
+      update: { startsAt, endsAt, provider: "CALENDLY", status: "CONFIRMED", externalEventId: eventUri, externalEventUrl: eventUri, cancelledAt: null },
+      create: { orderId: order.id, coachProfileId: order.offer.coachProfileId, userId: order.userId, startsAt, endsAt, timezone: settings.timezone, provider: "CALENDLY", status: "CONFIRMED", externalEventId: eventUri, externalEventUrl: eventUri }
+    });
+  });
 }
 
 function safeEqual(a: string, b: string) {

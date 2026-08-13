@@ -143,6 +143,36 @@ model PromoCode {
   @@index([active, expiresAt])
 }
 
+model DemoAccessCode {
+  id              String        @id @default(cuid())
+  label           String
+  codeHash        String        @unique
+  codeHint        String
+  active          Boolean       @default(true)
+  expiresAt       DateTime?
+  maxSessions     Int?
+  sessionsCreated Int           @default(0)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  sessions        DemoSession[]
+
+  @@index([active, expiresAt])
+}
+
+model DemoSession {
+  id           String         @id @default(cuid())
+  accessCodeId String
+  accessCode   DemoAccessCode @relation(fields: [accessCodeId], references: [id], onDelete: Cascade)
+  tokenHash    String         @unique
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  lastSeenAt   DateTime       @default(now())
+  createdAt    DateTime       @default(now())
+
+  @@index([accessCodeId, expiresAt])
+  @@index([expiresAt, revokedAt])
+}
+
 model MediaAsset {
   id         String           @id @default(cuid())
   analysisId String

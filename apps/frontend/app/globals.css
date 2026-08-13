@@ -2826,6 +2826,28 @@ svg {
 .admin-subcard p { margin: 0; }
 .admin-subcard p { color: rgba(148, 163, 184, 0.9); line-height: 1.5; }
 .admin-subcard label { display: grid; gap: 6px; color: rgba(203, 213, 225, 0.84); font-size: 12px; }
+
+.admin-demo-access { margin-bottom: 18px; }
+.admin-demo-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; }
+.admin-demo-heading h2 { margin: 5px 0 8px; }
+.admin-demo-heading p { max-width: 780px; margin: 0; line-height: 1.5; }
+.admin-demo-heading code,
+.admin-demo-created code,
+.admin-demo-access td code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; color: #4ee5ff; }
+.admin-demo-form { display: grid; grid-template-columns: minmax(240px, 1fr) 140px 150px auto; gap: 12px; align-items: end; }
+.admin-demo-form .button { min-height: 44px; display: inline-flex; align-items: center; gap: 8px; }
+.admin-demo-created { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 16px; border: 1px solid rgba(0, 212, 255, 0.28); border-radius: 7px; background: rgba(0, 212, 255, 0.07); }
+.admin-demo-created > div { display: grid; gap: 7px; }
+.admin-demo-created code { font-size: 18px; }
+@media (max-width: 900px) {
+  .admin-demo-form { grid-template-columns: 1fr 1fr; }
+  .admin-demo-form > :first-child { grid-column: 1 / -1; }
+}
+@media (max-width: 600px) {
+  .admin-demo-heading, .admin-demo-created { display: grid; }
+  .admin-demo-form { grid-template-columns: 1fr; }
+  .admin-demo-form > :first-child { grid-column: auto; }
+}
 .admin-content-editor { grid-column: 1 / -1; max-width: 920px; }
 .admin-content-editor textarea { min-height: 96px; resize: vertical; }
 .admin-table-wrap { max-width: 100%; overflow: auto; margin-top: 16px; }

@@ -16,6 +16,10 @@ import type {
   CoachScheduleSummary,
   CoachServiceOfferSummary,
   CoachWorkspaceResponse,
+  DemoAccessCodeCreated,
+  DemoAccessCodeSummary,
+  DemoSessionResponse,
+  DemoWorkspaceResponse,
   PublicCoachPlatformConfig,
   AppSetting,
   AuthResult,
@@ -798,6 +802,16 @@ export function restoreSessionFromUrl() {
   return true;
 }
 
+export const demoApi = {
+  access: (code: string) => request<DemoSessionResponse>("/api/demo/access", {
+    method: "POST",
+    body: JSON.stringify({ code })
+  }),
+  session: () => request<DemoSessionResponse>("/api/demo/session"),
+  workspace: () => request<DemoWorkspaceResponse>("/api/demo/workspace"),
+  logout: () => request<{ ok: true }>("/api/demo/logout", { method: "POST" })
+};
+
 async function adminRequest<T>(path: string, init?: RequestInit): Promise<T> {
   if (!hasWindow()) throw new Error("Admin API is only available in the browser");
   const token = window.sessionStorage.getItem("levelup_admin_token") ?? "";
@@ -881,6 +895,15 @@ export const adminApi = {
     body: JSON.stringify(promoCode)
   }),
   setPromoCodeActive: (id: string, active: boolean) => adminRequest<PromoCode>(`/api/admin/promo-codes/${encodeURIComponent(id)}/active`, {
+    method: "PUT",
+    body: JSON.stringify({ active })
+  }),
+  demoAccessCodes: () => adminRequest<DemoAccessCodeSummary[]>("/api/admin/demo-access-codes"),
+  createDemoAccessCode: (payload: { label: string; expiresInDays?: number | null; maxSessions?: number | null }) => adminRequest<DemoAccessCodeCreated>("/api/admin/demo-access-codes", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  }),
+  setDemoAccessCodeActive: (id: string, active: boolean) => adminRequest<DemoAccessCodeSummary>(`/api/admin/demo-access-codes/${encodeURIComponent(id)}/active`, {
     method: "PUT",
     body: JSON.stringify({ active })
   }),

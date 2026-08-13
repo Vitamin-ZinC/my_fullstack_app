@@ -373,6 +373,90 @@ export type PromoCode = {
   updatedAt: string;
 };
 
+export type DemoAccessCodeSummary = {
+  id: string;
+  label: string;
+  codeHint: string;
+  active: boolean;
+  expiresAt: string | null;
+  maxSessions: number | null;
+  sessionsCreated: number;
+  activeSessions: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type DemoAccessCodeCreated = {
+  accessCode: DemoAccessCodeSummary;
+  code: string;
+};
+
+export type DemoSessionResponse = {
+  active: boolean;
+  label: string;
+  expiresAt: string;
+};
+
+export type DemoMetricPoint = {
+  date: string;
+  energy: number;
+  clarity: number;
+  stability: number;
+};
+
+export type DemoCoachClient = {
+  id: string;
+  name: string;
+  initials: string;
+  status: "ACTIVE" | "ATTENTION" | "PAUSED";
+  todayCompleted: boolean;
+  weeklyAverage: number;
+  trend: number;
+  lastCheckin: string;
+  program: string;
+};
+
+export type DemoWorkspaceResponse = {
+  synthetic: true;
+  generatedAt: string;
+  coach: {
+    profile: { name: string; specialty: string; city: string };
+    stats: { activeClients: number; completedToday: number; needsAttention: number; monthlyRevenue: number };
+    clients: DemoCoachClient[];
+    selectedClient: {
+      client: DemoCoachClient;
+      metrics: DemoMetricPoint[];
+      insights: Array<{ id: string; date: string; text: string; energy: number }>;
+      feedback: Array<{ id: string; date: string; text: string; status: "SENT" | "READ" }>;
+      assignments: Array<{ id: string; title: string; dueAt: string; completed: boolean }>;
+      habits: Array<{ id: string; title: string; completionRate: number; streak: number; assignedByCoach: boolean }>;
+    };
+    schedule: {
+      timezone: string;
+      upcoming: Array<{ id: string; clientName: string; startsAt: string; durationMinutes: number; type: string }>;
+      availability: Array<{ weekday: string; hours: string }>;
+    };
+    plan: {
+      name: string;
+      includedClients: number;
+      usedClients: number;
+      monthlyAmount: number;
+      currency: string;
+      renewsAt: string;
+      options: Array<{ name: string; includedClients: number | null; monthlyAmount: number | null }>;
+    };
+  };
+  client: {
+    profile: { name: string; level: string; xp: number; streak: number };
+    metrics: DemoMetricPoint[];
+    habits: Array<{ id: string; title: string; completionRate: number; streak: number; assignedByCoach: boolean; completedToday: boolean }>;
+    coach: { name: string; specialty: string; program: string; daysLeft: number };
+    feedback: Array<{ id: string; date: string; text: string; status: "SENT" | "READ" }>;
+    assignments: Array<{ id: string; title: string; dueAt: string; completed: boolean }>;
+    insights: Array<{ id: string; date: string; text: string; energy: number }>;
+  };
+};
+
 export type PartnerCustomerBonusType = "NONE" | "FREE_DAYS" | "DISCOUNT" | "CREDITS" | "CUSTOM_ENTITLEMENT";
 export type PartnerCommissionModel = "FIXED" | "PERCENT" | "HYBRID";
 export type PartnerCommissionWindow = "FIRST_PAYMENT" | "MONTHS" | "LIFETIME";

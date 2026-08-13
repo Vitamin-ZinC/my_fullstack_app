@@ -9,6 +9,7 @@ import { HABIT_ASSISTANT_AVATAR_URL_KEY } from "../services/pricing.js";
 import { defaultReportPromptTemplates } from "../services/reportPrompts.js";
 import { calculateGiftedTrialEnd, calculateTrialDaysLeft } from "../services/adminUsers.js";
 import { getAdminBusinessReport } from "../services/adminReports.js";
+import { createDemoAccessCode, listDemoAccessCodes, setDemoAccessCodeActive } from "../services/demoAccess.js";
 
 const jsonValueSchema: z.ZodType<unknown> = z.lazy(() =>
   z.union([
@@ -54,6 +55,12 @@ const promoCodeSchema = z.object({
   maxRedemptions: z.coerce.number().int().positive().optional().nullable(),
   startsAt: z.string().datetime().optional().nullable(),
   expiresAt: z.string().datetime().optional().nullable()
+});
+
+const demoAccessCodeSchema = z.object({
+  label: z.string().trim().min(2).max(120),
+  expiresInDays: z.coerce.number().int().min(1).max(365).optional().nullable(),
+  maxSessions: z.coerce.number().int().min(1).max(10_000).optional().nullable()
 });
 
 const adminUsersQuerySchema = z.object({
@@ -509,6 +516,36 @@ export async function adminRoutes(app: FastifyInstance) {
     return prisma.promoCode.findMany({
       orderBy: [{ active: "desc" }, { updatedAt: "desc" }]
     });
+  });
+
+  app.get("/api/admin/demo-access-codes", async () => {
+    return listDemoAccessCodes();
+  });
+
+  app.post("/api/admin/demo-access-codes", async (request) => {
+    const body = demoAccessCodeSchema.parse(request.body ?? {});
+    const expiresAt = body.expiresInDays
+      ? new Date(Date.now() + body.expiresInDays * 24 * 60 * 60 * 1000)
+      : null;
+    const created = await createDemoAccessCode({
+      label: body.label,
+      expiresAt,
+      maxSessions: body.maxSessions ?? null
+    });
+    await writeAdminAudit("demo_access.create", "DemoAccessCode", created.accessCode.id, {
+      label: created.accessCode.label,
+      expiresAt: created.accessCode.expiresAt,
+      maxSessions: created.accessCode.maxSessions
+    });
+    return created;
+  });
+
+  app.put("/api/admin/demo-access-codes/:id/active", async (request) => {
+    const params = z.object({ id: z.string().min(1) }).parse(request.params);
+    const body = z.object({ active: z.boolean() }).parse(request.body ?? {});
+    const accessCode = await setDemoAccessCodeActive(params.id, body.active);
+    await writeAdminAudit(body.active ? "demo_access.activate" : "demo_access.deactivate", "DemoAccessCode", accessCode.id);
+    return accessCode;
   });
 
   app.post("/api/admin/promo-codes", async (request, reply) => {

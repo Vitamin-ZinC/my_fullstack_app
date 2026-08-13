@@ -12,6 +12,8 @@ import {
   Handshake,
   LayoutDashboard,
   Download,
+  Copy,
+  KeyRound,
   LogOut,
   RefreshCw,
   Settings,
@@ -28,6 +30,7 @@ import type {
   AdminTelegramCommunityChat,
   AppSetting,
   CoachPublicContent,
+  DemoAccessCodeSummary,
   FeatureFlag,
   PartnerAffiliateProgramSummary,
   PartnerCoreAdminSnapshot,
@@ -2151,7 +2154,10 @@ export function AdminConsole({ section }: { section: AdminSection }) {
             </>}
           </section>}
 
-          {section === "coaches" && coachPlatform && <AdminCoachesPanel snapshot={coachPlatform} refresh={refresh} setMessage={setMessage} />}
+          {section === "coaches" && coachPlatform && <>
+            <AdminDemoAccessPanel setMessage={setMessage} />
+            <AdminCoachesPanel snapshot={coachPlatform} refresh={refresh} setMessage={setMessage} />
+          </>}
 
           {section === "system" && <section id="admin-system" className="grid grid-2 admin-system-grid">
             <div className="admin-system-actions">
@@ -2510,6 +2516,78 @@ const coachPublicContentFields: Array<{ key: keyof CoachPublicContent; label: st
   { key: "applicationLead", label: "Пояснение заявки", multiline: true },
   { key: "applicationSubmitLabel", label: "Кнопка отправки заявки" }
 ];
+
+function AdminDemoAccessPanel({ setMessage }: { setMessage: (value: string) => void }) {
+  const [codes, setCodes] = useState<DemoAccessCodeSummary[]>([]);
+  const [label, setLabel] = useState("Демонстрация для коуча");
+  const [expiresInDays, setExpiresInDays] = useState("30");
+  const [maxSessions, setMaxSessions] = useState("50");
+  const [createdCode, setCreatedCode] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    void loadCodes();
+  }, []);
+
+  async function loadCodes() {
+    try {
+      setCodes(await adminApi.demoAccessCodes());
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "Не удалось загрузить демо-коды");
+    }
+  }
+
+  async function createCode() {
+    setBusy(true);
+    try {
+      const created = await adminApi.createDemoAccessCode({
+        label: label.trim(),
+        expiresInDays: expiresInDays ? Number(expiresInDays) : null,
+        maxSessions: maxSessions ? Number(maxSessions) : null
+      });
+      setCreatedCode(created.code);
+      setCodes((items) => [created.accessCode, ...items]);
+      setMessage("Демо-код создан. Сохраните его сейчас: повторно полный код не показывается.");
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "Не удалось создать демо-код");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleCode(item: DemoAccessCodeSummary) {
+    setBusy(true);
+    try {
+      const updated = await adminApi.setDemoAccessCodeActive(item.id, !item.active);
+      setCodes((items) => items.map((code) => code.id === item.id ? updated : code));
+      setMessage(updated.active ? "Демо-код включён" : "Демо-код отключён, активные сессии завершены");
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : "Не удалось изменить демо-код");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function copyCode() {
+    await navigator.clipboard.writeText(createdCode);
+    setMessage("Демо-код скопирован");
+  }
+
+  return <section className="card stack admin-section-card admin-demo-access">
+    <div className="admin-demo-heading">
+      <div><span className="eyebrow">Безопасная демонстрация</span><h2>Демо-доступ к кабинетам</h2><p className="muted">Создайте временный код для фаундера или коуча. По ссылке <code>/demo</code> доступны только вымышленные данные без платежей и доступа к Partner Core.</p></div>
+      <Link className="button secondary" href="/demo" target="_blank">Открыть демо</Link>
+    </div>
+    <div className="admin-demo-form">
+      <label className="admin-field"><span>Название</span><input className="input" value={label} onChange={(event) => setLabel(event.target.value)} placeholder="Например, показ коучу 15 августа" /></label>
+      <label className="admin-field"><span>Срок, дней</span><input className="input" type="number" min="1" max="365" value={expiresInDays} onChange={(event) => setExpiresInDays(event.target.value)} /></label>
+      <label className="admin-field"><span>Лимит входов</span><input className="input" type="number" min="1" max="10000" value={maxSessions} onChange={(event) => setMaxSessions(event.target.value)} /></label>
+      <button className="button" disabled={busy || label.trim().length < 2} onClick={() => void createCode()}><KeyRound size={17} />Создать код</button>
+    </div>
+    {createdCode && <div className="admin-demo-created"><div><strong>Код показывается только один раз</strong><code>{createdCode}</code></div><button className="button secondary compact" onClick={() => void copyCode()}><Copy size={16} />Копировать</button></div>}
+    <div className="admin-table-wrap"><table className="admin-data-table"><thead><tr><th>Назначение</th><th>Код</th><th>Срок</th><th>Использование</th><th>Статус</th><th>Действие</th></tr></thead><tbody>{codes.length === 0 ? <tr><td colSpan={6}>Демо-коды ещё не создавались.</td></tr> : codes.map((item) => <tr key={item.id}><td><strong>{item.label}</strong><small>Создан {formatAdminDate(item.createdAt)}</small></td><td><code>{item.codeHint}</code></td><td>{item.expiresAt ? formatAdminDate(item.expiresAt) : "Без срока"}</td><td>{item.sessionsCreated}{item.maxSessions ? ` / ${item.maxSessions}` : ""}<small>Активно сейчас: {item.activeSessions}</small></td><td><span className="admin-status-pill">{item.active ? "Активен" : "Отключён"}</span></td><td><button className="button secondary compact" disabled={busy} onClick={() => void toggleCode(item)}>{item.active ? "Отключить" : "Включить"}</button></td></tr>)}</tbody></table></div>
+  </section>;
+}
 
 function AdminCoachesPanel({ snapshot, refresh, setMessage }: { snapshot: AdminCoachPlatformSnapshot; refresh: () => Promise<void>; setMessage: (value: string) => void }) {
   const [view, setView] = useState<"profiles" | "plans" | "subscriptions" | "offers" | "sites" | "orders" | "rewards" | "content" | "settings">("profiles");

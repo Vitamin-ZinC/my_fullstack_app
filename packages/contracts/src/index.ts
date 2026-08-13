@@ -693,6 +693,13 @@ export type CoachWorkspaceResponse = {
   sites: CoachSiteSummary[];
   sitePlans: Array<{ id: string; code: string; name: string; setupAmount: number; monthlySupportAmount: number; currency: string }>;
   rewards: CoachRewardSummary[];
+  commerce: CoachCommerceAvailability;
+};
+
+export type CoachCommerceAvailability = {
+  packagesEnabled: boolean;
+  sitesEnabled: boolean;
+  servicesEnabled: boolean;
 };
 
 export type CoachSiteSummary = {
@@ -762,6 +769,7 @@ export type PublicCoachPlatformConfig = {
   plans: CoachPlanSummary[];
   sitePlans: Array<{ id: string; code: string; name: string; setupAmount: number; monthlySupportAmount: number; currency: string }>;
   content: CoachPublicContent;
+  commerce: CoachCommerceAvailability;
 };
 
 export type HabitProgressResponse = {

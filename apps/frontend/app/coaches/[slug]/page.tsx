@@ -15,7 +15,8 @@ export default function CoachProfilePage() {
   const [coach, setCoach] = useState<PublicCoach | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
-  useEffect(() => { coachCatalogApi.get(slug).then((result) => setCoach(result.coach as PublicCoach)).catch((reason) => setError(reason instanceof Error ? reason.message : "Коуч не найден")); }, [slug]);
+  const [servicesCommerceEnabled, setServicesCommerceEnabled] = useState(false);
+  useEffect(() => { coachCatalogApi.get(slug).then((result) => { setCoach(result.coach as PublicCoach); setServicesCommerceEnabled(result.servicesCommerceEnabled); }).catch((reason) => setError(reason instanceof Error ? reason.message : "Коуч не найден")); }, [slug]);
 
   async function buy(offerId: string) {
     setBusy(offerId); setError("");
@@ -50,7 +51,7 @@ export default function CoachProfilePage() {
             <h3>{offer.title}</h3><p>{offer.description}</p>
             <ul><li><Check size={15}/> Оплата внутри ORKEN</li>{offer.type === "CONSULTATION" && <li><Clock3 size={15}/> Запись через календарь после оплаты</li>}</ul>
             <strong>{money(offer.amount, offer.currency)}{offer.type === "ONGOING_SUPPORT" && offer.paymentModel === "CLIENT_PAID" ? " / месяц" : ""}</strong>
-            <button disabled={!coach.acceptingOrders || busy === offer.id} onClick={() => buy(offer.id)}>{busy === offer.id ? "Открываем оплату..." : "Выбрать"}</button>
+            <button disabled={!coach.acceptingOrders || !servicesCommerceEnabled || busy === offer.id} onClick={() => buy(offer.id)}>{busy === offer.id ? "Открываем оплату..." : servicesCommerceEnabled ? "Выбрать" : "Скоро доступно"}</button>
           </article>)}
           {coach.services.length === 0 && <div className={styles.state}>Коуч ещё не опубликовал услуги.</div>}
         </div>

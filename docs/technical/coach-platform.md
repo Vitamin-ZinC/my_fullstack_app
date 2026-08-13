@@ -126,15 +126,17 @@ The existing ORKEN Telegram bot handles `start=coach_<slug>`. It exposes only th
 ## Release Controls
 
 - `coach_workspace` enables the workspace release.
-- `coach_commerce` gates package, site, and client-service checkout. It is seeded as disabled.
+- `coach_packages_commerce` gates monthly coach package checkout and is enabled after Stripe subscription webhooks are verified.
+- `coach_sites_commerce` gates coach-site setup and support checkout and is enabled after Stripe subscription webhooks are verified.
+- `coach_services_commerce` gates client purchases of coaching and consultations. It remains disabled until Partner Core payout routing and Calendly are configured.
 
-Do not enable `coach_commerce` until Stripe and Calendly production smoke tests pass.
+Do not use the legacy `coach_commerce` flag for new routes. Do not enable `coach_services_commerce` until Stripe, Partner Core payouts, and Calendly production smoke tests pass.
 
 The main `/for-coaches` positioning fields are stored in `AppSetting.coach_public_content_ru` and edited under `/admin/coaches` -> `Публичная страница`. Package and site prices are always read from the active backend price records, never from the public page bundle.
 
 ## Production Checklist
 
-1. Apply `20260812190000_coach_platform` with `prisma migrate deploy` and run `prisma generate`.
+1. Apply `20260812190000_coach_platform` and `20260813090000_split_coach_commerce_flags` with `prisma migrate deploy`, then run `prisma generate`.
 2. Configure backend-only Calendly credentials and a high-entropy token encryption secret.
 3. Configure a published 100% coach-payout program in Partner Core and set `COACH_PAYOUT_PARTNER_CORE_PROGRAM_ID`.
 4. Subscribe the existing Stripe webhook to the events listed above.
@@ -143,6 +145,6 @@ The main `/for-coaches` positioning fields are stored in `AppSetting.coach_publi
 7. For custom domains, route verified hosts to the same frontend and set `COACH_SITE_PRIMARY_HOSTS` so primary ORKEN hosts are never rewritten.
 8. Verify Partner Core project scope is exactly `orken-life` and service credentials remain backend-only.
 9. Run unit tests, frontend production build, and smoke the full coach purchase/booking/refund path.
-10. Enable `coach_workspace`, then `coach_commerce` through admin feature flags.
+10. Enable `coach_workspace`, package and site commerce first. Enable service commerce only after the payout and booking checks pass.
 
 External DNS, CDN, custom-domain TLS issuance, Stripe credentials, and Calendly app credentials are infrastructure operations and are not created by the application migration.

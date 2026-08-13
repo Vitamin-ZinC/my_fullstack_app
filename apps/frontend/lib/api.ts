@@ -708,7 +708,7 @@ export const coachCatalogApi = {
     Object.entries(query ?? {}).forEach(([key, value]) => { if (value !== undefined && value !== "") params.set(key, String(value)); });
     return request<CoachCatalogResponse>(`/api/coaches${params.size ? `?${params.toString()}` : ""}`);
   },
-  get: (slug: string) => request<{ coach: CoachCatalogResponse["coaches"][number] & { rewards?: unknown[]; site?: unknown } }>(`/api/coaches/${encodeURIComponent(slug)}`),
+  get: (slug: string) => request<{ coach: CoachCatalogResponse["coaches"][number] & { rewards?: unknown[]; site?: unknown }; servicesCommerceEnabled: boolean }>(`/api/coaches/${encodeURIComponent(slug)}`),
   checkout: async (offerId: string, idempotencyKey: string) => {
     await ensureGuestSession();
     return request<{ url?: string; order: unknown }>(`/api/coaches/services/${encodeURIComponent(offerId)}/checkout`, { method: "POST", body: JSON.stringify({ idempotencyKey }) });

@@ -305,7 +305,7 @@ export async function coachWorkspaceRoutes(app: FastifyInstance) {
   });
 
   app.post("/api/coach/subscription/checkout/:id", async (request, reply) => {
-    if (!(await requireCoachFeature(reply, "coach_commerce"))) return;
+    if (!(await requireCoachFeature(reply, "coach_packages_commerce"))) return;
     const context = await requireCoachWrite(request, reply);
     if (!context) return;
     const { id } = idSchema.parse(request.params);
@@ -318,7 +318,7 @@ export async function coachWorkspaceRoutes(app: FastifyInstance) {
   });
 
   app.post("/api/coach/sites/checkout/:id", async (request, reply) => {
-    if (!(await requireCoachFeature(reply, "coach_commerce"))) return;
+    if (!(await requireCoachFeature(reply, "coach_sites_commerce"))) return;
     const context = await requireCoachWrite(request, reply);
     if (!context) return;
     const { id } = idSchema.parse(request.params);
@@ -631,7 +631,7 @@ function registerClientCoachingRoutes(app: FastifyInstance) {
   });
 
   app.post("/api/coaches/services/:id/checkout", async (request, reply) => {
-    if (!(await requireCoachFeature(reply, "coach_commerce"))) return;
+    if (!(await requireCoachFeature(reply, "coach_services_commerce"))) return;
     const session = await requireUserSession(request, reply);
     if (!session?.userId) return;
     const { id } = idSchema.parse(request.params);
@@ -672,12 +672,13 @@ function registerClientCoachingRoutes(app: FastifyInstance) {
 
 function registerPublicCoachRoutes(app: FastifyInstance) {
   app.get("/api/coaches/config", async () => {
-    const [plans, sitePlans, contentSetting] = await Promise.all([
+    const [plans, sitePlans, contentSetting, commerceFlags] = await Promise.all([
       listCoachPlans(),
       prisma.coachSitePlan.findMany({ where: { active: true }, orderBy: { sortOrder: "asc" } }),
-      prisma.appSetting.findUnique({ where: { key: COACH_PUBLIC_CONTENT_KEY } })
+      prisma.appSetting.findUnique({ where: { key: COACH_PUBLIC_CONTENT_KEY } }),
+      coachCommerceFlags()
     ]);
-    return { plans, sitePlans: sitePlans.map((plan) => ({ id: plan.id, code: plan.code, name: plan.name, setupAmount: plan.setupAmount, monthlySupportAmount: plan.monthlySupportAmount, currency: plan.currency })), content: readCoachPublicContent(contentSetting?.value) };
+    return { plans, sitePlans: sitePlans.map((plan) => ({ id: plan.id, code: plan.code, name: plan.name, setupAmount: plan.setupAmount, monthlySupportAmount: plan.monthlySupportAmount, currency: plan.currency })), content: readCoachPublicContent(contentSetting?.value), commerce: commerceFlags };
   });
   app.get("/api/coaches", async (request) => {
     const query = z.object({ city: z.string().trim().max(120).optional(), specialization: z.string().trim().max(80).optional(), language: z.string().trim().max(20).optional(), accepting: z.coerce.boolean().optional() }).parse(request.query ?? {});
@@ -696,7 +697,7 @@ function registerPublicCoachRoutes(app: FastifyInstance) {
     const { slug } = z.object({ slug: z.string().min(1).max(100) }).parse(request.params);
     const profile = await prisma.coachProfile.findFirst({ where: { slug, status: "APPROVED" }, include: { calendlyConnection: true, serviceOffers: { where: { status: "APPROVED", paymentModel: "CLIENT_PAID" }, orderBy: { amount: "asc" } }, rewards: { where: { status: "APPROVED" } }, sites: { where: { status: { in: ["ACTIVE", "GRACE"] } }, include: { plan: true }, take: 1 } } });
     if (!profile) return reply.code(404).send({ error: "Коуч не найден" });
-    return { coach: { ...serializeCoachProfile(profile), services: profile.serviceOffers.map(serializeCoachOffer), rewards: profile.rewards.map(serializeReward), site: profile.sites[0] ? serializeSite(profile.sites[0]) : null, siteUrl: profile.sites[0] ? `https://${profile.sites[0].customDomain || `${profile.sites[0].slug}.${env.COACH_SITE_BASE_DOMAIN}`}` : null, telegramBotUsername: env.TELEGRAM_BOT_USERNAME?.replace(/^@+/, "") ?? null } };
+    return { coach: { ...serializeCoachProfile(profile), services: profile.serviceOffers.map(serializeCoachOffer), rewards: profile.rewards.map(serializeReward), site: profile.sites[0] ? serializeSite(profile.sites[0]) : null, siteUrl: profile.sites[0] ? `https://${profile.sites[0].customDomain || `${profile.sites[0].slug}.${env.COACH_SITE_BASE_DOMAIN}`}` : null, telegramBotUsername: env.TELEGRAM_BOT_USERNAME?.replace(/^@+/, "") ?? null }, servicesCommerceEnabled: await coachFeatureEnabled("coach_services_commerce") };
   });
 
   app.get("/api/coach-sites/by-host", async (request, reply) => {
@@ -870,10 +871,27 @@ async function requireCoach(request: FastifyRequest, reply: FastifyReply) {
 }
 
 async function requireCoachFeature(reply: FastifyReply, key: string, defaultEnabled = false) {
-  const flag = await prisma.featureFlag.findUnique({ where: { key } });
-  if (flag?.enabled ?? defaultEnabled) return true;
+  if (await coachFeatureEnabled(key, defaultEnabled)) return true;
   reply.code(503).send({ error: "Функция готовится к запуску" });
   return false;
+}
+
+async function coachFeatureEnabled(key: string, defaultEnabled = false) {
+  const flag = await prisma.featureFlag.findUnique({ where: { key } });
+  return flag?.enabled ?? defaultEnabled;
+}
+
+async function coachCommerceFlags() {
+  const flags = await prisma.featureFlag.findMany({
+    where: { key: { in: ["coach_packages_commerce", "coach_sites_commerce", "coach_services_commerce"] } },
+    select: { key: true, enabled: true }
+  });
+  const enabled = new Map(flags.map((flag) => [flag.key, flag.enabled]));
+  return {
+    packagesEnabled: enabled.get("coach_packages_commerce") ?? false,
+    sitesEnabled: enabled.get("coach_sites_commerce") ?? false,
+    servicesEnabled: enabled.get("coach_services_commerce") ?? false
+  };
 }
 
 async function syncCoachPayoutReferralCode(context: Awaited<ReturnType<typeof requireCoach>> & {}) {
@@ -934,7 +952,7 @@ async function loadCoachClient(coachProfileId: string, relationshipId: string) {
 }
 
 async function workspaceSnapshot(coachProfileId: string) {
-  const [profile, plans, subscription, relationships, offers, sites, sitePlans, rewards, openAssignments] = await Promise.all([
+  const [profile, plans, subscription, relationships, offers, sites, sitePlans, rewards, openAssignments, commerce] = await Promise.all([
     prisma.coachProfile.findUniqueOrThrow({ where: { id: coachProfileId }, include: { calendlyConnection: true } }),
     listCoachPlans(coachProfileId),
     getActiveCoachSubscription(coachProfileId),
@@ -943,7 +961,8 @@ async function workspaceSnapshot(coachProfileId: string) {
     prisma.coachSite.findMany({ where: { coachProfileId }, include: { plan: true }, orderBy: { createdAt: "desc" } }),
     prisma.coachSitePlan.findMany({ where: { active: true }, orderBy: { sortOrder: "asc" } }),
     prisma.coachReward.findMany({ where: { coachProfileId }, orderBy: { createdAt: "desc" } }),
-    prisma.coachAssignment.count({ where: { coachProfileId, status: "OPEN" } })
+    prisma.coachAssignment.count({ where: { coachProfileId, status: "OPEN" } }),
+    coachCommerceFlags()
   ]);
   const clients = relationships.map(serializeCoachClient);
   const coachPaidClients = clients.filter((client) => client.funding === "COACH_PAID" && client.status === "ACTIVE").length;
@@ -959,7 +978,8 @@ async function workspaceSnapshot(coachProfileId: string) {
     integrations: { calendly: { connected: profile.calendlyConnection?.status === "ACTIVE", status: profile.calendlyConnection?.status ?? "DISCONNECTED" }, telegramBotUsername: env.TELEGRAM_BOT_USERNAME ?? null },
     sites: sites.map(serializeSite),
     sitePlans: sitePlans.map((plan) => ({ id: plan.id, code: plan.code, name: plan.name, setupAmount: plan.setupAmount, monthlySupportAmount: plan.monthlySupportAmount, currency: plan.currency })),
-    rewards: rewards.map(serializeReward)
+    rewards: rewards.map(serializeReward),
+    commerce
   };
 }
 

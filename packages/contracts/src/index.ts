@@ -449,11 +449,14 @@ export type DemoWorkspaceResponse = {
   client: {
     profile: { name: string; level: string; xp: number; streak: number };
     metrics: DemoMetricPoint[];
-    habits: Array<{ id: string; title: string; completionRate: number; streak: number; assignedByCoach: boolean; completedToday: boolean }>;
+    habits: Array<{ id: string; title: string; completionRate: number; streak: number; assignedByCoach: boolean; completedToday: boolean; week: boolean[] }>;
+    dailyCheckin: { energy: number; clarity: number; stability: number; habitCompleted: boolean; insight: string; xpEarned: number };
     coach: { name: string; specialty: string; program: string; daysLeft: number };
     feedback: Array<{ id: string; date: string; text: string; status: "SENT" | "READ" }>;
     assignments: Array<{ id: string; title: string; dueAt: string; completed: boolean }>;
     insights: Array<{ id: string; date: string; text: string; energy: number }>;
+    telegram: { linked: boolean; username: string | null; remindersEnabled: boolean; motivationFrequency: "off" | "daily" | "weekdays" | "weekly" };
+    subscription: { status: "ACTIVE" | "TRIAL"; paidBy: "CLIENT" | "COACH"; plan: string; currentPeriodEnd: string };
   };
 };
 

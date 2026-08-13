@@ -15,8 +15,11 @@ import {
   LayoutDashboard,
   LogOut,
   MessageSquareText,
+  Settings,
   Send,
   Sparkles,
+  BellRing,
+  Bot,
   Target,
   TrendingUp,
   UserRound,
@@ -38,7 +41,7 @@ import styles from "./demo.module.css";
 
 type Role = "coach" | "client";
 type CoachView = "overview" | "clients" | "schedule" | "plan";
-type ClientView = "overview" | "progress" | "coach" | "archive";
+type ClientView = "overview" | "habits" | "progress" | "coach" | "archive" | "settings";
 type ClientDetailView = "state" | "insights" | "feedback" | "assignments";
 
 const dateFormatter = new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "short" });
@@ -272,9 +275,11 @@ function ClientDemo({ data, onAction }: { data: DemoWorkspaceResponse; onAction:
   const [view, setView] = useState<ClientView>("overview");
   const nav = [
     { id: "overview" as const, label: "Мой путь", icon: LayoutDashboard },
+    { id: "habits" as const, label: "Привычки", icon: Target },
     { id: "progress" as const, label: "Прогресс", icon: Activity },
     { id: "coach" as const, label: "Мой коуч", icon: MessageSquareText },
-    { id: "archive" as const, label: "Архив", icon: BookOpen }
+    { id: "archive" as const, label: "Архив", icon: BookOpen },
+    { id: "settings" as const, label: "Настройки", icon: Settings }
   ];
   return <div className={styles.appLayout}>
     <aside className={styles.sidebar}>
@@ -284,9 +289,11 @@ function ClientDemo({ data, onAction }: { data: DemoWorkspaceResponse; onAction:
     </aside>
     <section className={styles.workspace}>
       {view === "overview" && <ClientOverview data={data} onAction={onAction} />}
+      {view === "habits" && <ClientHabits data={data} onAction={onAction} />}
       {view === "progress" && <ClientProgress data={data} />}
       {view === "coach" && <ClientCoach data={data} onAction={onAction} />}
       {view === "archive" && <ClientArchive data={data} />}
+      {view === "settings" && <ClientSettings data={data} onAction={onAction} />}
     </section>
   </div>;
 }
@@ -303,6 +310,18 @@ function ClientOverview({ data, onAction }: { data: DemoWorkspaceResponse; onAct
   </>;
 }
 
+function ClientHabits({ data, onAction }: { data: DemoWorkspaceResponse; onAction: (message?: string) => void }) {
+  const days = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+  return <>
+    <PageHeading eyebrow="Навигатор привычек" title="Трекер привычек" text="Сегодняшняя практика, недельные отметки и начисление XP." action={<button className={styles.primaryButton} onClick={() => onAction("В рабочем кабинете эта кнопка сохраняет отметку и начисляет XP один раз за день.")}><CheckCircle2 size={17} />Отметить сегодня</button>} />
+    <section className={styles.todayHabit}>
+      <div className={styles.todayHabitMain}><span className={styles.eyebrow}>Привычка недели</span><h2>{data.client.habits[0].title}</h2><p>До начала рабочих сообщений выбери одно действие, которое даст дню ясный результат.</p><div className={styles.softStep}><Sparkles size={18} /><div><strong>Если мало сил</strong><span>Запиши приоритет одним предложением. Этого достаточно, чтобы сохранить ритм.</span></div></div></div>
+      <div className={styles.todayReward}><strong>+{data.client.dailyCheckin.xpEarned} XP</strong><span>заработано сегодня</span><small>Привычка +10 · состояние +15 · инсайт +15</small></div>
+    </section>
+    <div className={styles.habitTrackerList}>{data.client.habits.map((habit) => <article key={habit.id} className={styles.trackerCard}><div className={styles.trackerHeading}><div><span>{habit.assignedByCoach ? "Назначено коучем" : "Программа ORKEN"}</span><h3>{habit.title}</h3></div><strong>{habit.completionRate}%</strong></div><div className={styles.weekTrack}>{days.map((day, index) => <div key={day} data-complete={habit.week[index]}><span>{day}</span><i>{habit.week[index] ? <CheckCircle2 size={17} /> : index === 6 ? "Сегодня" : "-"}</i></div>)}</div><footer><span>Серия: {habit.streak} дней</span><button onClick={() => onAction()}>Открыть</button></footer></article>)}</div>
+  </>;
+}
+
 function ClientProgress({ data }: { data: DemoWorkspaceResponse }) {
   return <><PageHeading eyebrow="Аналитика" title="Мой прогресс" text="Динамика внутреннего состояния и регулярность привычек за последние 14 дней." /><section className={styles.panel}><MetricChart metrics={data.client.metrics} /></section><div className={styles.habitList}>{data.client.habits.map((habit) => <HabitRow key={habit.id} {...habit} />)}</div><section className={styles.correlation}><TrendingUp size={22} /><div><strong>Наблюдение за период</strong><p>В дни с выполненным утренним фокусом средняя ясность была выше. Это связь в данных, а не доказанная причина.</p></div></section></>;
 }
@@ -313,6 +332,30 @@ function ClientCoach({ data, onAction }: { data: DemoWorkspaceResponse; onAction
 
 function ClientArchive({ data }: { data: DemoWorkspaceResponse }) {
   return <><PageHeading eyebrow="История" title="Архив инсайтов" text="Личные записи и наблюдения по состоянию." /><div className={styles.archiveToolbar}><input placeholder="Поиск по записям" /><select aria-label="Период"><option>Последние 30 дней</option><option>Последние 7 дней</option><option>Весь период</option></select></div><div className={styles.feed}>{data.client.insights.map((item) => <article key={item.id}><BookOpen size={18} /><div><span>{dateFormatter.format(new Date(item.date))} · энергия {item.energy}/10</span><p>{item.text}</p></div></article>)}</div></>;
+}
+
+function ClientSettings({ data, onAction }: { data: DemoWorkspaceResponse; onAction: (message?: string) => void }) {
+  return <>
+    <PageHeading eyebrow="Настройки" title="Профиль и напоминания" text="Telegram, частота поддержки и информация о доступе." />
+    <div className={styles.settingsGrid}>
+      <section className={styles.panel}>
+        <div className={styles.integrationTitle}><span><Bot size={22} /></span><div><h2>Telegram-бот ORKEN</h2><p>{data.client.telegram.linked ? "Подключён к этому кабинету." : "Принимает отметки, напоминает о привычке и отвечает с учётом прогресса."}</p></div><span className={styles.statusPill} data-status={data.client.telegram.linked ? "ACTIVE" : "PAUSED"}>{data.client.telegram.linked ? "Подключён" : "Не подключён"}</span></div>
+        <div className={styles.telegramFeatures}><span><CheckCircle2 size={16} />Отмечать привычку из Telegram</span><span><CheckCircle2 size={16} />Сохранять состояние и инсайты</span><span><CheckCircle2 size={16} />Получать фидбэк коуча</span><span><CheckCircle2 size={16} />Задавать вопросы ORKEN</span></div>
+        <button className={styles.primaryButton} onClick={() => onAction("В рабочем кабинете откроется официальный Telegram-бот с одноразовым токеном привязки.")}><Bot size={17} />Подключить Telegram</button>
+      </section>
+      <section className={styles.panel}>
+        <div className={styles.integrationTitle}><span><BellRing size={22} /></span><div><h2>Напоминания</h2><p>Выберите мягкий ритм мотивации. Настройка синхронизируется с ботом.</p></div></div>
+        <label className={styles.toggleRow}><span><strong>Telegram-напоминания</strong><small>Текущая привычка и вечерняя сверка</small></span><input type="checkbox" checked={data.client.telegram.remindersEnabled} onChange={() => onAction()} /></label>
+        <label className={styles.settingField}><span>Частота мотивации</span><select defaultValue={data.client.telegram.motivationFrequency} onChange={() => onAction()}><option value="daily">Каждый день</option><option value="weekdays">По будням</option><option value="weekly">Раз в неделю</option><option value="off">Не присылать</option></select></label>
+        <button className={styles.secondaryButton} onClick={() => onAction()}>Сохранить настройки</button>
+      </section>
+      <section className={styles.panel}>
+        <div className={styles.panelTitle}><div><span className={styles.eyebrow}>Доступ</span><h2>{data.client.subscription.plan}</h2></div><span className={styles.statusPill} data-status="ACTIVE">Активен</span></div>
+        <div className={styles.subscriptionFacts}><div><span>Оплачивает</span><strong>{data.client.subscription.paidBy === "COACH" ? "Коуч" : "Клиент"}</strong></div><div><span>Доступ до</span><strong>{dateFormatter.format(new Date(data.client.subscription.currentPeriodEnd))}</strong></div></div>
+        <p className={styles.panelText}>Если коуч завершит оплату пакета, клиент сможет продолжить по обычному тарифу ORKEN.</p>
+      </section>
+    </div>
+  </>;
 }
 
 function PageHeading({ eyebrow, title, text, action }: { eyebrow: string; title: string; text: string; action?: React.ReactNode }) {

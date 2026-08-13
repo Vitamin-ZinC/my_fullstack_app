@@ -287,11 +287,29 @@ export function buildDemoWorkspace(): DemoWorkspaceResponse {
     client: {
       profile: { name: "Анна Смирнова", level: "Уверенный ритм", xp: 1240, streak: 6 },
       metrics,
-      habits: habits.map((habit, index) => ({ ...habit, completedToday: index < 2 })),
+      habits: habits.map((habit, index) => ({
+        ...habit,
+        completedToday: index < 2,
+        week: index === 0
+          ? [true, true, true, false, true, true, true]
+          : index === 1
+            ? [true, false, true, true, true, false, true]
+            : [false, true, true, false, true, false, true]
+      })),
+      dailyCheckin: {
+        energy: 9,
+        clarity: 9,
+        stability: 8,
+        habitCompleted: true,
+        insight: "Когда начинаю день без сообщений, быстрее понимаю, что действительно важно.",
+        xpEarned: 40
+      },
       coach: { name: "Алексей Морозов", specialty: "Карьерный коуч", program: "Карьерный фокус", daysLeft: 24 },
       feedback,
       assignments,
-      insights
+      insights,
+      telegram: { linked: false, username: null, remindersEnabled: false, motivationFrequency: "daily" },
+      subscription: { status: "ACTIVE", paidBy: "COACH", plan: "Сопровождение с коучем", currentPeriodEnd: isoDate(24) }
     }
   };
 }

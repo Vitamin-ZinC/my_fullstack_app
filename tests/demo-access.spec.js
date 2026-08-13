@@ -27,11 +27,14 @@ const workspace = {
   client: {
     profile: { name: "Анна Смирнова", level: "Уверенный ритм", xp: 1240, streak: 6 },
     metrics,
-    habits: habits.map((habit) => ({ ...habit, completedToday: true })),
+    habits: habits.map((habit) => ({ ...habit, completedToday: true, week: [true, true, false, true, true, false, true] })),
+    dailyCheckin: { energy: 9, clarity: 9, stability: 8, habitCompleted: true, insight: "Когда начинаю день без сообщений, быстрее понимаю главное.", xpEarned: 40 },
     coach: { name: "Алексей Морозов", specialty: "Карьерный коуч", program: "Карьерный фокус", daysLeft: 24 },
     feedback,
     assignments,
-    insights
+    insights,
+    telegram: { linked: false, username: null, remindersEnabled: false, motivationFrequency: "daily" },
+    subscription: { status: "ACTIVE", paidBy: "COACH", plan: "Сопровождение с коучем", currentPeriodEnd: "2026-09-06T09:00:00.000Z" }
   }
 };
 
@@ -62,6 +65,11 @@ test("demo code opens isolated coach and client workspaces", async ({ page }) =>
   await expect(page.getByRole("heading", { name: /Добрый день, Анна/ })).toBeVisible();
   await page.getByRole("button", { name: "Мой коуч" }).click();
   await expect(page.getByText("На этой неделе фокус не на скорости, а на устойчивом ритме.")).toBeVisible();
+  await page.getByRole("button", { name: "Привычки" }).click();
+  await expect(page.getByRole("heading", { name: "Трекер привычек" })).toBeVisible();
+  await page.getByRole("button", { name: "Настройки" }).click();
+  await expect(page.getByRole("heading", { name: "Telegram-бот ORKEN" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Подключить Telegram" })).toBeVisible();
 });
 
 test("demo stays within the mobile viewport", async ({ page }) => {

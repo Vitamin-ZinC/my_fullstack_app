@@ -1,23 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
-import {
-  AudioLines,
-  Camera,
-  Check,
-  Compass,
-  FileText,
-  Microscope,
-  ScanFace,
-  ShieldCheck,
-  Sparkles,
-  Target,
-  type LucideIcon
-} from "lucide-react";
+import { Camera, Check, ChevronDown, Compass, FileText, Handshake, HeartPulse, Mic, Microscope, ScanFace, ShieldCheck, Sparkles, Store } from "lucide-react";
 import { IkigaiPremiumMap } from "@/components/IkigaiPremiumMap";
 import { api } from "@/lib/api";
-import { SUPPORT_EMAIL } from "@/lib/legal";
 import { useSiteText } from "@/lib/useSiteText";
 
 export default function LandingPage() {
@@ -65,7 +52,7 @@ export default function LandingPage() {
         <AppNav />
         <main className="screen">
           <div className="landing-flow">
-            <section className="landing-hero">
+            <section id="about" className="landing-hero">
               <div className="hero-video-wrap float">
                 <video src="/assets/paid-report-animation.mp4" autoPlay muted loop playsInline preload="auto" poster="/assets/levelup-logo.jpg" aria-label={`${text.nav.brand} preview`} />
               </div>
@@ -75,11 +62,12 @@ export default function LandingPage() {
                 <br />
                 <span className="landing-gradient-text">{landing.titleAccent}</span>
               </h1>
+              <p className="landing-hero-note">{landing.heroNote}</p>
               <div className="landing-pain-list" aria-label={landing.problemListLabel}>
                 {landing.problemItems.map((item) => (
-                  <div className="landing-pain-row" key={item}>
-                    <Sparkles size={17} strokeWidth={2.2} aria-hidden="true" />
-                    <strong>{item}</strong>
+                  <div className="landing-pain-row" key={item.emphasis}>
+                    <Sparkles className="landing-pain-marker" size={16} strokeWidth={1.8} aria-hidden="true" />
+                    <span>{item.prefix} <strong>{item.emphasis}</strong></span>
                   </div>
                 ))}
               </div>
@@ -88,14 +76,11 @@ export default function LandingPage() {
 
             <div className="divider landing-divider" />
 
-            <section className="landing-section compact">
-              <h2 className="ub landing-section-title landing-heading-with-icon">
-                <Microscope size={28} strokeWidth={2.1} aria-hidden="true" />
-                <span>{formatHeading(landing.signalsTitle)}</span>
-              </h2>
+            <section id="diagnostic" className="landing-section compact">
+              <h2 className="ub landing-section-title"><Microscope size={24} strokeWidth={1.7} aria-hidden="true" />{landing.signalsTitle}</h2>
               <div className="landing-two-col">
-                <SignalCard tone="cyan" title={landing.faceTitle} Icon={ScanFace} items={landing.faceSignals} />
-                <SignalCard tone="violet" title={landing.voiceTitle} Icon={AudioLines} items={landing.voiceSignals} />
+                <SignalCard tone="cyan" title={landing.faceTitle} icon={<ScanFace size={24} strokeWidth={1.8} />} items={landing.faceSignals} />
+                <SignalCard tone="violet" title={landing.voiceTitle} icon={<Mic size={24} strokeWidth={1.8} />} items={landing.voiceSignals} />
               </div>
             </section>
 
@@ -105,15 +90,16 @@ export default function LandingPage() {
               habitTrialDays={habitTrialDays}
             />
 
+            <B2BSection />
+
+            <PartnerSection />
+
             <section className="landing-section compact">
               <div className="card cyan-border card-lg">
-                <h2 className="ub cyan landing-card-title landing-card-heading">
-                  <FileText size={21} strokeWidth={2.1} aria-hidden="true" />
-                  <span>{formatHeading(landing.freeTitle)}</span>
-                </h2>
+                <h2 className="ub cyan landing-card-title"><FileText size={24} strokeWidth={1.8} aria-hidden="true" />{landing.freeTitle}</h2>
                 {landing.freeItems.map((item) => (
                   <div className="landing-bullet" key={item}>
-                    <Sparkles className="cyan" size={16} strokeWidth={2.2} aria-hidden="true" />
+                    <Sparkles className="cyan" size={18} strokeWidth={1.8} aria-hidden="true" />
                     <span>{item}</span>
                   </div>
                 ))}
@@ -122,10 +108,7 @@ export default function LandingPage() {
 
             <section className="landing-section compact">
               <div className="card cyan-border card-lg ikigai-landing-card">
-                <h2 className="ub cyan landing-card-title landing-card-heading">
-                  <Target size={21} strokeWidth={2.1} aria-hidden="true" />
-                  <span>{formatHeading(landing.modelTitle)}</span>
-                </h2>
+                <h2 className="ub cyan landing-card-title"><Compass size={24} strokeWidth={1.8} aria-hidden="true" />{landing.modelTitle}</h2>
                 <IkigaiPremiumMap allActive landingMode />
                 <p className="landing-model-copy">{landing.modelCopy}</p>
                 <div className="ikigai-factor-list">
@@ -137,13 +120,10 @@ export default function LandingPage() {
 
             <section className="landing-section compact">
               <div className="card green-border">
-                <h2 className="ub landing-privacy-title landing-card-heading">
-                  <ShieldCheck size={21} strokeWidth={2.1} aria-hidden="true" />
-                  <span>{formatHeading(landing.privacyTitle)}</span>
-                </h2>
+                <h2 className="ub landing-privacy-title"><ShieldCheck size={24} strokeWidth={1.8} aria-hidden="true" />{landing.privacyTitle}</h2>
                 {landing.privacyItems.map((item) => (
                   <div className="landing-safe-row" key={item}>
-                    <Check size={16} strokeWidth={2.5} aria-hidden="true" />
+                    <Check size={18} strokeWidth={2} aria-hidden="true" />
                     <span>{item}</span>
                   </div>
                 ))}
@@ -151,10 +131,7 @@ export default function LandingPage() {
             </section>
 
             <section className="landing-section final">
-              <h2 className="ub landing-final-title landing-heading-with-icon">
-                <Sparkles size={20} strokeWidth={2.1} aria-hidden="true" />
-                <span>{formatHeading(landing.finalTitle)}</span>
-              </h2>
+              <h2 className="ub landing-final-title">{landing.finalTitle}</h2>
               <p className="landing-final-copy">{landing.finalCopy}</p>
               <div className="landing-final-actions">
                 <a className="btn-primary" data-testid="landing-start-final" href="/flow/voice">{landing.cta}</a>
@@ -165,7 +142,6 @@ export default function LandingPage() {
               <span>{text.nav.brand}</span>
               <Link href="/privacy">Политика конфиденциальности</Link>
               <Link href="/offer">Публичная оферта</Link>
-              <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>
               <a href="https://www.threads.com/@orken.ai?igshid=NTc4MTIwNjQ2YQ==" target="_blank" rel="noreferrer">Threads</a>
               <a href="https://www.instagram.com/orken.ai?igsh=ZXBuMXJzcmtjNDBl&utm_source=qr" target="_blank" rel="noreferrer">Instagram</a>
             </footer>
@@ -182,10 +158,10 @@ function HeroToolCard() {
   return (
     <div className="landing-tool-card">
       {landing.heroTools.map((tool, index) => (
-        <div className="landing-tool-row" key={tool.cta}>
-          <div className="landing-tool-copy">
+        <div className={`landing-tool-row ${tool.prefix ? "" : "action-only"}`} key={tool.cta}>
+          {tool.prefix && <div className="landing-tool-copy">
             {tool.prefix} <strong>{tool.accent}</strong>
-          </div>
+          </div>}
           <a className="btn-primary landing-tool-button" data-testid={index === 0 ? "landing-start-primary" : undefined} href={index === 0 ? "/flow/voice" : "/habits"}>
             {tool.cta}
           </a>
@@ -199,9 +175,9 @@ function ProductSection({ habitPriceLabel, habitTrialDays, reportPriceLabel }: {
   const { landing } = useSiteText();
 
   return (
-    <section className="landing-section compact">
+    <section id="products" className="landing-section compact">
       <div className="landing-section-head">
-        <h2 className="ub landing-section-title">{formatHeading(landing.productsTitle)}</h2>
+        <h2 className="ub landing-section-title">{landing.productsTitle}</h2>
         <p className="landing-small-copy">{landing.productsSubtitle}</p>
       </div>
       <div className="landing-branch" aria-hidden="true">
@@ -226,7 +202,7 @@ function ProductSection({ habitPriceLabel, habitTrialDays, reportPriceLabel }: {
       <div className="landing-product-grid">
         <article className="card cyan-border landing-product-card">
           <div className="landing-product-icon"><Camera size={20} strokeWidth={2.3} aria-hidden="true" /></div>
-          <h3 className="ub">{formatHeading(landing.diagnosisProduct.title)}</h3>
+          <h3 className="ub">{landing.diagnosisProduct.title}</h3>
           <p>{landing.diagnosisProduct.copy}</p>
           <div className="landing-product-list">
             {landing.diagnosisProduct.items.map((item) => (
@@ -239,9 +215,9 @@ function ProductSection({ habitPriceLabel, habitTrialDays, reportPriceLabel }: {
           </div>
           <a className="btn-primary" href="/flow/voice">{landing.diagnosisProduct.cta}</a>
         </article>
-        <article className="card violet-border landing-product-card">
+        <article id="navigator" className="card violet-border landing-product-card">
           <div className="landing-product-icon violet"><Compass size={20} strokeWidth={2.3} aria-hidden="true" /></div>
-          <h3 className="ub">{formatHeading(landing.habitsProduct.title)}</h3>
+          <h3 className="ub">{landing.habitsProduct.title}</h3>
           <p>{landing.habitsProduct.copy}</p>
           <div className="landing-product-list accent">
             {landing.habitsProduct.items.map((item) => (
@@ -259,40 +235,104 @@ function ProductSection({ habitPriceLabel, habitTrialDays, reportPriceLabel }: {
   );
 }
 
+function B2BSection() {
+  const { landing } = useSiteText();
+  return (
+    <section id="coaches" className="landing-section compact">
+      <div className="landing-b2b-card">
+        <div className="landing-eyebrow"><HeartPulse size={18} strokeWidth={1.8} aria-hidden="true" />{landing.b2bEyebrow}</div>
+        <h2 className="ub">{landing.b2bTitle}</h2>
+        <p>{landing.b2bCopy}</p>
+        <div className="landing-feature-list b2b-list">
+          {landing.b2bItems.map((item) => <span key={item}><Check size={16} strokeWidth={2} aria-hidden="true" />{item}</span>)}
+        </div>
+        <Link className="btn-primary landing-coach-link" href="/demo">Открыть кабинет Коуча/HR</Link>
+      </div>
+    </section>
+  );
+}
+
+function PartnerSection() {
+  return (
+    <section id="partners" className="landing-section compact">
+      <div className="landing-partner-card">
+        <div className="landing-eyebrow"><Handshake size={18} strokeWidth={1.8} aria-hidden="true" />ПАРТНЁРАМ И ФРАНЧАЙЗИ</div>
+        <h2 className="ub">Развивайте свою практику вместе с ORKEN.</h2>
+        <p>Выберите формат сотрудничества: рекомендуйте платформу своей аудитории или запустите полноценный продукт под собственным брендом.</p>
+        <div className="landing-partner-grid">
+          <article>
+            <Handshake size={22} strokeWidth={1.8} aria-hidden="true" />
+            <h3>Партнёрская программа</h3>
+            <p>Получайте повышенный реферальный процент за клиентов, которые пришли по вашей ссылке.</p>
+          </article>
+          <article>
+            <Store size={22} strokeWidth={1.8} aria-hidden="true" />
+            <h3>Франчайзинг</h3>
+            <p>Получите полноценный продукт под своим брендом: интерфейс, сценарии и поддержку запуска.</p>
+          </article>
+        </div>
+        <Link className="btn-primary landing-partner-link" href="/partners">Открыть кабинет партнёра</Link>
+      </div>
+    </section>
+  );
+}
+
 function AppNav() {
   const text = useSiteText();
+  const [cabinetOpen, setCabinetOpen] = useState(false);
 
   return (
     <nav className="app-nav">
       <Link className="logo-wrap" href="/">
         <div className="logo-mark" aria-hidden="true">
-          <img src="/assets/levelup-logo.jpg" alt="" />
+          <img src="/assets/orken-penguin-mark-clean.png" alt="" />
         </div>
         <div className="logo-text">
           <div className="brand">{text.nav.brand}</div>
-          <div className="sub">{text.nav.sub}</div>
         </div>
       </Link>
-      <Link className="btn-back" href="/account">Кабинет</Link>
+      <div className="landing-nav-links" aria-label="Навигация по лендингу">
+        <a href="#about">О нас</a>
+        <a href="#diagnostic">Диагностика</a>
+        <a href="#navigator">Навигатор</a>
+        <a href="#coaches">Коучам и HR</a>
+        <a href="#partners">Партнёрам</a>
+      </div>
+      <div className="landing-nav-accounts">
+        <details className="landing-feedback-menu">
+          <summary className="btn-back">Обратная связь</summary>
+          <div className="landing-feedback-dropdown">
+            <Link href="/offer">Публичная оферта</Link>
+            <Link href="/privacy">Политика конфиденциальности</Link>
+            <a href="mailto:orken.eco@gmail.com">Написать в поддержку</a>
+          </div>
+        </details>
+        <div className="landing-cabinet-menu">
+          <button className="btn-back" type="button" aria-expanded={cabinetOpen} aria-controls="cabinet-menu" onClick={() => setCabinetOpen((open) => !open)}>
+            Кабинет <ChevronDown size={14} strokeWidth={2} aria-hidden="true" />
+          </button>
+          {cabinetOpen && <div id="cabinet-menu" className="landing-cabinet-dropdown">
+            <Link href="/account?mode=personal" onClick={() => setCabinetOpen(false)}>Кабинет пользователя</Link>
+            <Link href="/account?mode=client" onClick={() => setCabinetOpen(false)}>Кабинет клиента</Link>
+            <Link href="/demo" onClick={() => setCabinetOpen(false)}>Кабинет коуча</Link>
+            <Link href="/partners" onClick={() => setCabinetOpen(false)}>Кабинет партнёра</Link>
+          </div>}
+        </div>
+      </div>
     </nav>
   );
 }
 
-function SignalCard({ Icon, items, title, tone }: { Icon: LucideIcon; items: readonly string[]; title: string; tone: "cyan" | "violet" }) {
+function SignalCard({ icon, items, title, tone }: { icon: ReactNode; items: readonly string[]; title: string; tone: "cyan" | "violet" }) {
   return (
-    <div className={`card landing-signal-card ${tone === "cyan" ? "cyan-border" : "violet-border"}`}>
-      <div className={`signal-icon ${tone}`}><Icon size={28} strokeWidth={1.9} aria-hidden="true" /></div>
-      <div className={`ub ${tone} signal-title`}>{formatHeading(title)}</div>
+    <div className={`card ${tone === "cyan" ? "cyan-border" : "violet-border"}`}>
+      <div className="signal-icon">{icon}</div>
+      <div className={`ub ${tone} signal-title`}>{title}</div>
       {items.map((item) => (
         <div className="signal-item" key={item}><span aria-hidden="true" />{item}</div>
       ))}
     </div>
   );
-}
-
-function formatHeading(value: string) {
-  const normalized = value.trim().replace(/^[^\p{L}\p{N}]+/u, "").trim();
-  return normalized.replace(/\p{L}/u, (letter) => letter.toLocaleUpperCase("ru"));
 }
 
 function formatTemplate(template: string, values: Record<string, string | number>) {

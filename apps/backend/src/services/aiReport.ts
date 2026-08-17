@@ -181,7 +181,7 @@ export const reportFullSchema = z.object({
     faceEvidence: z.string(),
     strengths: z.string(),
     risks: z.string()
-  })).min(3).max(5),
+  })).length(5),
   ikigai_zones: z.object({
     passion: ikigaiZoneSchema,
     mission: ikigaiZoneSchema,

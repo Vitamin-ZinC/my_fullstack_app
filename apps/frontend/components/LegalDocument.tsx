@@ -38,11 +38,10 @@ export function LegalDocument({ document }: { document: LegalDocumentData }) {
       <nav className="legal-nav">
         <Link className="logo-wrap" href="/">
           <div className="logo-mark" aria-hidden="true">
-            <img src="/assets/levelup-logo.jpg" alt="" />
+          <img src="/assets/orken-penguin-mark-clean.png" alt="" />
           </div>
           <div className="logo-text">
             <div className="brand">ORKEN.LIFE</div>
-            <div className="sub">AI Ikigai</div>
           </div>
         </Link>
         <div className="legal-nav-links">

@@ -102,7 +102,7 @@ export default function FullReportPage() {
             <h2>{visibleSections[4]}</h2>
             <p className="report-section-note">{text.rolesIntro}</p>
             <div className="roles-grid">
-              {report.top_roles.map((role) => (
+              {report.top_roles.slice(0, 5).map((role) => (
                 <div className="role-card" key={role.name}>
                   <div className="role-head">
                     <h3>{role.name}</h3>

@@ -12,11 +12,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <nav className="app-nav">
           <Link className="logo-wrap" href="/">
             <div className="logo-mark" aria-hidden="true">
-              <img src="/assets/levelup-logo.jpg" alt="" />
+          <img src="/assets/orken-penguin-mark-clean.png" alt="" />
             </div>
             <div className="logo-text">
               <div className="brand">{text.nav.brand}</div>
-              <div className="sub">{text.nav.sub}</div>
             </div>
           </Link>
           <div className="nav-actions">

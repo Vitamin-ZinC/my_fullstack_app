@@ -5,6 +5,7 @@
 - `C:\Users\User\Downloads\Telegram Desktop\orken-landing-prototype-v2.html`
 - `C:\Users\User\Downloads\Telegram Desktop\photo_2026-08-20_21-04-40.jpg`
 - `C:\Users\User\Downloads\Telegram Desktop\photo_2026-08-20_21-04-45.jpg`
+- `C:\Users\User\AppData\Local\Temp\codex-clipboard-d90cd4d3-4052-4637-916b-48a5c49455cf.png`
 
 ## Implementation captures
 
@@ -21,6 +22,7 @@
 4. Verified consistent 1160px desktop grid, equal product CTA heights, no mobile horizontal overflow, readable full-page stacking, and stable button/card dimensions.
 5. Verified real destinations for `/offer`, `/privacy`, `/account`, `/habits`, `/coach`, and `/partners`; every route returned HTTP 200 in the browser test.
 6. Verified keyboard-native summaries, accessible menu labels, visible focus/hover states, reduced-motion handling, and semantic headings/navigation.
+7. Updated the hero question from the latest review and restored a dedicated privacy band with the approved photo/audio handling statements and a direct link to the privacy policy.
 
 ## Test evidence
 

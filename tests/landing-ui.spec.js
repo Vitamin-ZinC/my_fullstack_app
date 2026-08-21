@@ -39,11 +39,14 @@ test("landing grid, navigation and role links work on desktop and mobile", async
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(appBase);
 
-  await expect(page.getByRole("heading", { name: /Поймите себя.*Выберите следующий вектор роста/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Почему так сложно понять.*что с тобой происходит/ })).toBeVisible();
   await expect(page.locator(".landing-v2-pains svg")).toHaveCount(3);
   await expect(page.locator(".landing-v2-product-icon svg")).toHaveCount(2);
   await expect(page.locator(".landing-v2-hero-art img")).toBeVisible();
   await expect(page.getByText("1 фото + запись голоса 30–60 сек")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Данные в безопасности" })).toBeVisible();
+  await expect(page.locator(".landing-v2-security-item")).toHaveCount(4);
+  await expect(page.locator(".landing-v2-security").getByRole("link", { name: /Политике конфиденциальности/ })).toHaveAttribute("href", "/privacy");
   await expect(page.getByRole("link", { name: "orken.eco@gmail.com" })).toHaveAttribute("href", "mailto:orken.eco@gmail.com");
 
   const primaryCtas = page.locator(".landing-v2-product > .landing-v2-button");
@@ -114,7 +117,7 @@ test("legacy landing content cannot overwrite the versioned v2 copy", async ({ p
   });
   await page.goto(appBase);
 
-  await expect(page.getByRole("heading", { name: /Поймите себя.*Выберите следующий вектор роста/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Почему так сложно понять.*что с тобой происходит/ })).toBeVisible();
   await expect(page.getByText("Старый заголовок")).toHaveCount(0);
 });
 

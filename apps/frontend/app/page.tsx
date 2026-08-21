@@ -149,6 +149,28 @@ export default function LandingPage() {
           </div>
         </section>
 
+        <section id="security" className="landing-v2-security">
+          <div className="landing-v2-container landing-v2-security-inner">
+            <div className="landing-v2-security-copy">
+              <p className="landing-v2-eyebrow"><ShieldCheck size={16} aria-hidden="true" /> {landing.security.eyebrow}</p>
+              <h2>{landing.security.title}</h2>
+              <p>{landing.security.copy}</p>
+              <Link href="/privacy">
+                {landing.security.link}
+                <ArrowRight size={16} aria-hidden="true" />
+              </Link>
+            </div>
+            <div className="landing-v2-security-grid">
+              {landing.security.items.map((item) => (
+                <div className="landing-v2-security-item" key={item}>
+                  <span aria-hidden="true"><Check size={17} strokeWidth={2.5} /></span>
+                  <strong>{item}</strong>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
         <section id="coaches" className="landing-v2-band landing-v2-band-violet">
           <div className="landing-v2-container landing-v2-band-inner">
             <p className="landing-v2-eyebrow"><UsersRound size={15} aria-hidden="true" /> {landing.coaches.eyebrow}</p>

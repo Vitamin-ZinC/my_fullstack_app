@@ -20,6 +20,7 @@ import {
   type AudioSuitabilityResult
 } from "../services/audioSuitability.js";
 import { normalizeFullReportValue } from "../services/aiReport.js";
+import { publicReportFailureMessage, resolveAnalysisProgress } from "../services/analysisProgress.js";
 import { sendReportEmail } from "../services/email.js";
 import { buildFallbackFreeReport, buildFallbackReport } from "../services/report.js";
 
@@ -227,9 +228,22 @@ export async function analysisRoutes(app: FastifyInstance) {
     const access = await requireAnalysisAccess(request, reply, params.id);
     if (!access) return;
     const analysis = access.analysis;
-    const progress = analysis.status === "DONE" ? 100 : analysis.status === "PROCESSING" ? 55 : analysis.status === "QUEUED" ? 15 : 0;
+    const latestEvent = await prisma.jobEvent.findFirst({
+      where: { analysisId: params.id },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      select: { progress: true, stage: true, log: true }
+    });
+    const progress = resolveAnalysisProgress(analysis.status, latestEvent?.progress);
     const reportMeta = await buildReportGenerationMeta(params.id, analysis.locale);
-    return { status: analysis.status, progress, jobId: analysis.jobId, errorMessage: analysis.errorMessage, reportMeta };
+    return {
+      status: analysis.status,
+      progress,
+      stage: latestEvent?.stage ?? null,
+      log: analysis.status === "FAILED" ? null : latestEvent?.log ?? null,
+      jobId: analysis.jobId,
+      errorMessage: analysis.status === "FAILED" ? publicReportFailureMessage(analysis.locale) : null,
+      reportMeta
+    };
   });
 
   app.get("/api/analyses/:id/report/free", async (request, reply) => {
@@ -353,6 +367,11 @@ export async function analysisRoutes(app: FastifyInstance) {
     const params = z.object({ id: z.string() }).parse(request.params);
     const access = await requireAnalysisAccess(request, reply, params.id);
     if (!access) return;
+    const latestEvent = await prisma.jobEvent.findFirst({
+      where: { analysisId: params.id },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      select: { progress: true, stage: true, log: true }
+    });
     reply.raw.writeHead(200, {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
@@ -361,7 +380,12 @@ export async function analysisRoutes(app: FastifyInstance) {
     const unsubscribe = subscribeProgress(params.id, (event) => {
       reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
     });
-    reply.raw.write(`data: ${JSON.stringify({ status: access.analysis.status, progress: 0 })}\n\n`);
+    reply.raw.write(`data: ${JSON.stringify({
+      status: access.analysis.status,
+      progress: resolveAnalysisProgress(access.analysis.status, latestEvent?.progress),
+      stage: latestEvent?.stage,
+      log: access.analysis.status === "FAILED" ? undefined : latestEvent?.log
+    })}\n\n`);
     request.raw.on("close", unsubscribe);
   });
 

@@ -54,7 +54,7 @@ export default function AnalysisPage() {
       const next = await api.getStatus(id);
       setStatus(next.status);
       setProgress(next.progress);
-      if (next.errorMessage) setLog(next.errorMessage);
+      if (next.log) setLog(next.log);
       if (next.status === "DONE") setLog(text.ready);
       if (next.status === "FAILED") setError(next.errorMessage || text.failed);
     } catch (reason) {

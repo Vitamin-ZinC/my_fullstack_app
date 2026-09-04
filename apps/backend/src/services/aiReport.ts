@@ -496,10 +496,18 @@ function completeTopRoles(source: unknown, candidate: UnknownRecord, voiceAnalys
     risks: safeLongText(role.risks, "Риск роли - слишком долго оставаться в анализе и не проверять гипотезу через маленький рыночный или рабочий эксперимент.")
   })) : [];
 
-  while (roles.length < 3) {
+  const fallbackNames = [
+    "Стратег развития",
+    "Методолог практики",
+    "Консультант по ясности",
+    "Навигатор изменений",
+    "Автор экспертного продукта"
+  ];
+
+  while (roles.length < 5) {
     const index = roles.length;
     roles.push({
-      name: ["Стратег развития", "Методолог практики", "Навигатор изменений"][index] ?? `Профессиональная роль ${index + 1}`,
+      name: fallbackNames[index] ?? `Профессиональная роль ${index + 1}`,
       match: Math.max(55, 78 - index * 5),
       why: safeLongText(candidate.summary, "Роль добавлена как осторожная рабочая гипотеза по анкете и общему профилю."),
       voiceEvidence: String(voiceAnalysis.communication ?? diagnosticFallback("voice", "communication")),

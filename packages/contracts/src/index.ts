@@ -194,6 +194,8 @@ export type ReportGenerationMeta = {
 export type AnalysisStatusResponse = {
   status: AnalysisStatus;
   progress: number;
+  stage?: string | null;
+  log?: string | null;
   jobId?: string | number | null;
   errorMessage?: string | null;
   reportMeta?: ReportGenerationMeta;

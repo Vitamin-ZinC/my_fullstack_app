@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildDemoWorkspace, hashDemoValue, normalizeDemoAccessCode } from "./demoAccess.js";
+
+process.env.DATABASE_URL ??= "postgresql://levelup:dev_password@localhost:5432/levelup";
+process.env.PARTNER_CORE_URL = "";
+
+const { buildDemoWorkspace, hashDemoValue, normalizeDemoAccessCode } = await import("./demoAccess.js");
 
 test("demo access code normalization is stable and case-insensitive", () => {
   assert.equal(normalizeDemoAccessCode("  orken-demo-abcd-1234  "), "ORKEN-DEMO-ABCD-1234");

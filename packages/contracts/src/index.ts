@@ -358,6 +358,10 @@ export type PromptTemplate = {
 
 export type PromptTemplateInput = Omit<PromptTemplate, "id">;
 
+export type EffectivePromptTemplate = PromptTemplateInput & {
+  source: "database" | "default";
+};
+
 export type PromoCode = {
   id: string;
   code: string;

@@ -9,22 +9,10 @@ import { sendDueTelegramReminders } from "../services/telegramBot.js";
 import { processTelegramCommunityUpdate, sendDueTelegramCommunityPosts, type TelegramCommunityUpdate } from "../services/telegramCommunityBot.js";
 import { retryPartnerCoreEvents } from "../services/partnerCore.js";
 
-const logs = [
-  [15, "Analyzing facial micro-signals..."],
-  [35, "Estimating voice tone and confidence..."],
-  [55, "Matching profile against career roles..."],
-  [78, "Building premium report structure..."],
-  [95, "Writing final insight..."]
-] as const;
-
 export const worker = new Worker("analysis", async (job) => {
   const { analysisId } = job.data as { analysisId: string };
   await prisma.analysis.update({ where: { id: analysisId }, data: { status: "PROCESSING" } });
-
-  for (const [progress, log] of logs) {
-    emitProgress(analysisId, { progress, log, stage: "processing" });
-    await new Promise((resolve) => setTimeout(resolve, 900));
-  }
+  await emitProgress(analysisId, { progress: 5, log: "Analysis worker started", stage: "processing" });
 
   const analysis = await prisma.analysis.findUniqueOrThrow({
     where: { id: analysisId },
@@ -39,15 +27,22 @@ export const worker = new Worker("analysis", async (job) => {
   let freePromptVersion = analysis.reportVersion;
   let fullPromptVersion = analysis.reportVersion;
   let fallbackReason: string | null = allowFallbackReport ? "AI report was prebuilt as fallback before LLM generation" : null;
+  let reportProgressQueue = Promise.resolve();
+  const queueReportProgress = (event: { progress: number; stage: string; log: string }) => {
+    reportProgressQueue = reportProgressQueue.then(() => emitProgress(analysisId, event));
+    return reportProgressQueue;
+  };
 
   try {
-    emitProgress(analysisId, { progress: 96, log: "Generating AI report...", stage: "ai" });
+    await emitProgress(analysisId, { progress: 7, log: "Preparing AI report generation...", stage: "ai" });
     const generated = await generateOpenAiReport({
       analysisId,
       locale: analysis.locale,
       answers,
-      mediaAssets: analysis.mediaAssets
+      mediaAssets: analysis.mediaAssets,
+      onProgress: queueReportProgress
     });
+    await reportProgressQueue;
     if (generated) {
       report = generated.report;
       reportFree = generated.reportFree;
@@ -56,26 +51,48 @@ export const worker = new Worker("analysis", async (job) => {
       freePromptVersion = generated.promptVersions.free;
       fullPromptVersion = generated.promptVersions.full;
       fallbackReason = null;
-      emitProgress(analysisId, {
+      await emitProgress(analysisId, {
         progress: 98,
         stage: "ai",
         log: `AI report generated (${generated.mediaSignals.audioTranscript ? "audio transcript" : "no audio transcript"}, ${generated.mediaSignals.audioMetrics ? "voice metrics" : "no voice metrics"}, ${generated.mediaSignals.photoInput ? "photo" : "no photo"})`
+      });
+      await prisma.analyticsEvent.create({
+        data: {
+          name: "analysis_llm_completion",
+          locale: analysis.locale,
+          sessionId: analysis.sessionId,
+          userId: analysis.userId,
+          analysisId,
+          properties: JSON.parse(JSON.stringify({
+            model: generated.model,
+            promptVersions: generated.promptVersions,
+            splitPipeline: true,
+            roleGeneration: generated.roleGeneration,
+            completions: generated.telemetry
+          }))
+        }
+      }).catch((error) => {
+        console.error("Failed to persist LLM completion telemetry", {
+          analysisId,
+          error: error instanceof Error ? error.message : String(error)
+        });
       });
     } else {
       if (!allowFallbackReport) {
         throw new Error("AI report generation is not configured");
       }
       fallbackReason = "AI report generation is not configured";
-      emitProgress(analysisId, { progress: 98, stage: "fallback", log: "AI is not configured; using fallback report" });
+      await emitProgress(analysisId, { progress: 98, stage: "fallback", log: "AI is not configured; using fallback report" });
     }
   } catch (error) {
+    await reportProgressQueue.catch(() => undefined);
     const message = error instanceof Error ? error.message : "AI report generation failed";
     if (!allowFallbackReport) {
-      emitProgress(analysisId, { progress: 98, stage: "failed", log: message });
+      await emitProgress(analysisId, { progress: 98, stage: "failed", log: message });
       throw error;
     }
     fallbackReason = message;
-    emitProgress(analysisId, { progress: 98, stage: "fallback", log: `${message}; using fallback report` });
+    await emitProgress(analysisId, { progress: 98, stage: "fallback", log: `${message}; using fallback report` });
   }
 
   if (!report || !reportFree) {
@@ -146,7 +163,7 @@ export const worker = new Worker("analysis", async (job) => {
     }
   });
 
-  emitProgress(analysisId, { status: "DONE", progress: 100, log: "Report is ready" });
+  await emitProgress(analysisId, { status: "DONE", progress: 100, log: "Report is ready" });
 }, {
   connection: redis,
   concurrency: env.ANALYSIS_WORKER_CONCURRENCY
@@ -167,7 +184,7 @@ worker.on("failed", async (job, error) => {
       where: { id: job.data.analysisId },
       data: { status: "FAILED", errorMessage: error.message }
     });
-    emitProgress(job.data.analysisId, { status: "FAILED", progress: 100, log: error.message });
+    await emitProgress(job.data.analysisId, { status: "FAILED", progress: 100, log: error.message });
   }
 });
 

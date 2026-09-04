@@ -5,7 +5,7 @@ test("full report completion fills missing diagnostic sections before schema val
   process.env.DATABASE_URL ??= "postgresql://levelup:dev_password@localhost:5432/levelup";
   process.env.PARTNER_CORE_URL = "";
 
-  const { normalizeFullReportValue } = await import("./aiReport.js");
+  const { mergeFullReportParts, normalizeFullReportValue } = await import("./aiReport.js");
   const report = normalizeFullReportValue({
     profession: "Продуктовый стратег",
     summary: "Пользователь лучше всего раскрывается там, где нужно соединять идеи, людей и практическую проверку.",
@@ -32,4 +32,24 @@ test("full report completion fills missing diagnostic sections before schema val
   assert.match(report.face_analysis.communication, /Рекомендация:/);
   assert.equal(report.top_roles.length, 5);
   assert.equal(new Set(report.top_roles.map((role) => role.name.toLocaleLowerCase())).size, 5);
+  assert.ok(report.ikigai_zones);
+
+  const reassembled = mergeFullReportParts(
+    {
+      profession: report.profession,
+      summary: report.summary,
+      ikigai_scores: report.ikigai_scores,
+      voice_analysis: report.voice_analysis,
+      face_analysis: report.face_analysis
+    },
+    {
+      top_roles: report.top_roles.slice(0, 2),
+      ikigai_zones: report.ikigai_zones,
+      career_action: report.career_action,
+      final_insight: report.final_insight
+    },
+    report.top_roles.slice(2)
+  );
+  assert.equal(reassembled.top_roles.length, 5);
+  assert.deepEqual(reassembled.top_roles.map((role) => role.name), report.top_roles.map((role) => role.name));
 });

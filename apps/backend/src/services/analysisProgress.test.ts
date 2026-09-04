@@ -4,7 +4,8 @@ import { publicReportFailureMessage, resolveAnalysisProgress } from "./analysisP
 
 test("analysis polling reports persisted worker progress instead of a fixed 55 percent", () => {
   assert.equal(resolveAnalysisProgress("PROCESSING", 96), 96);
-  assert.equal(resolveAnalysisProgress("PROCESSING", null), 55);
+  assert.equal(resolveAnalysisProgress("PROCESSING", null), 5);
+  assert.equal(resolveAnalysisProgress("PROCESSING", 24), 24);
   assert.equal(resolveAnalysisProgress("PROCESSING", 120), 99);
 });
 

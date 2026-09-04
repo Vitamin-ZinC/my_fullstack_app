@@ -6,7 +6,7 @@ import { prisma } from "../lib/prisma.js";
 import { validatePhotoBuffer } from "../services/imageValidation.js";
 import { createImageUploadKey, writeUploadBuffer } from "../services/media.js";
 import { HABIT_ASSISTANT_AVATAR_URL_KEY } from "../services/pricing.js";
-import { defaultReportPromptTemplates } from "../services/reportPrompts.js";
+import { defaultReportPromptTemplates, resolveActivePrompt } from "../services/reportPrompts.js";
 import { calculateGiftedTrialEnd, calculateTrialDaysLeft } from "../services/adminUsers.js";
 import { getAdminBusinessReport } from "../services/adminReports.js";
 import { createDemoAccessCode, listDemoAccessCodes, setDemoAccessCodeActive } from "../services/demoAccess.js";
@@ -466,6 +466,14 @@ export async function adminRoutes(app: FastifyInstance) {
   });
 
   app.get("/api/admin/prompts/defaults", async () => defaultReportPromptTemplates);
+
+  app.get("/api/admin/prompts/effective", async () => {
+    const identities = [...new Map(defaultReportPromptTemplates.map((prompt) => [
+      `${prompt.key}|${prompt.locale}`,
+      { key: prompt.key, locale: prompt.locale }
+    ])).values()];
+    return Promise.all(identities.map(({ key, locale }) => resolveActivePrompt(key, locale)));
+  });
 
   app.post("/api/admin/prompts", async (request) => {
     const body = promptSchema.parse(request.body);

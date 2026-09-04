@@ -28,6 +28,18 @@ type ReportContext = {
   locale: string;
   answers: IkigaiAnswers;
   mediaAssets: MediaAsset[];
+  onProgress?: (event: { progress: number; stage: string; log: string }) => void;
+};
+
+export type ReportCompletionTelemetry = {
+  part: string;
+  requestedTransport: "async" | "sync";
+  durationMs: number;
+  finishReason: string | null;
+  outputCharacters: number;
+  completionTokens: number | null;
+  totalTokens: number | null;
+  repairAttempts: number;
 };
 
 export type GeneratedReport = {
@@ -45,12 +57,19 @@ export type GeneratedReport = {
     audioMetrics: boolean;
     photoInput: boolean;
   };
+  telemetry: ReportCompletionTelemetry[];
+  roleGeneration: {
+    initial: number;
+    supplemented: number;
+    fallback: number;
+  };
 };
 
 type CompletionResult<TReport> = {
   report: TReport;
   photoInputUsed: boolean;
   promptVersion: number;
+  telemetry: ReportCompletionTelemetry;
 };
 
 type OpenAiClient = NonNullable<ReturnType<typeof getOpenAiClient>>;
@@ -140,11 +159,7 @@ const faceAnalysisKeys = [
 
 const ikigaiZoneKeys = ["passion", "mission", "profession", "vocation", "ikigai"] as const;
 
-export const reportFullSchema = z.object({
-  profession: z.string().min(2),
-  summary: z.string().min(20),
-  ikigai_scores: scoreSchema,
-  voice_analysis: z.object({
+const voiceAnalysisSchema = z.object({
     timbre: diagnosticTextSchema,
     emotionality: diagnosticTextSchema,
     confidence: diagnosticTextSchema,
@@ -158,8 +173,9 @@ export const reportFullSchema = z.object({
     sociality: diagnosticTextSchema,
     persuasion: diagnosticTextSchema,
     motivation: diagnosticTextSchema
-  }),
-  face_analysis: z.object({
+});
+
+const faceAnalysisSchema = z.object({
     emotionality: diagnosticTextSchema,
     leadership: diagnosticTextSchema,
     confidence: diagnosticTextSchema,
@@ -173,26 +189,50 @@ export const reportFullSchema = z.object({
     communication: diagnosticTextSchema,
     discipline: diagnosticTextSchema,
     ambition: diagnosticTextSchema
-  }),
-  top_roles: z.array(z.object({
-    name: z.string(),
-    match: z.number().int().min(0).max(100),
-    why: z.string(),
-    voiceEvidence: z.string(),
-    faceEvidence: z.string(),
-    strengths: z.string(),
-    risks: z.string()
-  })).length(5),
-  ikigai_zones: z.object({
+});
+
+const topRoleSchema = z.object({
+  name: z.string(),
+  match: z.number().int().min(0).max(100),
+  why: z.string(),
+  voiceEvidence: z.string(),
+  faceEvidence: z.string(),
+  strengths: z.string(),
+  risks: z.string()
+});
+
+const ikigaiZonesSchema = z.object({
     passion: ikigaiZoneSchema,
     mission: ikigaiZoneSchema,
     profession: ikigaiZoneSchema,
     vocation: ikigaiZoneSchema,
     ikigai: ikigaiZoneSchema
-  }),
+});
+
+const reportDiagnosticsSchema = z.object({
+  profession: z.string().min(2),
+  summary: z.string().min(20),
+  ikigai_scores: scoreSchema,
+  voice_analysis: voiceAnalysisSchema,
+  face_analysis: faceAnalysisSchema
+});
+
+const reportDirectionsSchema = z.object({
+  top_roles: z.array(topRoleSchema).max(5),
+  ikigai_zones: ikigaiZonesSchema,
   career_action: z.string(),
   final_insight: z.string()
 });
+
+export const reportFullSchema = reportDiagnosticsSchema.extend({
+  top_roles: z.array(topRoleSchema).length(5),
+  ikigai_zones: ikigaiZonesSchema,
+  career_action: z.string(),
+  final_insight: z.string()
+});
+
+type ReportDiagnostics = z.infer<typeof reportDiagnosticsSchema>;
+type ReportDirections = z.infer<typeof reportDirectionsSchema>;
 
 export const reportFreeSchema = z.object({
   profession: z.string().min(2),
@@ -306,6 +346,46 @@ const reportFullJsonSchema = {
   }
 } as const;
 
+const reportDiagnosticsJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["profession", "summary", "ikigai_scores", "voice_analysis", "face_analysis"],
+  properties: {
+    profession: reportFullJsonSchema.properties.profession,
+    summary: reportFullJsonSchema.properties.summary,
+    ikigai_scores: reportFullJsonSchema.properties.ikigai_scores,
+    voice_analysis: reportFullJsonSchema.properties.voice_analysis,
+    face_analysis: reportFullJsonSchema.properties.face_analysis
+  }
+} as const;
+
+const reportDirectionsJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["top_roles", "ikigai_zones", "career_action", "final_insight"],
+  properties: {
+    top_roles: reportFullJsonSchema.properties.top_roles,
+    ikigai_zones: reportFullJsonSchema.properties.ikigai_zones,
+    career_action: reportFullJsonSchema.properties.career_action,
+    final_insight: reportFullJsonSchema.properties.final_insight
+  }
+} as const;
+
+function reportRoleSupplementJsonSchema(count: number) {
+  return {
+    type: "object",
+    additionalProperties: false,
+    required: ["top_roles"],
+    properties: {
+      top_roles: {
+        ...reportFullJsonSchema.properties.top_roles,
+        minItems: count,
+        maxItems: count
+      }
+    }
+  };
+}
+
 function textMapSchema(keys: string[]) {
   return {
     type: "object",
@@ -342,70 +422,209 @@ async function buildPhotoInput(asset: MediaAsset | null) {
   return getMediaAssetPublicUrl(asset.key);
 }
 
+const fullDiagnosticsSegmentInstruction = [
+  "SEGMENT REQUEST: diagnostic profile.",
+  "Return only profession, summary, ikigai_scores, voice_analysis, and face_analysis.",
+  "Do not return top_roles, ikigai_zones, career_action, or final_insight in this segment.",
+  "Keep all diagnostic safety, evidence hierarchy, language, and three-label requirements from the main prompt."
+].join("\n");
+
+const fullDirectionsSegmentInstruction = [
+  "SEGMENT REQUEST: career directions and synthesis.",
+  "Return only top_roles, ikigai_zones, career_action, and final_insight.",
+  "top_roles must contain exactly five distinct, realistic, forward-looking directions sorted by match descending.",
+  "Do not return profession, summary, ikigai_scores, voice_analysis, or face_analysis in this segment.",
+  "Keep all safety, personalization, language, and synthesis requirements from the main prompt."
+].join("\n");
+
+function reportProgress(context: ReportContext, progress: number, ru: string, en: string) {
+  context.onProgress?.({
+    progress,
+    stage: "ai",
+    log: context.locale.toLowerCase().startsWith("ru") ? ru : en
+  });
+}
+
 export async function generateOpenAiReport(context: ReportContext): Promise<GeneratedReport | null> {
   if (!hasOpenAiClient()) return null;
 
   const audioAsset = getAsset(context.mediaAssets, "AUDIO");
   const photoAsset = getAsset(context.mediaAssets, "PHOTO");
 
+  reportProgress(context, 8, "Подготавливаем аудио и изображение...", "Preparing audio and image...");
   let transcription: AudioTranscription | null = null;
   try {
     transcription = await transcribeAudioAsset(audioAsset);
   } catch {
     transcription = null;
   }
+  reportProgress(context, 24, "Расшифровка голоса завершена...", "Voice transcription completed...");
 
   const clientDurationSeconds = extractClientVoiceDuration(context.answers);
-  let voiceMetrics: VoiceSignalMetrics | null = null;
+  const [voiceMetrics, photoInput] = await Promise.all([
+    buildVoiceMetrics(audioAsset, transcription, clientDurationSeconds).catch(() => null),
+    buildPhotoInput(photoAsset).catch(() => null)
+  ]);
+  const transcript = transcription?.text ?? null;
+  const useCompatibleAsync = env.OPENAI_ASYNC_REPORTS_ENABLED && supportsCompatibleAsyncCompletions();
+  reportProgress(context, 42, "Формируем разделы отчёта параллельно...", "Generating report sections in parallel...");
+
+  let generationProgress = 42;
+  let completedParts = 0;
+  const telemetry: ReportCompletionTelemetry[] = [];
+  const heartbeat = setInterval(() => {
+    generationProgress = Math.min(72, generationProgress + 2);
+    reportProgress(context, generationProgress, "Нейросеть продолжает анализ, данные сохранены...", "AI analysis is still running; your data is saved...");
+  }, 15_000);
+  heartbeat.unref?.();
+
+  const runPart = async <TReport>(labelRu: string, labelEn: string, factory: () => Promise<CompletionResult<TReport>>) => {
+    const completion = await factory();
+    telemetry.push(completion.telemetry);
+    completedParts += 1;
+    generationProgress = Math.max(generationProgress, 72 + completedParts * 6);
+    reportProgress(context, generationProgress, labelRu, labelEn);
+    return completion;
+  };
+
+  let freeCompletion: CompletionResult<ReportFree>;
+  let diagnosticsCompletion: CompletionResult<ReportDiagnostics>;
+  let directionsCompletion: CompletionResult<ReportDirections>;
+  let diagnosticsParseAttempt = 0;
   try {
-    voiceMetrics = await buildVoiceMetrics(audioAsset, transcription, clientDurationSeconds);
-  } catch {
-    voiceMetrics = null;
+    [freeCompletion, diagnosticsCompletion, directionsCompletion] = await Promise.all([
+      runPart("Бесплатная часть отчёта готова...", "Free report section completed...", () => createReportCompletion({
+        context,
+        tier: "FREE",
+        transcript,
+        voiceMetrics,
+        photoInput,
+        part: "free",
+        schemaName: "ikigai_free_report",
+        jsonSchema: reportFreeJsonSchema,
+        useAsync: useCompatibleAsync,
+        maxTokens: 3000,
+        parseReport: (content) => reportFreeSchema.parse(parseCompletionJson(content))
+      })),
+      runPart("Анализ лица и голоса готов...", "Voice and face analysis completed...", () => createReportCompletion({
+        context,
+        tier: "FULL",
+        transcript,
+        voiceMetrics,
+        photoInput,
+        part: "full_diagnostics",
+        schemaName: "ikigai_full_diagnostics",
+        jsonSchema: reportDiagnosticsJsonSchema,
+        useAsync: useCompatibleAsync,
+        maxTokens: 8000,
+        segmentInstruction: fullDiagnosticsSegmentInstruction,
+        parseReport: (content) => {
+          diagnosticsParseAttempt += 1;
+          const parsed = parseCompletionJson(content);
+          return diagnosticsParseAttempt < 3
+            ? reportDiagnosticsSchema.parse(parsed)
+            : normalizeDiagnosticsValue(parsed);
+        }
+      })),
+      runPart("Профессиональные направления готовы...", "Career directions completed...", () => createReportCompletion({
+        context,
+        tier: "FULL",
+        transcript,
+        voiceMetrics,
+        photoInput,
+        part: "full_directions",
+        schemaName: "ikigai_full_directions",
+        jsonSchema: reportDirectionsJsonSchema,
+        useAsync: useCompatibleAsync,
+        maxTokens: 6000,
+        segmentInstruction: fullDirectionsSegmentInstruction,
+        parseReport: (content) => {
+          const parsed = parseCompletionJson(content);
+          if (!isRecord(parsed)) throw new Error("Career report segment must be a JSON object");
+          return reportDirectionsSchema.parse(parsed);
+        }
+      }))
+    ]);
+  } finally {
+    clearInterval(heartbeat);
   }
 
-  const transcript = transcription?.text ?? null;
-  const photoInput = await buildPhotoInput(photoAsset);
-  const useCompatibleAsync = env.OPENAI_ASYNC_REPORTS_ENABLED && supportsCompatibleAsyncCompletions();
-  const [freeCompletion, fullCompletion] = await Promise.all([
-    createReportCompletion({
-      context,
-      tier: "FREE",
-      transcript,
-      voiceMetrics,
-      photoInput,
-      schemaName: "ikigai_free_report",
-      jsonSchema: reportFreeJsonSchema,
-      useAsync: useCompatibleAsync,
-      parseReport: (content) => reportFreeSchema.parse(parseCompletionJson(content))
-    }),
-    createReportCompletion({
-      context,
-      tier: "FULL",
-      transcript,
-      voiceMetrics,
-      photoInput,
-      schemaName: "ikigai_full_report",
-      jsonSchema: reportFullJsonSchema,
-      useAsync: useCompatibleAsync,
-      parseReport: (content) => normalizeFullReportValue(parseCompletionJson(content))
-    })
-  ]);
-  const promptVersion = Math.max(freeCompletion.promptVersion, fullCompletion.promptVersion);
+  const diagnostics = diagnosticsCompletion.report;
+  const directions = normalizeDirectionsValue(directionsCompletion.report, diagnostics);
+  const initialRoles = uniqueTopRoles(directions.top_roles);
+  const missingRoleCount = Math.max(0, 5 - initialRoles.length);
+  let supplementedRoles: ReportFull["top_roles"] = [];
+  let supplementPromptVersion = 0;
+
+  if (missingRoleCount > 0) {
+    reportProgress(context, 92, "Дополняем недостающие профессиональные направления...", "Completing missing career directions...");
+    const existingNames = initialRoles.map((role) => role.name);
+    const supplementInstruction = [
+      "SEGMENT REQUEST: alternative career directions only.",
+      `Return exactly five new top_roles candidates that are distinct from these existing directions: ${existingNames.join(", ")}.`,
+      `The backend will select the best ${missingRoleCount} candidates needed to complete the final five-item list.`,
+      "Return only the top_roles object requested by the attached schema.",
+      "Keep every role realistic, forward-looking, personalized, evidence-specific, and written in the requested output language."
+    ].join("\n");
+
+    try {
+      const supplement = await createReportCompletion({
+        context,
+        tier: "FULL",
+        transcript,
+        voiceMetrics,
+        photoInput,
+        part: "full_roles_supplement",
+        schemaName: "ikigai_full_roles_supplement",
+        jsonSchema: reportRoleSupplementJsonSchema(5),
+        useAsync: useCompatibleAsync,
+        maxTokens: 5000,
+        segmentInstruction: supplementInstruction,
+        parseReport: (content) => {
+          const parsed = parseCompletionJson(content);
+          if (!isRecord(parsed)) throw new Error("Role supplement must be a JSON object");
+          const roles = uniqueTopRoles(
+            normalizeTopRoleCandidates(parsed.top_roles, { ...parsed, summary: diagnostics.summary }, diagnostics.voice_analysis, diagnostics.face_analysis),
+            existingNames
+          );
+          return z.object({ top_roles: z.array(topRoleSchema).length(5) }).parse({ top_roles: roles });
+        }
+      });
+      supplementedRoles = supplement.report.top_roles.slice(0, missingRoleCount);
+      supplementPromptVersion = supplement.promptVersion;
+      telemetry.push(supplement.telemetry);
+    } catch {
+      reportProgress(context, 94, "Завершаем отчёт с безопасным резервным дополнением...", "Finishing report with a safe fallback...");
+    }
+  }
+
+  const aiRoleCount = uniqueTopRoles([...initialRoles, ...supplementedRoles]).length;
+  const fallbackRoleCount = Math.max(0, 5 - aiRoleCount);
+  const report = mergeFullReportParts(diagnostics, { ...directions, top_roles: initialRoles }, supplementedRoles);
+  const fullPromptVersion = Math.max(diagnosticsCompletion.promptVersion, directionsCompletion.promptVersion, supplementPromptVersion);
+  const promptVersion = Math.max(freeCompletion.promptVersion, fullPromptVersion);
+  reportProgress(context, 96, "Собираем итоговый отчёт...", "Assembling the final report...");
 
   return {
     reportFree: freeCompletion.report,
-    report: fullCompletion.report,
+    report,
     model: env.OPENAI_MODEL,
     promptVersion,
     promptVersions: {
       free: freeCompletion.promptVersion,
-      full: fullCompletion.promptVersion
+      full: fullPromptVersion
     },
     usedOpenAI: true,
     mediaSignals: {
       audioTranscript: Boolean(transcript),
       audioMetrics: Boolean(voiceMetrics),
-      photoInput: freeCompletion.photoInputUsed || fullCompletion.photoInputUsed
+      photoInput: freeCompletion.photoInputUsed || diagnosticsCompletion.photoInputUsed || directionsCompletion.photoInputUsed
+    },
+    telemetry,
+    roleGeneration: {
+      initial: initialRoles.length,
+      supplemented: supplementedRoles.length,
+      fallback: fallbackRoleCount
     }
   };
 }
@@ -486,8 +705,8 @@ function completeIkigaiZones(source: unknown, summary: string) {
   }));
 }
 
-function completeTopRoles(source: unknown, candidate: UnknownRecord, voiceAnalysis: UnknownRecord, faceAnalysis: UnknownRecord) {
-  const roles = Array.isArray(source) ? source.filter(isRecord).slice(0, 5).map((role, index) => ({
+function normalizeTopRoleCandidates(source: unknown, candidate: UnknownRecord, voiceAnalysis: UnknownRecord, faceAnalysis: UnknownRecord) {
+  return Array.isArray(source) ? source.filter(isRecord).slice(0, 5).map((role, index) => ({
     name: stringValue(role, "name", "role") ?? `Профессиональная роль ${index + 1}`,
     match: numberValue(role, "match", Math.max(55, 82 - index * 5)),
     why: safeLongText(role.why, safeLongText(candidate.summary, "Роль подходит как рабочая гипотеза по анкете и общему профилю пользователя.")),
@@ -496,6 +715,20 @@ function completeTopRoles(source: unknown, candidate: UnknownRecord, voiceAnalys
     strengths: safeLongText(role.strengths, "Сильная сторона роли - соединять личный интерес, структуру действий и понятную пользу для других."),
     risks: safeLongText(role.risks, "Риск роли - слишком долго оставаться в анализе и не проверять гипотезу через маленький рыночный или рабочий эксперимент.")
   })) : [];
+}
+
+function uniqueTopRoles(roles: ReportFull["top_roles"], excludedNames: string[] = []) {
+  const seen = new Set(excludedNames.map((name) => name.trim().toLocaleLowerCase()).filter(Boolean));
+  return roles.filter((role) => {
+    const key = role.name.trim().toLocaleLowerCase();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function completeTopRoles(source: unknown, candidate: UnknownRecord, voiceAnalysis: UnknownRecord, faceAnalysis: UnknownRecord) {
+  const roles = normalizeTopRoleCandidates(source, candidate, voiceAnalysis, faceAnalysis);
 
   const fallbackNames = [
     "Стратег развития",
@@ -519,6 +752,42 @@ function completeTopRoles(source: unknown, candidate: UnknownRecord, voiceAnalys
   }
 
   return roles;
+}
+
+function normalizeDiagnosticsValue(value: unknown): ReportDiagnostics {
+  if (!isRecord(value)) throw new Error("Diagnostic report segment must be a JSON object");
+  return reportDiagnosticsSchema.parse(completeFullReportCandidate(value));
+}
+
+function normalizeDirectionsValue(value: unknown, diagnostics: ReportDiagnostics): ReportDirections {
+  if (!isRecord(value)) throw new Error("Career report segment must be a JSON object");
+  const completed = completeFullReportCandidate({ ...diagnostics, ...value });
+  if (!isRecord(completed)) throw new Error("Career report segment could not be normalized");
+  const roles = uniqueTopRoles(normalizeTopRoleCandidates(
+    value.top_roles,
+    { ...value, summary: diagnostics.summary },
+    diagnostics.voice_analysis,
+    diagnostics.face_analysis
+  ));
+
+  return reportDirectionsSchema.parse({
+    top_roles: roles,
+    ikigai_zones: completed.ikigai_zones,
+    career_action: completed.career_action,
+    final_insight: completed.final_insight
+  });
+}
+
+export function mergeFullReportParts(
+  diagnostics: ReportDiagnostics,
+  directions: ReportDirections,
+  supplementedRoles: ReportFull["top_roles"] = []
+): ReportFull {
+  return normalizeFullReportValue({
+    ...diagnostics,
+    ...directions,
+    top_roles: uniqueTopRoles([...directions.top_roles, ...supplementedRoles])
+  });
 }
 
 export function completeFullReportCandidate(value: unknown) {
@@ -611,12 +880,16 @@ async function buildCompletionInput(
   tier: ReportTier,
   transcript: string | null,
   voiceMetrics: VoiceSignalMetrics | null,
-  photoInput: string | null
+  photoInput: string | null,
+  segmentInstruction?: string
 ) {
   const prompts = await buildReportPromptMessages(context, tier, transcript, voiceMetrics, Boolean(photoInput));
   const userContent: ChatCompletionContentPart[] = [
     { type: "text", text: prompts.userPrompt }
   ];
+  if (segmentInstruction) {
+    userContent.push({ type: "text", text: segmentInstruction });
+  }
   if (photoInput) {
     userContent.push({
       type: "image_url",
@@ -637,12 +910,12 @@ function isImageInputError(body: string) {
 }
 
 function getReportMaxTokens(tier: ReportTier) {
-  const tierBudget = tier === "FREE" ? 2500 : 5500;
+  const tierBudget = tier === "FREE" ? 3000 : 8000;
   return Math.min(env.OPENAI_MAX_OUTPUT_TOKENS, tierBudget);
 }
 
 function getRepairMaxTokens() {
-  return Math.min(env.OPENAI_MAX_OUTPUT_TOKENS, 3500);
+  return Math.min(env.OPENAI_MAX_OUTPUT_TOKENS, 5000);
 }
 
 type ReportCompletionRequest<TReport> = {
@@ -651,9 +924,12 @@ type ReportCompletionRequest<TReport> = {
   transcript: string | null;
   voiceMetrics: VoiceSignalMetrics | null;
   photoInput: string | null;
+  part: string;
   schemaName: string;
   jsonSchema: Record<string, unknown>;
   useAsync: boolean;
+  maxTokens?: number;
+  segmentInstruction?: string;
   parseReport: (content: string) => TReport;
 };
 
@@ -934,14 +1210,23 @@ async function requestReportJsonRepair(
 }
 
 async function createReportCompletion<TReport>(request: ReportCompletionRequest<TReport>): Promise<CompletionResult<TReport>> {
-  const input = await buildCompletionInput(request.context, request.tier, request.transcript, request.voiceMetrics, request.photoInput);
+  const input = await buildCompletionInput(
+    request.context,
+    request.tier,
+    request.transcript,
+    request.voiceMetrics,
+    request.photoInput,
+    request.segmentInstruction
+  );
   try {
     return await requestReportCompletion(
       input,
       Boolean(request.photoInput),
+      request.part,
       request.schemaName,
       request.jsonSchema,
       request.useAsync,
+      request.maxTokens,
       request.parseReport
     );
   } catch (error) {
@@ -950,11 +1235,20 @@ async function createReportCompletion<TReport>(request: ReportCompletionRequest<
     }
 
     return requestReportCompletion(
-      await buildCompletionInput(request.context, request.tier, request.transcript, request.voiceMetrics, null),
+      await buildCompletionInput(
+        request.context,
+        request.tier,
+        request.transcript,
+        request.voiceMetrics,
+        null,
+        request.segmentInstruction
+      ),
       false,
+      request.part,
       request.schemaName,
       request.jsonSchema,
       request.useAsync,
+      request.maxTokens,
       request.parseReport
     );
   }
@@ -963,13 +1257,16 @@ async function createReportCompletion<TReport>(request: ReportCompletionRequest<
 async function requestReportCompletion<TReport>(
   input: Awaited<ReturnType<typeof buildCompletionInput>>,
   photoInputUsed: boolean,
+  part: string,
   schemaName: string,
   jsonSchema: Record<string, unknown>,
   useAsync: boolean,
+  maxTokens: number | undefined,
   parseReport: (content: string) => TReport
 ): Promise<CompletionResult<TReport>> {
   const openai = getOpenAiClient();
   if (!openai) throw new Error("OpenAI-compatible client is not configured");
+  const startedAt = Date.now();
 
   const messages: ChatCompletionMessageParam[] = [
     {
@@ -991,7 +1288,7 @@ async function requestReportCompletion<TReport>(
     const params = withCompatibleGenerationControls({
       model: env.OPENAI_MODEL,
       temperature: 0.25,
-      max_tokens: getReportMaxTokens(input.tier),
+      max_tokens: Math.min(env.OPENAI_MAX_OUTPUT_TOKENS, maxTokens ?? getReportMaxTokens(input.tier)),
       messages
     } satisfies ChatCompletionParams);
     const response = useAsync
@@ -1001,18 +1298,29 @@ async function requestReportCompletion<TReport>(
     const message = response.choices?.[0]?.message;
     if (message?.refusal) throw new Error(`OpenAI-compatible gateway refused report generation: ${message.refusal}`);
     if (!message?.content) throw new Error("OpenAI-compatible gateway returned an empty report");
+    const parsed = await parseReportWithRepair(
+      openai,
+      schemaName,
+      jsonSchema,
+      message.content,
+      responseFormat,
+      parseReport
+    );
 
     return {
-      report: await parseReportWithRepair(
-        openai,
-        schemaName,
-        jsonSchema,
-        message.content,
-        responseFormat,
-        parseReport
-      ),
+      report: parsed.report,
       photoInputUsed,
-      promptVersion: input.promptVersion
+      promptVersion: input.promptVersion,
+      telemetry: {
+        part,
+        requestedTransport: useAsync ? "async" : "sync",
+        durationMs: Date.now() - startedAt,
+        finishReason: response.choices?.[0]?.finish_reason ? String(response.choices[0].finish_reason) : null,
+        outputCharacters: message.content.length,
+        completionTokens: response.usage?.completion_tokens ?? null,
+        totalTokens: response.usage?.total_tokens ?? null,
+        repairAttempts: parsed.repairAttempts
+      }
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -1032,7 +1340,10 @@ async function parseReportWithRepair<TReport>(
   let lastError: unknown = null;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
-      return parseReport(candidate);
+      return {
+        report: parseReport(candidate),
+        repairAttempts: attempt
+      };
     } catch (error) {
       lastError = error;
       if (attempt >= 2) break;

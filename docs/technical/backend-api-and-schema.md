@@ -537,6 +537,7 @@ Local watcher for this workstation:
 - `PUT /api/admin/feature-flags/:key`
 - `GET /api/admin/prompts`
 - `GET /api/admin/prompts/defaults`
+- `GET /api/admin/prompts/effective` - resolved runtime versions and their `database` or `default` source.
 - `POST /api/admin/prompts`
 - `GET /api/admin/promo-codes`
 - `POST /api/admin/promo-codes`
@@ -646,6 +647,8 @@ For new report prompt behavior:
 1. Update `apps/backend/src/services/reportPrompts.ts`.
 2. Update tests in `apps/backend/src/services/reportPrompts.test.ts`.
 3. Consider admin `PromptTemplate` migration/versioning if it should be editable.
+4. Bump the bundled prompt version. Production deploy runs `prompts:sync`, which persists a missing bundled version without overwriting a same-version custom prompt.
+5. Keep the segmented JSON schemas and the final `ReportFull` contract aligned. Do not expose completion telemetry in report responses.
 
 For new Pingvi behavior:
 

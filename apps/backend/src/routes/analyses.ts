@@ -380,13 +380,20 @@ export async function analysisRoutes(app: FastifyInstance) {
     const unsubscribe = subscribeProgress(params.id, (event) => {
       reply.raw.write(`data: ${JSON.stringify(event)}\n\n`);
     });
+    const heartbeat = setInterval(() => {
+      if (!reply.raw.destroyed) reply.raw.write(": keepalive\n\n");
+    }, 15_000);
+    heartbeat.unref?.();
     reply.raw.write(`data: ${JSON.stringify({
       status: access.analysis.status,
       progress: resolveAnalysisProgress(access.analysis.status, latestEvent?.progress),
       stage: latestEvent?.stage,
       log: access.analysis.status === "FAILED" ? undefined : latestEvent?.log
     })}\n\n`);
-    request.raw.on("close", unsubscribe);
+    request.raw.on("close", () => {
+      clearInterval(heartbeat);
+      unsubscribe();
+    });
   });
 
   app.put("/api/uploads/:key", async (request, reply) => {

@@ -5,8 +5,8 @@ export function resolveAnalysisProgress(status: AnalysisProgressStatus, latestPr
   if (status === "PENDING") return 0;
   if (status === "QUEUED") return 15;
 
-  const persisted = Number.isFinite(latestProgress) ? Math.round(Number(latestProgress)) : 55;
-  return Math.max(55, Math.min(99, persisted));
+  const persisted = Number.isFinite(latestProgress) ? Math.round(Number(latestProgress)) : 5;
+  return Math.max(5, Math.min(99, persisted));
 }
 
 export function publicReportFailureMessage(locale: string) {

@@ -141,7 +141,7 @@ export const defaultReportPromptTemplates: PromptDraft[] = [
   {
     key: REPORT_FULL_SYSTEM_PROMPT_KEY,
     locale: "ru",
-    version: 8,
+    version: 9,
     status: "ACTIVE",
     title: "ORKEN.LIFE PREMIUM report system prompt",
     content: [
@@ -155,13 +155,14 @@ export const defaultReportPromptTemplates: PromptDraft[] = [
       "Every voice_analysis and face_analysis value must use three labeled parts: 'Ваш результат:', 'Что это значит:', and 'Рекомендация:'.",
       "Separate what the person said from how the voice sounded. Spoken profession, role names, and topics can influence content interpretation only as questionnaire/transcript evidence; they must not be treated as acoustic voice evidence.",
       "Prefer evidence-based interpretation: questionnaire first, transcript/content second, measurable voice metrics third, photo/micromimic observations only as weak visual presentation signals.",
-      "If a signal is missing or low quality, still write a useful recommendation, but explicitly soften the evidence strength."
+      "If a signal is missing or low quality, still write a useful recommendation, but explicitly soften the evidence strength.",
+      "The premium report can be requested in independent JSON segments. Return only the fields present in the attached JSON Schema while applying every relevant safety and quality rule."
     ].join("\n")
   },
   {
     key: REPORT_FULL_USER_PROMPT_KEY,
     locale: "ru",
-    version: 8,
+    version: 9,
     status: "ACTIVE",
     title: "ORKEN.LIFE PREMIUM report user prompt",
     content: [
@@ -170,7 +171,7 @@ export const defaultReportPromptTemplates: PromptDraft[] = [
       "Evidence hierarchy: questionnaire is the primary source; transcript shows vocabulary, themes, and clarity of thought; voiceMetricsJson shows delivery signals; image/photo is only a weak visual presentation signal.",
       "Explicitly separate content analysis from voice delivery analysis: if the user says a profession or role, use it only as self-described context and explain that it does not automatically determine the result.",
       "If media evidence is unavailable or weak, still write useful sections, but ground them in the questionnaire and clearly phrase media parts as limited hypotheses.",
-      "Return a practical premium report with detailed voice_analysis, face_analysis, exactly 5 top_roles, personalized ikigai_zones, career_action, and final_insight.",
+      "The report may be generated in independent segments. For each request, return only fields present in the attached JSON Schema. Across the assembled premium report, provide detailed voice_analysis, face_analysis, exactly 5 top_roles, personalized ikigai_zones, career_action, and final_insight.",
       "The visible top_roles block is titled 'ТОП-5 профессиональных направлений с уклоном в будущее'. Treat each item as a forward-looking professional direction: connect the user's transferable strengths to realistic roles, industries, or emerging work formats that are likely to remain useful as technology changes.",
       "Sections 2 through 8 must be personalized. Do not output placeholders, one-word labels, English trait words, raw scores, or 'unavailable' as a value.",
       "Each voice_analysis and face_analysis value must be a Russian short paragraph with exactly these three visible labeled parts: 'Ваш результат:', 'Что это значит:', and 'Рекомендация:'.",
@@ -194,7 +195,7 @@ export const defaultReportPromptTemplates: PromptDraft[] = [
       "Use this final_insight format and level of specificity: 'Комплексный AI-анализ показывает [главная синхронизация или рассинхронизация внешнего проявления и внутреннего потенциала]. [Как уверенность в голосе, мимика и/или визуальная собранность создают фундамент для конкретных профессиональных сфер]. Однако ваш истинный Икигай лежит глубже: [какие качества или компетенции нужно развивать, чтобы получать больше удовлетворения от деятельности]. [Какой фокус с личных результатов на пользу людям, команду, обучение, продукт или рынок позволит раскрыть потенциал и найти баланс в профессии].'",
       "Keep every field specific, useful, and safe. Avoid generic coaching filler.",
       "Every visible value must be in Russian when Output language is Russian.",
-      "Quality gate before returning JSON: every voice_analysis and face_analysis value has the three labels; no value is a raw score or translated parameter name; top_roles has array length exactly 5, is sorted, distinct, forward-looking, and role-specific; all ikigai_zones are personal; final_insight starts with the requested analytical synthesis style; all visible values are Russian.",
+      "Quality gate before returning each JSON segment: validate every field included in the attached schema. Every included voice_analysis and face_analysis value has the three labels; no value is a raw score or translated parameter name; when included, top_roles has array length exactly 5 and its items are sorted, distinct, forward-looking, and role-specific; included ikigai_zones are personal; included final_insight uses the requested analytical synthesis style; all visible values are Russian.",
       "Return exactly the requested JSON shape.",
       "",
       "Analysis ID: {{analysisId}}",

@@ -216,7 +216,9 @@ Environment variables:
 - `OPENAI_BASE_URL`
 - `OPENAI_MODEL`
 - `OPENAI_TRANSCRIPTION_MODEL`
+- `OPENAI_MAX_OUTPUT_TOKENS` (default `12000`; individual report segments use lower bounded budgets)
 - `OPENAI_ASYNC_REPORTS_ENABLED`
+- `OPENAI_ASYNC_TIMEOUT_MS` (default `420000`)
 
 Important constraints:
 
@@ -225,6 +227,10 @@ Important constraints:
 - Use OpenAI SDK `chat.completions.create`.
 - Do not use `/responses`.
 - Long report generation may use OpenAI-compatible async `/chat/completions/async`.
+- Paid reports are generated as parallel `free`, `full_diagnostics`, and `full_directions` completions and then assembled into the existing `ReportFull` contract.
+- If the career segment contains fewer than five distinct directions, a separate roles-only completion supplies candidates; deterministic fallback is the final safety net.
+- Completion telemetry stores only part name, timing, finish reason, token counts, output character count, and repair count. It must never store raw prompts, questionnaire text, transcript, image, audio, or model output.
+- Worker progress is persisted to `JobEvent` throughout generation, and the SSE stream sends keepalives for mobile browsers and reverse proxies.
 
 ## Text And Localization
 
@@ -247,6 +253,7 @@ The admin UI currently manages:
 - promo codes;
 - feature flags;
 - report prompt templates;
+- the effective prompt version and whether runtime resolves it from the database or bundled defaults;
 - localized content JSON;
 - enabled/default locales;
 - habits week summary mode: rule-based or LLM-based;

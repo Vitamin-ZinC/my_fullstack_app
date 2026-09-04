@@ -44,16 +44,18 @@ export function subscribeProgress(analysisId: string, listener: (event: Progress
   };
 }
 
-export function emitProgress(analysisId: string, event: ProgressEvent) {
+export async function emitProgress(analysisId: string, event: ProgressEvent) {
   dispatch(analysisId, event);
-  void redis.publish(channel, JSON.stringify({ analysisId, event })).catch(() => undefined);
-  void prisma.jobEvent.create({
-    data: {
-      analysisId,
-      status: event.status,
-      progress: event.progress,
-      stage: event.stage,
-      log: event.log
-    }
-  }).catch(() => undefined);
+  await Promise.allSettled([
+    redis.publish(channel, JSON.stringify({ analysisId, event })),
+    prisma.jobEvent.create({
+      data: {
+        analysisId,
+        status: event.status,
+        progress: event.progress,
+        stage: event.stage,
+        log: event.log
+      }
+    })
+  ]);
 }

@@ -38,7 +38,7 @@ test("default report prompts expose strengthened version numbers", () => {
     .map((prompt) => prompt.version);
 
   assert.deepEqual(new Set(freeVersions), new Set([4]));
-  assert.deepEqual(new Set(fullVersions), new Set([8]));
+  assert.deepEqual(new Set(fullVersions), new Set([9]));
 });
 
 test("free default prompt requires engaging result and paid-report preview", () => {
@@ -73,6 +73,8 @@ test("premium default prompt requires safe profiling lens and Russian personaliz
   assert.match(user.content, /Quality gate/);
   assert.match(user.content, /exactly 5 top_roles|exactly five distinct/);
   assert.match(user.content, /array length exactly 5/);
+  assert.match(user.content, /independent segments/);
+  assert.match(system.content, /independent JSON segments/);
   assert.match(user.content, /forward-looking professional direction/);
   assert.match(user.content, /55 to 95/);
   assert.match(user.content, /not be a translation of the field name/);

@@ -26,6 +26,7 @@ import type {
   AuthSessionResponse,
   CheckoutSessionResponse,
   AnalysisStatusResponse,
+  EffectivePromptTemplate,
   FeatureFlag,
   FreeReportResponse,
   FullReportResponse,
@@ -885,6 +886,7 @@ export const adminApi = {
   }),
   prompts: () => adminRequest<PromptTemplate[]>("/api/admin/prompts"),
   promptDefaults: () => adminRequest<PromptTemplateInput[]>("/api/admin/prompts/defaults"),
+  effectivePrompts: () => adminRequest<EffectivePromptTemplate[]>("/api/admin/prompts/effective"),
   upsertPrompt: (prompt: PromptTemplateInput) => adminRequest<PromptTemplate>("/api/admin/prompts", {
     method: "POST",
     body: JSON.stringify(prompt)

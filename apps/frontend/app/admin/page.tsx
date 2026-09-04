@@ -31,6 +31,7 @@ import type {
   AppSetting,
   CoachPublicContent,
   DemoAccessCodeSummary,
+  EffectivePromptTemplate,
   FeatureFlag,
   PartnerAffiliateProgramSummary,
   PartnerCoreAdminSnapshot,
@@ -247,6 +248,7 @@ export function AdminConsole({ section }: { section: AdminSection }) {
   const [flags, setFlags] = useState<FeatureFlag[]>([]);
   const [prompts, setPrompts] = useState<PromptTemplate[]>([]);
   const [promptDefaults, setPromptDefaults] = useState<PromptTemplateInput[]>([]);
+  const [effectivePrompts, setEffectivePrompts] = useState<EffectivePromptTemplate[]>([]);
   const [promptForm, setPromptForm] = useState<PromptTemplateInput>(emptyPromptForm);
   const [promoCodes, setPromoCodes] = useState<PromoCode[]>([]);
   const [partnerPrograms, setPartnerPrograms] = useState<PartnerAffiliateProgramSummary[]>([]);
@@ -404,14 +406,16 @@ export function AdminConsole({ section }: { section: AdminSection }) {
       }
 
       if (section === "ai") {
-        const [nextSettings, nextPrompts, nextPromptDefaults] = await Promise.all([
+        const [nextSettings, nextPrompts, nextPromptDefaults, nextEffectivePrompts] = await Promise.all([
           adminApi.settings(),
           adminApi.prompts(),
-          adminApi.promptDefaults()
+          adminApi.promptDefaults(),
+          adminApi.effectivePrompts()
         ]);
         setSettings(nextSettings);
         setPrompts(nextPrompts);
         setPromptDefaults(nextPromptDefaults);
+        setEffectivePrompts(nextEffectivePrompts);
         hydrateHabitAiForm(nextSettings);
         hydratePromptForm(nextPrompts, nextPromptDefaults);
       }
@@ -1131,6 +1135,10 @@ export function AdminConsole({ section }: { section: AdminSection }) {
       .map((prompt) => ({ label: `${prompt.key}/${prompt.locale}/v${prompt.version} default`, value: `${prompt.key}|${prompt.locale}|${prompt.version}|default`, prompt }))
   ];
   const promptVersionHistory = promptVersionsFor(promptForm);
+  const effectivePrompt = effectivePrompts.find((item) => (
+    item.key === promptForm.key.trim() &&
+    item.locale === (promptForm.locale.trim().toLowerCase() || "ru")
+  ));
   const reportPricePreview = formatAdminPriceLabel(priceForm.amount, priceForm.currency);
   const habitPricePreview = formatAdminPriceLabel(habitPriceForm.amount, habitPriceForm.currency);
   const habitTrialDaysNumber = Number(habitPriceForm.trialDays);
@@ -1784,6 +1792,14 @@ export function AdminConsole({ section }: { section: AdminSection }) {
             <div className="prompt-output-note">
               <strong>{adminText.promptOutputTitle}</strong>
               <span>{adminText.promptOutputCopy}</span>
+            </div>
+            <div className="prompt-output-note">
+              <strong>Фактически используется</strong>
+              <span>
+                {effectivePrompt
+                  ? `${effectivePrompt.key}/${effectivePrompt.locale}/v${effectivePrompt.version}, источник: ${effectivePrompt.source === "database" ? "база данных" : "встроенный default"}`
+                  : "Выберите промпт, чтобы увидеть effective-версию."}
+              </span>
             </div>
             <select
               className="input"

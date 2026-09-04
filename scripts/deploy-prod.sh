@@ -110,6 +110,10 @@ if [[ "$RUN_MIGRATIONS" == "true" ]]; then
     backend npx prisma migrate deploy --schema apps/backend/prisma/schema.prisma
 fi
 
+log "Synchronizing bundled prompt versions"
+docker compose --env-file .env -f "$COMPOSE_FILE" -p "$PROJECT_NAME" run --rm --no-deps \
+  backend npm --workspace apps/backend run prompts:sync
+
 log "Switching current symlink to $RELEASE_DIR"
 ln -sfnT "$RELEASE_DIR" "$CURRENT_LINK"
 

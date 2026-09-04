@@ -5,6 +5,7 @@ import {
   isRetryableAsyncCompletionError,
   isTerminalAsyncProviderError,
   normalizeCompatibleChatMessages,
+  stableRequestFingerprint,
   shouldFallbackToSyncCompletionAfterAsyncError
 } from "./aiReportRouting.js";
 
@@ -53,4 +54,14 @@ test("provider unavailable can fall back to sync report generation", () => {
   assert.equal(isRetryableAsyncCompletionError(message), true);
   assert.equal(isTerminalAsyncProviderError(message), true);
   assert.equal(shouldFallbackToSyncCompletionAfterAsyncError(message), true);
+});
+
+test("async idempotency fingerprint changes only when the request body changes", () => {
+  const request = { model: "gpt-4o-mini", messages: [{ role: "user", content: "report" }] };
+
+  assert.equal(stableRequestFingerprint(request), stableRequestFingerprint({ ...request }));
+  assert.notEqual(
+    stableRequestFingerprint(request),
+    stableRequestFingerprint({ ...request, messages: [{ role: "user", content: "updated report" }] })
+  );
 });

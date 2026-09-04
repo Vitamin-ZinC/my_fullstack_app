@@ -19,6 +19,7 @@ import {
   isRetryableAsyncCompletionError,
   isTerminalAsyncProviderError,
   normalizeCompatibleChatMessages,
+  stableRequestFingerprint,
   shouldFallbackToSyncCompletionAfterAsyncError
 } from "./aiReportRouting.js";
 
@@ -743,13 +744,19 @@ function withCompatibleGenerationControls(params: ChatCompletionParams): Compati
   };
 }
 
-function buildAsyncIdempotencyKey(input: Awaited<ReturnType<typeof buildCompletionInput>>, schemaName: string, photoInputUsed: boolean) {
+function buildAsyncIdempotencyKey(
+  input: Awaited<ReturnType<typeof buildCompletionInput>>,
+  schemaName: string,
+  photoInputUsed: boolean,
+  params: CompatibleChatCompletionParams
+) {
   return [
     "report",
     input.analysisId,
     schemaName,
     `v${input.promptVersion}`,
-    photoInputUsed ? "photo" : "no-photo"
+    photoInputUsed ? "photo" : "no-photo",
+    stableRequestFingerprint(params)
   ].join("-");
 }
 
@@ -988,7 +995,7 @@ async function requestReportCompletion<TReport>(
       messages
     } satisfies ChatCompletionParams);
     const response = useAsync
-      ? await createChatCompletionWithAsyncFallback(openai, params, responseFormat, buildAsyncIdempotencyKey(input, schemaName, photoInputUsed))
+      ? await createChatCompletionWithAsyncFallback(openai, params, responseFormat, buildAsyncIdempotencyKey(input, schemaName, photoInputUsed, params))
       : await createChatCompletionWithJsonMode(openai, params, responseFormat);
 
     const message = response.choices?.[0]?.message;

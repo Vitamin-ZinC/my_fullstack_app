@@ -15,6 +15,10 @@ export function shouldFallbackToSyncCompletionAfterAsyncError(message: string) {
   return /provider_unavailable|Provider request failed|404|405|method not allowed|cannot\s+(post|get)|unsupported.*async|async.*unsupported|async.*not supported|not found.*\/chat\/completions\/async|\/chat\/completions\/async.*not found/i.test(message);
 }
 
+export function stableRequestFingerprint(value: unknown) {
+  return createHash("sha256").update(JSON.stringify(value)).digest("hex").slice(0, 16);
+}
+
 type ChatMessageLike = {
   content?: unknown;
 };
@@ -47,3 +51,4 @@ function normalizeCompatibleContentPart(part: unknown) {
   }
   return part;
 }
+import { createHash } from "node:crypto";

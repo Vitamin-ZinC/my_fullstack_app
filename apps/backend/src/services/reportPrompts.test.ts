@@ -37,8 +37,8 @@ test("default report prompts expose strengthened version numbers", () => {
     .filter((prompt) => prompt.key.startsWith("ikigai.report.full."))
     .map((prompt) => prompt.version);
 
-  assert.deepEqual(new Set(freeVersions), new Set([4]));
-  assert.deepEqual(new Set(fullVersions), new Set([9]));
+  assert.deepEqual(new Set(freeVersions), new Set([5]));
+  assert.deepEqual(new Set(fullVersions), new Set([10]));
 });
 
 test("free default prompt requires engaging result and paid-report preview", () => {
@@ -47,6 +47,8 @@ test("free default prompt requires engaging result and paid-report preview", () 
   assert.ok(user);
   assert.match(user.content, /paid_report_teaser/);
   assert.match(user.content, /paid_report_preview/);
+  assert.match(user.content, /exactly 5 professional directions/);
+  assert.match(user.content, /Never promise TOP-3 roles, a 90-day route/);
   assert.match(user.content, /next 24 hours/);
   assert.match(user.content, /Итоговое аналитическое заключение/);
   assert.match(user.content, /does not expose the full premium/);
@@ -73,6 +75,7 @@ test("premium default prompt requires safe profiling lens and Russian personaliz
   assert.match(user.content, /Quality gate/);
   assert.match(user.content, /exactly 5 top_roles|exactly five distinct/);
   assert.match(user.content, /array length exactly 5/);
+  assert.match(user.content, /detailed 30-day implementation route/);
   assert.match(user.content, /independent segments/);
   assert.match(system.content, /independent JSON segments/);
   assert.match(user.content, /forward-looking professional direction/);

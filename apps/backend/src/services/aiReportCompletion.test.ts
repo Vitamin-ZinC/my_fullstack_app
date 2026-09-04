@@ -53,3 +53,27 @@ test("full report completion fills missing diagnostic sections before schema val
   assert.equal(reassembled.top_roles.length, 5);
   assert.deepEqual(reassembled.top_roles.map((role) => role.name), report.top_roles.map((role) => role.name));
 });
+
+test("free report normalizes incorrect premium role count and route duration", async () => {
+  process.env.DATABASE_URL ??= "postgresql://levelup:dev_password@localhost:5432/levelup";
+  process.env.PARTNER_CORE_URL = "";
+
+  const { normalizeFreeReportValue } = await import("./aiReport.js");
+  const report = normalizeFreeReportValue({
+    profession: "Продуктовый стратег",
+    summary: "Сильнее всего сейчас проявляется способность соединять анализ, людей и практические решения.",
+    ikigai_scores: { love: 80, good_at: 72, paid_for: 65, world_needs: 70 },
+    key_insight: "Полезно проверить эту профессиональную гипотезу через один небольшой проект и внешнюю обратную связь.",
+    paid_report_teaser: "В полном отчёте будут Топ-3 роли и пошаговый 90-дневный маршрут.",
+    paid_report_preview: [
+      "Топ-3 перспективные роли следующего карьерного уровня",
+      "Пошаговый 90-дневный план перехода",
+      "Расширенный анализ голоса",
+      "Персональные зоны Икигай"
+    ]
+  });
+
+  assert.match(report.paid_report_teaser ?? "", /ТОП-5/);
+  assert.match(report.paid_report_teaser ?? "", /30-дневный/);
+  assert.doesNotMatch(JSON.stringify(report), /Топ-3|90-дневный/);
+});

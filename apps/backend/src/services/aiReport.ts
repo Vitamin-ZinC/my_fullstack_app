@@ -243,6 +243,37 @@ export const reportFreeSchema = z.object({
   paid_report_preview: z.array(z.string().min(3)).min(4).max(6)
 });
 
+function normalizePaidReportPromise(value: string) {
+  return value
+    .replace(/топ\s*[-–—]?\s*3(?!\d)/giu, "ТОП-5")
+    .replace(/три\s+(?:перспективн[а-яё]*\s+)?(?:професси[а-яё]*|рол[а-яё]*|направлени[а-яё]*)/giu, "5 профессиональных направлений")
+    .replace(/\btop\s*[-–—]?\s*3\b/giu, "Top-5")
+    .replace(/90\s*[-–—]?\s*дневн[а-яё]*/giu, "30-дневный")
+    .replace(/90\s+д(?:ень|ня|ней)/giu, "30 дней")
+    .replace(/девяносто\s+д(?:ень|ня|ней)/giu, "30 дней")
+    .replace(/\b90\s*[-–—]?\s*days?\b/giu, "30-day");
+}
+
+function normalizePaidReportPreviewItem(value: string) {
+  const normalized = normalizePaidReportPromise(value);
+  if (/(?:топ|професси|рол|направлени)/iu.test(normalized)) {
+    return "ТОП-5 профессиональных направлений с процентами совпадения, сильными сторонами и рисками";
+  }
+  if (/(?:маршрут|план).*(?:дн|недел)/iu.test(normalized)) {
+    return "Персональный 30-дневный маршрут: четыре недели действий, результатов и проверок";
+  }
+  return normalized;
+}
+
+export function normalizeFreeReportValue(value: unknown): ReportFree {
+  const report = reportFreeSchema.parse(value);
+  return {
+    ...report,
+    paid_report_teaser: normalizePaidReportPromise(report.paid_report_teaser),
+    paid_report_preview: report.paid_report_preview.map(normalizePaidReportPreviewItem)
+  };
+}
+
 const scoreJsonSchema = {
   type: "object",
   additionalProperties: false,
@@ -433,6 +464,7 @@ const fullDirectionsSegmentInstruction = [
   "SEGMENT REQUEST: career directions and synthesis.",
   "Return only top_roles, ikigai_zones, career_action, and final_insight.",
   "top_roles must contain exactly five distinct, realistic, forward-looking directions sorted by match descending.",
+  "career_action must cover exactly 30 days in four detailed weekly blocks. For every week include a goal, 2 to 3 concrete actions, a tangible deliverable, and a measurable completion check. Never call it a 90-day route.",
   "Do not return profession, summary, ikigai_scores, voice_analysis, or face_analysis in this segment.",
   "Keep all safety, personalization, language, and synthesis requirements from the main prompt."
 ].join("\n");
@@ -504,7 +536,7 @@ export async function generateOpenAiReport(context: ReportContext): Promise<Gene
         jsonSchema: reportFreeJsonSchema,
         useAsync: useCompatibleAsync,
         maxTokens: 3000,
-        parseReport: (content) => reportFreeSchema.parse(parseCompletionJson(content))
+        parseReport: (content) => normalizeFreeReportValue(parseCompletionJson(content))
       })),
       runPart("Анализ лица и голоса готов...", "Voice and face analysis completed...", () => createReportCompletion({
         context,
@@ -813,7 +845,7 @@ export function completeFullReportCandidate(value: unknown) {
     face_analysis: faceAnalysis,
     top_roles: completeTopRoles(value.top_roles, value, voiceAnalysis, faceAnalysis),
     ikigai_zones: completeIkigaiZones(value.ikigai_zones, summary),
-    career_action: safeLongText(value.career_action, "Week 1: выбрать один рабочий эксперимент. Week 2: собрать первую обратную связь. Week 3: улучшить формат и повторить проверку. Week 4: зафиксировать выводы и выбрать следующий шаг."),
+    career_action: safeLongText(value.career_action, "Неделя 1. Цель: выбрать одну профессиональную гипотезу из отчёта. Действия: описать ожидаемый результат, провести две короткие беседы с людьми из этой сферы и определить критерий успеха. Результат недели: карточка гипотезы с тремя фактами за и против. Проверка: две беседы проведены и один критерий записан. Неделя 2. Цель: проверить роль на практике. Действия: выполнить небольшой рабочий кейс, ограничить его срок тремя днями и показать результат одному потенциальному пользователю или коллеге. Результат недели: готовый мини-проект. Проверка: получена хотя бы одна конкретная реакция. Неделя 3. Цель: улучшить формат по обратной связи. Действия: собрать ещё три комментария, выделить повторяющийся запрос и внести одно заметное изменение. Результат недели: вторая версия мини-проекта. Проверка: зафиксированы три комментария и одно изменение. Неделя 4. Цель: принять решение о следующем шаге. Действия: сравнить энергию, интерес и рыночный отклик, выбрать продолжение или новую гипотезу и поставить задачу на следующие 30 дней. Результат недели: короткое решение с аргументами. Проверка: выбран один следующий шаг, срок и измеримый результат."),
     final_insight: safeLongText(value.final_insight, "Комплексный AI-анализ показывает рабочую гипотезу о направлении развития: сильнее всего сейчас стоит проверять связку личного интереса, ясной коммуникации и маленьких практических экспериментов. Используйте вывод как карту для следующих действий, а не как окончательный ярлык.")
   };
 }

@@ -19,7 +19,7 @@ import {
   validateAnalysisAudioSuitability,
   type AudioSuitabilityResult
 } from "../services/audioSuitability.js";
-import { normalizeFullReportValue } from "../services/aiReport.js";
+import { normalizeFreeReportValue, normalizeFullReportValue } from "../services/aiReport.js";
 import { publicReportFailureMessage, resolveAnalysisProgress } from "../services/analysisProgress.js";
 import { sendReportEmail } from "../services/email.js";
 import { buildFallbackFreeReport, buildFallbackReport } from "../services/report.js";
@@ -252,6 +252,7 @@ export async function analysisRoutes(app: FastifyInstance) {
     if (!access) return;
     const analysis = access.analysis;
     if (analysis.status !== "DONE") return reply.code(409).send({ error: "Analysis not ready" });
+    if (!analysis.reportFree) return reply.code(409).send({ error: "Free report is not available" });
     await prisma.analyticsEvent.create({
       data: {
         name: "free_report_viewed",
@@ -262,7 +263,7 @@ export async function analysisRoutes(app: FastifyInstance) {
       }
     });
     const reportMeta = await buildReportGenerationMeta(params.id, analysis.locale);
-    return { reportFree: analysis.reportFree, reportMeta };
+    return { reportFree: normalizeFreeReportValue(analysis.reportFree), reportMeta };
   });
 
   app.get("/api/analyses/:id/report/full", async (request, reply) => {

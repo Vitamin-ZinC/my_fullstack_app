@@ -96,7 +96,7 @@ export const defaultReportPromptTemplates: PromptDraft[] = [
   {
     key: REPORT_FREE_SYSTEM_PROMPT_KEY,
     locale: "ru",
-    version: 4,
+    version: 5,
     status: "ACTIVE",
     title: "ORKEN.LIFE FREE report system prompt",
     content: [
@@ -113,7 +113,7 @@ export const defaultReportPromptTemplates: PromptDraft[] = [
   {
     key: REPORT_FREE_USER_PROMPT_KEY,
     locale: "ru",
-    version: 4,
+    version: 5,
     status: "ACTIVE",
     title: "ORKEN.LIFE FREE report user prompt",
     content: [
@@ -126,6 +126,7 @@ export const defaultReportPromptTemplates: PromptDraft[] = [
       "Use the questionnaire as primary evidence. Treat voice transcript and image, when present, as weak presentation signals only.",
       "Do not reveal the full paid analysis. Instead, write paid_report_teaser and paid_report_preview so the user clearly understands what extra information the paid report contains and why it matters.",
       "paid_report_preview must contain 5 to 6 specific paid sections: expanded voice profile, face/micromimic observations, personalized Ikigai zones, role-fit percentages with risks, 30-day action route, and 'Итоговое аналитическое заключение'.",
+      "When describing the paid report, always say that it contains exactly 5 professional directions and a 30-day action route. Never promise TOP-3 roles, a 90-day route, or any other role count or duration.",
       "The preview must describe benefits, not just section names. Example: 'Разбор темпа, пауз и энергии голоса с рекомендациями для переговоров и презентаций'.",
       "Every visible value must be in Russian when Output language is Russian. Avoid English labels and generic filler.",
       "Do not use placeholders, one-word trait labels, or values such as unavailable, N/A, low, medium, high.",
@@ -141,7 +142,7 @@ export const defaultReportPromptTemplates: PromptDraft[] = [
   {
     key: REPORT_FULL_SYSTEM_PROMPT_KEY,
     locale: "ru",
-    version: 9,
+    version: 10,
     status: "ACTIVE",
     title: "ORKEN.LIFE PREMIUM report system prompt",
     content: [
@@ -162,7 +163,7 @@ export const defaultReportPromptTemplates: PromptDraft[] = [
   {
     key: REPORT_FULL_USER_PROMPT_KEY,
     locale: "ru",
-    version: 9,
+    version: 10,
     status: "ACTIVE",
     title: "ORKEN.LIFE PREMIUM report user prompt",
     content: [
@@ -190,7 +191,7 @@ export const defaultReportPromptTemplates: PromptDraft[] = [
       "For each ikigai zone, connect the recommendation to one of the user's questionnaire answers and one career experiment or communication behavior.",
       "top_roles must contain exactly five distinct items, never two, three, four, or more than five. Use realistic match percentages from 55 to 95 and sort them descending. Each role must include role-specific why, voiceEvidence, faceEvidence, strengths, and risks.",
       "Do not reuse the same evidence sentence across all roles. Each role must explain a different practical fit.",
-      "career_action must be a 30-day implementation route with Week 1, Week 2, Week 3, and Week 4 steps, each with a concrete deliverable and a measurable check.",
+      "career_action must be a detailed 30-day implementation route with separate Week 1, Week 2, Week 3, and Week 4 blocks. Every week must include a clear goal, 2 to 3 concrete actions, a tangible deliverable, and a measurable completion check. Connect the route to the strongest top_role and the user's questionnaire evidence. Never describe it as a 90-day route.",
       "final_insight is section 8, titled 'Итоговое аналитическое заключение'. Write it as one cohesive analytical paragraph, not a list. It must synthesize the visible presentation, voice signal, facial/micromimic signal, inner potential, leadership/learning vector, and the user's deeper Ikigai direction.",
       "Use this final_insight format and level of specificity: 'Комплексный AI-анализ показывает [главная синхронизация или рассинхронизация внешнего проявления и внутреннего потенциала]. [Как уверенность в голосе, мимика и/или визуальная собранность создают фундамент для конкретных профессиональных сфер]. Однако ваш истинный Икигай лежит глубже: [какие качества или компетенции нужно развивать, чтобы получать больше удовлетворения от деятельности]. [Какой фокус с личных результатов на пользу людям, команду, обучение, продукт или рынок позволит раскрыть потенциал и найти баланс в профессии].'",
       "Keep every field specific, useful, and safe. Avoid generic coaching filler.",

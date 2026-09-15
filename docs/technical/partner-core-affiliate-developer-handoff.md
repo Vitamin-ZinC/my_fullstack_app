@@ -116,6 +116,25 @@ Return neutral credential errors on failed registration/login. Return `401` or
 `403` when the Core session is expired or revoked; Orken will revoke its local
 session and ask the partner to sign in again.
 
+### Password Recovery Gap
+
+Partner Core does not currently expose a password-reset contract. ORKEN must not
+store a second password, reset token, or credential copy to work around this. The
+current `/coach` login offers a support-assisted recovery link.
+
+To automate recovery, implement this Core-owned endpoint:
+
+```http
+POST /api/projects/orken-life/partner/password-reset/request
+```
+
+Request body: `{ "email": "partner@example.com" }`. Always return the same `202`
+response whether the account exists or not, rate-limit by privacy-preserving
+client reference and email hash, create and deliver the short-lived reset token
+inside Partner Core, and never return that token to ORKEN. After this contract is
+available, ORKEN can proxy the request through its BFF without changing password
+ownership.
+
 ### Partner Portal Data
 
 ```http

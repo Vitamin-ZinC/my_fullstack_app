@@ -1,6 +1,6 @@
 # ORKEN Coach Platform
 
-Last updated: 2026-08-12
+Last updated: 2026-09-15
 
 This document is the implemented contract for the coach and client coaching surfaces. Do not invent replacement tables or move Partner Core data into ORKEN.
 
@@ -22,6 +22,8 @@ ORKEN stores product-specific coaching data only:
 ## Authentication And Consent
 
 - `/coach` provides both registration and login and shares the same Partner Core identity and ORKEN BFF session with `/partners`.
+- Logout uses `POST /api/partners/portal/logout`: the Core token is revoked, the local BFF session is revoked, and both cookies are cleared.
+- Partner Core does not currently expose a password-reset endpoint. The coach login therefore provides a support-assisted recovery action and never creates a local password or reset token in ORKEN.
 - The browser receives only the ORKEN HttpOnly session cookie and double-submit CSRF cookie.
 - The Core token remains encrypted in `PartnerPortalSession` on the backend.
 - A coach can read a client only through an owned active relationship.
@@ -57,6 +59,8 @@ Coach workspace:
 - `GET|POST /api/coach/services`
 - `POST /api/coach/services/:id/submit-review`
 - `POST /api/coach/subscription/checkout/:id`
+- `POST /api/coach/subscription/change/:id`
+- `POST /api/coach/subscription/portal`
 - `POST /api/coach/sites/checkout/:id`
 - `PATCH /api/coach/sites/:id`
 - `POST /api/coach/sites/:id/verify-domain`
@@ -90,6 +94,9 @@ Public and admin:
 ## Commerce Rules
 
 - Packages count only active `COACH_PAID` clients.
+- A coach can switch between fixed packages in the cabinet. ORKEN rejects a downgrade when occupied coach-funded seats exceed the target limit.
+- Package changes update the Stripe subscription without proration: the new seat limit is available immediately and the new recurring price is charged on the existing renewal date.
+- Payment-method changes, invoice history, and cancellation at the end of the paid period use a short-lived Stripe Billing Portal session. Card data never passes through ORKEN.
 - Service publication is blocked unless coach and platform shares total exactly 10,000 basis points.
 - Plan price edits create immutable `CoachPlanPriceVersion` records.
 - `NEW_ONLY` keeps current subscriptions unchanged.

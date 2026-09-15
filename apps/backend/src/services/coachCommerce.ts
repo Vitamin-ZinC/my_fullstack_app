@@ -11,11 +11,18 @@ export const COACH_CONSULTATION_CANCEL_HOURS_KEY = "coach_consultation_cancel_ho
 export const COACH_CONSULTATION_REFUND_PERCENT_KEY = "coach_consultation_refund_percent";
 export const coachStripe = env.STRIPE_SECRET_KEY ? new Stripe(env.STRIPE_SECRET_KEY, { apiVersion: "2024-06-20" }) : null;
 
+function stripeIdempotencyKey(scope: string, value: string) {
+  return `${scope}:${createHash("sha256").update(value).digest("hex")}`;
+}
+
 export async function createCoachSubscriptionCheckout(input: { coachProfileId: string; planId: string; idempotencyKey: string }) {
   const existing = await prisma.coachSubscription.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
   if (existing?.stripeCheckoutSessionId && coachStripe) {
     const checkout = await coachStripe.checkout.sessions.retrieve(existing.stripeCheckoutSessionId);
     return { subscription: existing, url: checkout.url };
+  }
+  if (await getActiveCoachSubscription(input.coachProfileId)) {
+    throw new Error("Пакет уже подключён. Измените его в разделе управления подпиской");
   }
   const plan = (await listCoachPlans(input.coachProfileId)).find((item) => item.id === input.planId);
   if (!plan || plan.customQuote || !plan.includedClients) throw new Error("Этот пакет подключается через индивидуальный расчёт");
@@ -60,6 +67,158 @@ export async function createCoachSubscriptionCheckout(input: { coachProfileId: s
     data: { stripeCheckoutSessionId: checkout.id }
   });
   return { subscription: updated, url: checkout.url };
+}
+
+export async function createCoachSubscriptionPortal(input: { coachProfileId: string }) {
+  const subscription = await getActiveCoachSubscription(input.coachProfileId);
+  if (!subscription) throw new Error("Активная подписка не найдена");
+  if (!coachStripe) throw new Error("Stripe is not configured");
+  if (!subscription.stripeCustomerId) throw new Error("Платёжный профиль ещё не создан");
+
+  const configurations = await coachStripe.billingPortal.configurations.list({ active: true, limit: 100 });
+  let configuration = configurations.data.find((item) => item.metadata?.orken_surface === "coach_subscription");
+  if (!configuration) {
+    configuration = await coachStripe.billingPortal.configurations.create({
+      business_profile: {
+        headline: "Управление подпиской ORKEN для коучей",
+        privacy_policy_url: `${env.APP_ORIGIN}/privacy`,
+        terms_of_service_url: `${env.APP_ORIGIN}/offer`
+      },
+      default_return_url: `${env.APP_ORIGIN}/coach?billing=returned`,
+      features: {
+        customer_update: { enabled: false, allowed_updates: [] },
+        invoice_history: { enabled: true },
+        payment_method_update: { enabled: true },
+        subscription_cancel: {
+          enabled: true,
+          mode: "at_period_end",
+          cancellation_reason: {
+            enabled: true,
+            options: ["too_expensive", "unused", "missing_features", "customer_service", "other"]
+          }
+        },
+        subscription_update: { enabled: false, default_allowed_updates: [], products: [] }
+      },
+      metadata: { orken_surface: "coach_subscription", version: "1" }
+    }, { idempotencyKey: "orken-coach-billing-portal-v1" });
+  }
+
+  const session = await coachStripe.billingPortal.sessions.create({
+    customer: subscription.stripeCustomerId,
+    configuration: configuration.id,
+    return_url: `${env.APP_ORIGIN}/coach?billing=returned`
+  });
+  return { url: session.url };
+}
+
+export async function changeCoachSubscriptionPlan(input: {
+  coachProfileId: string;
+  planId: string;
+  idempotencyKey: string;
+}) {
+  const subscription = await getActiveCoachSubscription(input.coachProfileId);
+  if (!subscription) throw new Error("Сначала подключите пакет клиентов");
+  const plan = (await listCoachPlans(input.coachProfileId)).find((item) => item.id === input.planId);
+  if (!plan || plan.customQuote || !plan.includedClients) throw new Error("Этот пакет подключается через индивидуальный расчёт");
+  if (subscription.planId === plan.id) return { changed: false, nextChargeAt: subscription.currentPeriodEnd?.toISOString() ?? null };
+
+  const occupiedSeats = await prisma.coachClientRelationship.count({
+    where: { coachProfileId: input.coachProfileId, funding: "COACH_PAID", status: { in: ["PENDING", "ACTIVE"] } }
+  });
+  if (occupiedSeats > plan.includedClients) {
+    throw new Error(`Нельзя перейти на этот пакет: занято мест ${occupiedSeats}, доступно ${plan.includedClients}`);
+  }
+
+  if (!coachStripe) {
+    if (!env.DEV_TOOLS_ENABLED) throw new Error("Stripe is not configured");
+    await prisma.coachSubscription.update({
+      where: { id: subscription.id },
+      data: { planId: plan.id, priceVersionId: plan.priceVersionId, amount: plan.amount, currency: plan.currency, clientLimit: plan.includedClients }
+    });
+    return { changed: true, nextChargeAt: subscription.currentPeriodEnd?.toISOString() ?? null };
+  }
+  if (!subscription.stripeSubscriptionId) throw new Error("Подписка ещё не синхронизирована со Stripe");
+
+  const stripeSubscription = await coachStripe.subscriptions.retrieve(subscription.stripeSubscriptionId);
+  const item = stripeSubscription.items.data[0];
+  if (!item) throw new Error("В Stripe не найден тариф подписки");
+  const priceId = await ensureCoachPlanStripePrice({
+    coachProfileId: input.coachProfileId,
+    plan,
+    idempotencyKey: input.idempotencyKey
+  });
+  await coachStripe.subscriptions.update(subscription.stripeSubscriptionId, {
+    items: [{ id: item.id, price: priceId }],
+    proration_behavior: "none",
+    cancel_at_period_end: false,
+    metadata: {
+      ...stripeSubscription.metadata,
+      kind: "coach_subscription",
+      coachSubscriptionId: subscription.id,
+      coachProfileId: input.coachProfileId,
+      coachPlanId: plan.id,
+      coachPriceVersionId: plan.priceVersionId ?? ""
+    }
+  }, { idempotencyKey: stripeIdempotencyKey("coach-plan-change", input.idempotencyKey) });
+
+  await prisma.coachSubscription.update({
+    where: { id: subscription.id },
+    data: {
+      planId: plan.id,
+      priceVersionId: plan.priceVersionId,
+      amount: plan.amount,
+      currency: plan.currency,
+      clientLimit: plan.includedClients,
+      status: "ACTIVE",
+      cancelAtPeriodEnd: false,
+      graceEndsAt: null
+    }
+  });
+  return { changed: true, nextChargeAt: subscription.currentPeriodEnd?.toISOString() ?? null };
+}
+
+async function ensureCoachPlanStripePrice(input: {
+  coachProfileId: string;
+  plan: Awaited<ReturnType<typeof listCoachPlans>>[number];
+  idempotencyKey: string;
+}) {
+  if (!coachStripe) throw new Error("Stripe is not configured");
+  if (input.plan.stripePriceId) return input.plan.stripePriceId;
+  const storedPlan = await prisma.coachPlan.findUniqueOrThrow({ where: { id: input.plan.id } });
+  let productId = storedPlan.stripeProductId;
+  if (!productId) {
+    const product = await coachStripe.products.create({
+      name: `ORKEN для коучей: ${input.plan.name}`,
+      metadata: { kind: "coach_plan", coachPlanId: input.plan.id }
+    }, { idempotencyKey: stripeIdempotencyKey("coach-plan-product", input.plan.id) });
+    productId = product.id;
+    await prisma.coachPlan.updateMany({ where: { id: input.plan.id, stripeProductId: null }, data: { stripeProductId: productId } });
+  }
+
+  const price = await coachStripe.prices.create({
+    product: productId,
+    currency: input.plan.currency,
+    unit_amount: input.plan.amount,
+    recurring: { interval: "month" },
+    metadata: {
+      kind: "coach_plan",
+      coachPlanId: input.plan.id,
+      coachProfileId: input.plan.overridden ? input.coachProfileId : "",
+      coachPriceVersionId: input.plan.priceVersionId ?? ""
+    }
+  }, {
+    idempotencyKey: stripeIdempotencyKey(
+      "coach-plan-price",
+      `${input.plan.id}:${input.plan.priceVersionId ?? "override"}:${input.plan.amount}:${input.plan.currency}:${input.plan.overridden ? input.coachProfileId : "global"}:${input.idempotencyKey}`
+    )
+  });
+  if (!input.plan.overridden && input.plan.priceVersionId) {
+    await prisma.coachPlanPriceVersion.updateMany({
+      where: { id: input.plan.priceVersionId, stripePriceId: null },
+      data: { stripePriceId: price.id }
+    });
+  }
+  return price.id;
 }
 
 export async function createCoachServiceCheckout(input: { offerId: string; userId: string; idempotencyKey: string }) {

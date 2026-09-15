@@ -31,9 +31,11 @@ import {
   slugifyCoach
 } from "../services/coachPlatform.js";
 import {
+  changeCoachSubscriptionPlan,
   createCoachServiceCheckout,
   createCoachSiteCheckout,
   createCoachSubscriptionCheckout,
+  createCoachSubscriptionPortal,
   coachStripe,
   handleCoachConsultationCancelled
 } from "../services/coachCommerce.js";
@@ -349,6 +351,33 @@ export async function coachWorkspaceRoutes(app: FastifyInstance) {
       return await createCoachSubscriptionCheckout({ coachProfileId: context.profile.id, planId: id, idempotencyKey: `coach-sub:${context.profile.id}:${body.idempotencyKey}` });
     } catch (error) {
       return reply.code(409).send({ error: error instanceof Error ? error.message : "Не удалось открыть оплату" });
+    }
+  });
+
+  app.post("/api/coach/subscription/change/:id", async (request, reply) => {
+    if (!(await requireCoachFeature(reply, "coach_packages_commerce"))) return;
+    const context = await requireCoachWrite(request, reply);
+    if (!context) return;
+    const { id } = idSchema.parse(request.params);
+    const body = checkoutSchema.parse(request.body ?? {});
+    try {
+      return await changeCoachSubscriptionPlan({
+        coachProfileId: context.profile.id,
+        planId: id,
+        idempotencyKey: `coach-sub-change:${context.profile.id}:${body.idempotencyKey}`
+      });
+    } catch (error) {
+      return reply.code(409).send({ error: error instanceof Error ? error.message : "Не удалось изменить пакет" });
+    }
+  });
+
+  app.post("/api/coach/subscription/portal", async (request, reply) => {
+    const context = await requireCoachWrite(request, reply);
+    if (!context) return;
+    try {
+      return await createCoachSubscriptionPortal({ coachProfileId: context.profile.id });
+    } catch (error) {
+      return reply.code(409).send({ error: error instanceof Error ? error.message : "Не удалось открыть управление оплатой" });
     }
   });
 

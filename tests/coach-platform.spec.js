@@ -75,14 +75,29 @@ function clientDetail() {
 
 async function installApiMocks(page, options = {}) {
   let coachingActive = false;
+  let coachLoggedOut = false;
+  let selectedPlanId = "plan-5";
   await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url());
     const method = route.request().method();
     if (method === "OPTIONS") return fulfillJson(route, {});
     if (url.pathname === "/api/auth/guest") return fulfillJson(route, { sessionId: "session-1", guestToken: "guest-1" }, 201);
     if (url.pathname === "/api/coaches") return fulfillJson(route, { coaches: [{ ...profile(), services: [offer()], siteUrl: "https://anna-orlova.orken.life" }], filters: { cities: ["Алматы"], specializations: ["Карьера", "Лидерство"], languages: ["ru"] } });
-    if (url.pathname === "/api/coach/workspace") return fulfillJson(route, options.withoutSubscription ? { ...workspace(), subscription: null, clients: [], counts: { coachPaidClients: 0, clientPaidClients: 0, attention: 0, openAssignments: 0 } } : workspace());
+    if (url.pathname === "/api/coach/workspace") {
+      if (coachLoggedOut) return fulfillJson(route, { error: "Partner login required" }, 401);
+      if (options.withoutSubscription) return fulfillJson(route, { ...workspace(), subscription: null, clients: [], counts: { coachPaidClients: 0, clientPaidClients: 0, attention: 0, openAssignments: 0 } });
+      const value = workspace();
+      const selectedPlan = value.plans.find((plan) => plan.id === selectedPlanId);
+      if (selectedPlan) value.subscription = { ...value.subscription, plan: selectedPlan, clientLimit: selectedPlan.includedClients, availableSlots: selectedPlan.includedClients - value.subscription.coachPaidClients };
+      return fulfillJson(route, value);
+    }
     if (url.pathname.startsWith("/api/coach/subscription/checkout/") && method === "POST") return fulfillJson(route, { url: `${appBase}/coach?subscription_checkout=mock` });
+    if (url.pathname.startsWith("/api/coach/subscription/change/") && method === "POST") {
+      selectedPlanId = url.pathname.split("/").pop();
+      return fulfillJson(route, { changed: true, nextChargeAt: "2026-09-12T10:00:00.000Z" });
+    }
+    if (url.pathname === "/api/coach/subscription/portal" && method === "POST") return fulfillJson(route, { url: `${appBase}/coach?billing=returned` });
+    if (url.pathname === "/api/partners/portal/logout" && method === "POST") { coachLoggedOut = true; return fulfillJson(route, { ok: true }); }
     if (url.pathname === "/api/coach/invites" && method === "POST") return fulfillJson(route, { inviteId: "invite-1", connectUrl: `${appBase}/habits/coaching?coach_invite=invite-token`, expiresAt: "2026-08-27T10:00:00.000Z" }, 201);
     if (url.pathname === "/api/coach/clients/rel-1" && method === "GET") return fulfillJson(route, clientDetail());
     if (url.pathname === "/api/coach/clients/rel-1/messages" && method === "POST") return fulfillJson(route, clientDetail().messages[0], 201);
@@ -160,8 +175,17 @@ test("coach registers directly in the production cabinet", async ({ page }) => {
     return fulfillJson(route, { error: `Unmocked ${route.request().method()} ${url.pathname}` }, 404);
   });
 
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`${appBase}/coach`);
   await expect(page.getByRole("heading", { name: "Вход для коуча" })).toBeVisible();
+  await page.getByLabel("Email").fill("coach@example.com");
+  await page.getByRole("button", { name: "Забыли пароль?" }).click();
+  await expect(page.getByRole("heading", { name: "Восстановление доступа" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Написать в поддержку" })).toHaveAttribute("href", /mailto:orken\.eco@gmail\.com/);
+  if (captureScreenshots) {
+    fs.mkdirSync(screenshotDir, { recursive: true });
+    await page.screenshot({ path: path.join(screenshotDir, "coach-password-recovery-390.png"), fullPage: true });
+  }
   await page.getByRole("button", { name: "Зарегистрироваться" }).click();
   await page.getByLabel("Имя и фамилия").fill("Анна Орлова");
   await page.getByLabel("Email").fill("coach@example.com");
@@ -171,6 +195,28 @@ test("coach registers directly in the production cabinet", async ({ page }) => {
   await page.getByRole("button", { name: "Создать кабинет" }).click();
   await expect(page.getByRole("heading", { name: "Рабочий обзор" })).toBeVisible();
   await expect(page.getByText("Публичный профиль и продажи станут доступны после модерации.")).toBeVisible();
+});
+
+test("coach can change package, open Stripe billing, and log out", async ({ page }) => {
+  await installApiMocks(page);
+  await page.goto(`${appBase}/coach`);
+  await page.getByRole("button", { name: "Пакет" }).first().click();
+  await expect(page.getByRole("button", { name: "Карта, счета и отмена" })).toBeEnabled();
+  if (captureScreenshots) {
+    fs.mkdirSync(screenshotDir, { recursive: true });
+    await page.setViewportSize({ width: 360, height: 900 });
+    await page.screenshot({ path: path.join(screenshotDir, "coach-subscription-360.png"), fullPage: true });
+  }
+
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Перейти на пакет" }).click();
+  await expect(page.getByRole("heading", { name: "Текущий пакет: До 15 клиентов" })).toBeVisible();
+  await expect(page.getByText(/Новый лимит уже доступен/)).toBeVisible();
+
+  await page.getByRole("button", { name: "Карта, счета и отмена" }).click();
+  await expect(page.getByText(/Настройки оплаты обновлены/)).toBeVisible();
+  await page.getByRole("button", { name: "Выйти" }).click();
+  await expect(page.getByRole("heading", { name: "Вход для коуча" })).toBeVisible();
 });
 
 test("client progress, archive, and explicit coach consent work on target widths", async ({ page }) => {

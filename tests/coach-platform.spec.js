@@ -114,12 +114,14 @@ test("coach catalog and workspace are responsive and actionable", async ({ page 
   await expect(page.getByRole("link", { name: /Посмотреть профиль/ })).toBeVisible();
 
   await assertResponsive(page, "/coach", "Рабочий обзор", [360, 768, 1024, 1440]);
+  await expect(page.getByRole("heading", { name: "Кабинет готов к работе" })).toBeVisible();
   await page.getByRole("button", { name: "Пакет" }).first().click();
   await expect(page.getByText("Текущий пакет: До 5 клиентов")).toBeVisible();
   await expect(page.getByText(/1 из 5 мест занято/)).toBeVisible();
   await page.getByRole("button", { name: "Расписание" }).first().click();
-  await expect(page.getByRole("heading", { name: "Где вести расписание" })).toBeVisible();
-  await expect(page.getByText("В ORKEN", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Встроенное расписание ORKEN" })).toBeVisible();
+  await expect(page.getByText("Google Calendar", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Calendly", { exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Клиенты" }).first().click();
   await page.getByLabel("Кто оплачивает доступ").selectOption("CLIENT_PAID");
   await page.getByRole("button", { name: "Создать приглашение" }).click();
@@ -136,6 +138,39 @@ test("coach catalog and workspace are responsive and actionable", async ({ page 
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
     if (captureScreenshots) await page.screenshot({ path: path.join(screenshotDir, `coach-scheduling-${width}.png`), fullPage: true });
   }
+});
+
+test("coach registers directly in the production cabinet", async ({ page }) => {
+  let authenticated = false;
+  await page.route("**/api/**", async (route) => {
+    const url = new URL(route.request().url());
+    if (route.request().method() === "OPTIONS") return fulfillJson(route, {});
+    if (url.pathname === "/api/coach/workspace") {
+      return authenticated
+        ? fulfillJson(route, { ...workspace(), profile: profile({ status: "PENDING_REVIEW" }), subscription: null, clients: [], counts: { coachPaidClients: 0, clientPaidClients: 0, attention: 0, openAssignments: 0 } })
+        : fulfillJson(route, { error: "Partner login required" }, 401);
+    }
+    if (url.pathname === "/api/partners/portal/register" && route.request().method() === "POST") {
+      const body = route.request().postDataJSON();
+      expect(body).toMatchObject({ email: "coach@example.com", displayName: "Анна Орлова", accountName: "Анна Орлова", accountType: "individual" });
+      expect(body.password).toHaveLength(12);
+      authenticated = true;
+      return fulfillJson(route, { partner: { partnerCorePartnerId: "partner-new", status: "PENDING_REVIEW", displayName: "Анна Орлова", email: body.email }, expiresAt: "2026-10-01T00:00:00.000Z" }, 201);
+    }
+    return fulfillJson(route, { error: `Unmocked ${route.request().method()} ${url.pathname}` }, 404);
+  });
+
+  await page.goto(`${appBase}/coach`);
+  await expect(page.getByRole("heading", { name: "Вход для коуча" })).toBeVisible();
+  await page.getByRole("button", { name: "Зарегистрироваться" }).click();
+  await page.getByLabel("Имя и фамилия").fill("Анна Орлова");
+  await page.getByLabel("Email").fill("coach@example.com");
+  await page.locator('input[type="password"]').first().fill("StrongPass12");
+  await page.getByLabel("Повторите пароль").fill("StrongPass12");
+  await page.getByLabel(/Принимаю/).check();
+  await page.getByRole("button", { name: "Создать кабинет" }).click();
+  await expect(page.getByRole("heading", { name: "Рабочий обзор" })).toBeVisible();
+  await expect(page.getByText("Публичный профиль и продажи станут доступны после модерации.")).toBeVisible();
 });
 
 test("client progress, archive, and explicit coach consent work on target widths", async ({ page }) => {

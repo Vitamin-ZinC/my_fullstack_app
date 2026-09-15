@@ -1,5 +1,8 @@
 const { test, expect } = require("@playwright/test");
 
+const appBase = process.env.E2E_APP_BASE || "http://localhost:3000";
+const apiBase = process.env.E2E_API_BASE || "http://localhost:3001";
+
 const metrics = Array.from({ length: 14 }, (_, index) => ({
   date: `2026-08-${String(index + 1).padStart(2, "0")}`,
   energy: 5 + (index % 4),
@@ -40,9 +43,9 @@ const workspace = {
 
 async function mockDemoApi(page) {
   let authenticated = false;
-  await page.route("http://localhost:3001/api/demo/**", async (route) => {
+  await page.route(`${apiBase}/api/demo/**`, async (route) => {
     const url = new URL(route.request().url());
-    const headers = { "content-type": "application/json", "access-control-allow-origin": "http://localhost:3100", "access-control-allow-credentials": "true" };
+    const headers = { "content-type": "application/json", "access-control-allow-origin": appBase, "access-control-allow-credentials": "true" };
     if (url.pathname === "/api/demo/access") {
       authenticated = true;
       return route.fulfill({ status: 200, headers, body: JSON.stringify({ active: true, label: "E2E demo", expiresAt: "2026-08-14T18:00:00.000Z" }) });
@@ -55,7 +58,7 @@ async function mockDemoApi(page) {
 
 test("demo code opens isolated coach and client workspaces", async ({ page }) => {
   await mockDemoApi(page);
-  await page.goto("http://localhost:3100/demo");
+  await page.goto(`${appBase}/demo`);
   await expect(page.getByRole("heading", { name: "Кабинеты коуча и клиента" })).toBeVisible();
   await page.getByLabel("Код доступа").fill("ORKEN-DEMO-TEST-TEST-TEST");
   await page.getByRole("button", { name: /Открыть демо/ }).click();
@@ -75,7 +78,7 @@ test("demo code opens isolated coach and client workspaces", async ({ page }) =>
 test("demo stays within the mobile viewport", async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 800 });
   await mockDemoApi(page);
-  await page.goto("http://localhost:3100/demo");
+  await page.goto(`${appBase}/demo`);
   await page.getByLabel("Код доступа").fill("ORKEN-DEMO-TEST-TEST-TEST");
   await page.getByRole("button", { name: /Открыть демо/ }).click();
   await expect(page.getByRole("heading", { name: /Добрый день, Алексей/ })).toBeVisible();
@@ -87,10 +90,10 @@ test("demo stays within the mobile viewport", async ({ page }) => {
 test("admin can create and revoke demo access without seeing stored plaintext", async ({ page }) => {
   await page.addInitScript(() => window.sessionStorage.setItem("levelup_admin_session", "e2e-admin-session"));
   let codes = [];
-  await page.route("http://localhost:3001/api/admin/**", async (route) => {
+  await page.route(`${apiBase}/api/admin/**`, async (route) => {
     const request = route.request();
     const url = new URL(request.url());
-    const headers = { "content-type": "application/json", "access-control-allow-origin": "http://localhost:3100" };
+    const headers = { "content-type": "application/json", "access-control-allow-origin": appBase };
     if (url.pathname === "/api/admin/coaches/platform") {
       return route.fulfill({ status: 200, headers, body: JSON.stringify({
         profiles: [], plans: [], sitePlans: [], subscriptions: [], orders: [], offers: [], rewardsPendingReview: [],
@@ -108,7 +111,7 @@ test("admin can create and revoke demo access without seeing stored plaintext", 
     }
     return route.fulfill({ status: 404, headers, body: JSON.stringify({ error: "Not mocked" }) });
   });
-  await page.goto("http://localhost:3100/admin/coaches");
+  await page.goto(`${appBase}/admin/coaches`);
   await expect(page.getByRole("heading", { name: "Демо-доступ к кабинетам" })).toBeVisible();
   await page.getByRole("button", { name: /Создать код/ }).click();
   await expect(page.getByText("ORKEN-DEMO-ABCD-1234-CDEF")).toBeVisible();

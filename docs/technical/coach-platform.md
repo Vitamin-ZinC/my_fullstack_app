@@ -21,7 +21,7 @@ ORKEN stores product-specific coaching data only:
 
 ## Authentication And Consent
 
-- `/coach` and `/partners` use the same Partner Core login and ORKEN BFF session.
+- `/coach` provides both registration and login and shares the same Partner Core identity and ORKEN BFF session with `/partners`.
 - The browser receives only the ORKEN HttpOnly session cookie and double-submit CSRF cookie.
 - The Core token remains encrypted in `PartnerPortalSession` on the backend.
 - A coach can read a client only through an owned active relationship.
@@ -110,11 +110,13 @@ Stripe webhook events used by the shared payment endpoint:
 
 ## Scheduling, Calendars, And Telegram
 
-`CoachScheduleSettings` is the source of truth for the selected provider, timezone, slot duration, buffers, minimum notice, booking horizon, weekly rules, and date exceptions. `CoachAppointment` is the product-owned booking record for every provider.
+`CoachScheduleSettings` is the source of truth for the selected provider, timezone, slot duration, buffers, minimum notice, booking horizon, weekly rules, and date exceptions. `CoachAppointment` is the product-owned booking record for every provider. The production coach cabinet currently exposes only the built-in `ORKEN` provider so a coach can start without external setup.
 
 - `ORKEN` requires no external account. The client picks an available slot inside Coaching Hub.
 - `GOOGLE` reads busy intervals through FreeBusy and creates an attendee event with a Google Meet link. OAuth tokens are encrypted on the backend. ORKEN remains the source of truth; calendar writes are an adapter.
 - `CALENDLY` redirects the client to the approved event type. Webhooks and the existing 30-minute reconciliation job write the resulting meeting into `CoachAppointment`.
+
+Google and Calendly adapters remain backend capabilities but are intentionally hidden from the current production UI. Re-enable them only after credentials and the complete booking flow are production-tested.
 
 Google OAuth needs `GOOGLE_CALENDAR_CLIENT_ID`, `GOOGLE_CALENDAR_CLIENT_SECRET`, and `GOOGLE_CALENDAR_REDIRECT_URI`. Calendly uses its existing OAuth variables. Both integrations use the high-entropy backend-only `COACH_INTEGRATION_TOKEN_ENCRYPTION_SECRET`; `CALENDLY_TOKEN_ENCRYPTION_SECRET` remains a compatibility fallback for existing installations.
 
@@ -143,7 +145,7 @@ The main `/for-coaches` positioning fields are stored in `AppSetting.coach_publi
 ## Production Checklist
 
 1. Apply `20260812190000_coach_platform`, `20260813090000_split_coach_commerce_flags`, and `20260813153000_coach_scheduling` with `prisma migrate deploy`, then run `prisma generate`.
-2. Keep ORKEN scheduling available by default. Configure backend-only Google and/or Calendly OAuth credentials only for providers offered in production, plus a high-entropy integration token encryption secret.
+2. Keep ORKEN scheduling as the only provider in the current coach UI. Configure backend-only Google and/or Calendly OAuth credentials only before explicitly restoring those providers, plus a high-entropy integration token encryption secret.
 3. Configure a published 100% coach-payout program in Partner Core and set `COACH_PAYOUT_PARTNER_CORE_PROGRAM_ID`.
 4. Subscribe the existing Stripe webhook to the events listed above.
 5. Configure wildcard DNS and TLS for `*.orken.life` at the reverse proxy/CDN.

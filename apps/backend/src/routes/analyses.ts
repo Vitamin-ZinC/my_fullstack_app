@@ -39,13 +39,16 @@ const contactEmailSchema = z.object({
   email: z.string().trim().email().max(254)
 });
 
+const audioMimeTypeSchema = z.enum(["audio/webm", "audio/mp4", "audio/ogg", "audio/mpeg", "audio/wav"]);
+
 export async function analysisRoutes(app: FastifyInstance) {
   app.post("/api/analyses", async (request, reply) => {
     const session = await requireSession(request, reply);
     if (!session) return;
     const parsedBody = z.object({
       locale: z.string().optional(),
-      audioConsent: z.literal(true)
+      audioConsent: z.literal(true),
+      audioMimeType: audioMimeTypeSchema.optional().default("audio/webm")
     }).safeParse(request.body ?? {});
     if (!parsedBody.success) {
       return reply.code(400).send({
@@ -55,7 +58,7 @@ export async function analysisRoutes(app: FastifyInstance) {
     }
     const body = parsedBody.data;
     const locale = (body.locale ?? session.locale ?? getRequestedLocale(request)).slice(0, 12);
-    const media = await createMediaUploadUrls();
+    const media = await createMediaUploadUrls(body.audioMimeType);
     const consentedAt = new Date();
     const analysis = await prisma.analysis.create({
       data: {
@@ -68,7 +71,7 @@ export async function analysisRoutes(app: FastifyInstance) {
         status: "PENDING",
         mediaAssets: {
           create: [
-            { type: "AUDIO", key: media.audioKey, mimeType: "audio/webm" },
+            { type: "AUDIO", key: media.audioKey, mimeType: body.audioMimeType },
             { type: "PHOTO", key: media.photoKey, mimeType: "image/jpeg" }
           ]
         }

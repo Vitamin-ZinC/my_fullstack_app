@@ -1,6 +1,6 @@
 "use client";
 
-import { Mic, RotateCcw, Square } from "lucide-react";
+import { ExternalLink, FileAudio, Mic, RotateCcw, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { api, storeAnalysisDraft, uploadMedia } from "@/lib/api";
 import { useSiteText } from "@/lib/useSiteText";
@@ -11,6 +11,8 @@ type VoiceMetrics = {
   size: number;
 };
 
+type MicrophoneIssue = "permission" | "unavailable" | "busy" | "unsupported" | "insecure" | "generic" | null;
+
 const MIN_RECORDING_SECONDS = 30;
 const MAX_RECORDING_SECONDS = 60;
 const TOPIC_ROTATION_SECONDS = 7;
@@ -20,6 +22,7 @@ export default function VoicePage() {
   const recorder = useRef<MediaRecorder | null>(null);
   const stream = useRef<MediaStream | null>(null);
   const chunks = useRef<Blob[]>([]);
+  const fileInput = useRef<HTMLInputElement | null>(null);
   const timer = useRef<number | null>(null);
   const secondsRef = useRef(0);
   const [recording, setRecording] = useState(false);
@@ -30,11 +33,16 @@ export default function VoicePage() {
   const [audioUrl, setAudioUrl] = useState("");
   const [metrics, setMetrics] = useState<VoiceMetrics | null>(null);
   const [error, setError] = useState("");
+  const [microphoneIssue, setMicrophoneIssue] = useState<MicrophoneIssue>(null);
+  const [restrictedContext, setRestrictedContext] = useState(false);
+  const [externalUrl, setExternalUrl] = useState("");
   const [validationMessage, setValidationMessage] = useState("");
   const [consent, setConsent] = useState(false);
 
   useEffect(() => {
     setReady(true);
+    setRestrictedContext(isRestrictedBrowserContext());
+    setExternalUrl(window.location.href);
   }, []);
 
   useEffect(() => () => {
@@ -45,6 +53,7 @@ export default function VoicePage() {
 
   async function start() {
     setError("");
+    setMicrophoneIssue(null);
     setValidationMessage("");
 
     if (!consent) {
@@ -52,7 +61,14 @@ export default function VoicePage() {
       return;
     }
 
+    if (!window.isSecureContext) {
+      setMicrophoneIssue("insecure");
+      setError(text.insecureContext);
+      return;
+    }
+
     if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+      setMicrophoneIssue("unsupported");
       setError(text.unsupported);
       return;
     }
@@ -65,11 +81,12 @@ export default function VoicePage() {
       });
       stream.current = mediaStream;
 
-      const draft = await api.createAnalysis();
+      const recorderMimeType = getRecorderMimeType();
+      const audioMimeType = normalizeAudioMimeType(recorderMimeType) ?? "audio/webm";
+      const draft = await api.createAnalysis(audioMimeType);
       storeAnalysisDraft(draft);
 
-      const mimeType = getRecorderMimeType();
-      const mediaRecorder = new MediaRecorder(mediaStream, mimeType ? { mimeType } : undefined);
+      const mediaRecorder = new MediaRecorder(mediaStream, recorderMimeType ? { mimeType: recorderMimeType } : undefined);
       recorder.current = mediaRecorder;
       chunks.current = [];
       mediaRecorder.ondataavailable = (event) => {
@@ -83,7 +100,9 @@ export default function VoicePage() {
         setUploading(false);
       };
       mediaRecorder.onstop = () => {
-        void uploadRecording(draft.analysisId, draft.audioUploadUrl, mediaRecorder.mimeType || mimeType || "audio/webm");
+        const mimeType = normalizeAudioMimeType(mediaRecorder.mimeType) ?? audioMimeType;
+        const blob = new Blob(chunks.current, { type: mimeType });
+        void uploadRecording(draft.analysisId, draft.audioUploadUrl, blob, secondsRef.current, mimeType);
       };
       mediaRecorder.start(250);
       setRecording(true);
@@ -92,7 +111,9 @@ export default function VoicePage() {
       setSeconds(0);
       startTimer();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : text.failed);
+      const issue = classifyMicrophoneIssue(reason);
+      setMicrophoneIssue(issue);
+      setError(microphoneIssueMessage(issue, text));
       stopStream();
     } finally {
       setUploading(false);
@@ -116,10 +137,8 @@ export default function VoicePage() {
     }
   }
 
-  async function uploadRecording(analysisId: string, uploadUrl: string, mime: string) {
+  async function uploadRecording(analysisId: string, uploadUrl: string, blob: Blob, duration: number, mime: string) {
     try {
-      const blob = new Blob(chunks.current, { type: mime });
-      const duration = secondsRef.current;
       const validation = validateVoiceRecording(blob, duration);
       if (!validation.ok) throw new Error(validation.message);
 
@@ -146,6 +165,45 @@ export default function VoicePage() {
     }
   }
 
+  async function selectAudioFile(event: React.ChangeEvent<HTMLInputElement>) {
+    const selectedFile = event.target.files?.[0];
+    event.target.value = "";
+    if (!selectedFile) return;
+
+    setError("");
+    setMicrophoneIssue(null);
+    setValidationMessage("");
+
+    if (!consent) {
+      setError(text.consentRequired);
+      return;
+    }
+
+    const mimeType = normalizeAudioMimeType(selectedFile.type, selectedFile.name);
+    if (!mimeType) {
+      setError(text.uploadUnsupported);
+      return;
+    }
+
+    resetRecording(false);
+    setUploading(true);
+    setValidationMessage(text.readingFile);
+    try {
+      const duration = await readAudioDuration(selectedFile);
+      const blob = new Blob([selectedFile], { type: mimeType });
+      const validation = validateVoiceRecording(blob, duration);
+      if (!validation.ok) throw new Error(validation.message);
+
+      const draft = await api.createAnalysis(mimeType);
+      storeAnalysisDraft(draft);
+      await uploadRecording(draft.analysisId, draft.audioUploadUrl, blob, duration, mimeType);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : text.failed);
+      setValidationMessage("");
+      setUploading(false);
+    }
+  }
+
   function resetRecording(clearError = true) {
     stopTimer();
     if (recorder.current && recorder.current.state !== "inactive") {
@@ -166,6 +224,7 @@ export default function VoicePage() {
     window.sessionStorage.removeItem("levelup_voice_ready");
     window.sessionStorage.removeItem("levelup_voice_duration_seconds");
     if (clearError) setError("");
+    if (clearError) setMicrophoneIssue(null);
   }
 
   function startTimer() {
@@ -279,13 +338,46 @@ export default function VoicePage() {
         </div>
       </div>
 
-      {error && <div className="card error-card">{error}</div>}
+      {error && (
+        <div className="card error-card voice-error-card" role="alert">
+          <strong>{error}</strong>
+          {microphoneIssue === "permission" && <span>{text.permissionHelp}</span>}
+          {restrictedContext && microphoneIssue && externalUrl && (
+            <a className="button secondary compact" href={externalUrl} target="_blank" rel="noopener noreferrer">
+              <ExternalLink size={16} /> {text.openBrowser}
+            </a>
+          )}
+        </div>
+      )}
       {validationMessage && <p className="auth-message" role="status">{validationMessage}</p>}
 
       {!recording && !done && (
         <button className="button" data-testid="voice-record-button" onClick={start} disabled={!ready || uploading || !consent}>
-          <Mic size={18} /> {uploading ? text.busy : text.start}
+          <Mic size={18} /> {uploading ? text.busy : microphoneIssue ? text.retryAccess : text.start}
         </button>
+      )}
+      {!recording && !done && (
+        <div className="voice-upload-area">
+          <span className="very-muted">{text.orUpload}</span>
+          <button
+            className="button secondary"
+            type="button"
+            data-testid="voice-file-button"
+            onClick={() => fileInput.current?.click()}
+            disabled={uploading || !consent}
+          >
+            <FileAudio size={18} /> {text.uploadFile}
+          </button>
+          <input
+            ref={fileInput}
+            data-testid="voice-file-input"
+            type="file"
+            accept="audio/webm,audio/mp4,audio/ogg,audio/mpeg,audio/wav,.webm,.m4a,.mp4,.ogg,.mp3,.wav"
+            onChange={selectAudioFile}
+            disabled={uploading || !consent}
+          />
+          <span className="very-muted">{text.uploadHint}</span>
+        </div>
       )}
       {recording && !canStop && (
         <div className="voice-minimum-hint" data-testid="voice-stop-locked">
@@ -314,9 +406,69 @@ function getRecorderMimeType() {
   return types.find((type) => window.MediaRecorder?.isTypeSupported(type)) || "";
 }
 
+function normalizeAudioMimeType(value: string, fileName = "") {
+  const mimeType = value.toLowerCase().split(";", 1)[0].trim();
+  if (["audio/webm", "audio/mp4", "audio/ogg", "audio/mpeg", "audio/wav"].includes(mimeType)) return mimeType;
+  if (["audio/x-m4a", "audio/m4a", "video/mp4"].includes(mimeType)) return "audio/mp4";
+  if (mimeType === "audio/x-wav") return "audio/wav";
+
+  const extension = fileName.toLowerCase().split(".").pop();
+  return ({ webm: "audio/webm", m4a: "audio/mp4", mp4: "audio/mp4", ogg: "audio/ogg", mp3: "audio/mpeg", wav: "audio/wav" } as Record<string, string>)[extension ?? ""] ?? null;
+}
+
+function classifyMicrophoneIssue(reason: unknown): Exclude<MicrophoneIssue, null> {
+  const name = reason instanceof DOMException || reason instanceof Error ? reason.name : "";
+  if (name === "NotAllowedError" || name === "PermissionDeniedError" || name === "SecurityError") return "permission";
+  if (name === "NotFoundError" || name === "DevicesNotFoundError" || name === "OverconstrainedError") return "unavailable";
+  if (name === "NotReadableError" || name === "TrackStartError" || name === "AbortError") return "busy";
+  return "generic";
+}
+
+function microphoneIssueMessage(issue: Exclude<MicrophoneIssue, null>, text: ReturnType<typeof useSiteText>["flow"]["voice"]) {
+  if (issue === "permission") return text.permissionDenied;
+  if (issue === "unavailable") return text.microphoneUnavailable;
+  if (issue === "busy") return text.microphoneBusy;
+  if (issue === "unsupported") return text.unsupported;
+  if (issue === "insecure") return text.insecureContext;
+  return text.failed;
+}
+
+function isRestrictedBrowserContext() {
+  const userAgent = navigator.userAgent.toLowerCase();
+  return window.self !== window.top || /(telegram|instagram|fban|fbav|; wv\)|line\/)/i.test(userAgent);
+}
+
+function readAudioDuration(file: File) {
+  return new Promise<number>((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const audio = document.createElement("audio");
+    const timeout = window.setTimeout(() => finish(() => reject(new Error("Не удалось прочитать длительность аудио. Выберите другой файл."))), 10000);
+
+    const finish = (callback: () => void) => {
+      window.clearTimeout(timeout);
+      audio.removeAttribute("src");
+      audio.load();
+      URL.revokeObjectURL(url);
+      callback();
+    };
+
+    audio.preload = "metadata";
+    audio.onloadedmetadata = () => {
+      if (!Number.isFinite(audio.duration) || audio.duration <= 0) {
+        finish(() => reject(new Error("Не удалось прочитать длительность аудио. Выберите другой файл.")));
+        return;
+      }
+      finish(() => resolve(Math.round(audio.duration)));
+    };
+    audio.onerror = () => finish(() => reject(new Error("Формат аудио не поддерживается браузером. Выберите MP3, M4A, WAV, WEBM или OGG.")));
+    audio.src = url;
+  });
+}
+
 function validateVoiceRecording(blob: Blob, duration: number) {
   if (!blob || blob.size < 2500) return { ok: false, message: "Голос не распознан: запись слишком короткая или пустая. Запишите фразу голосом, а не тишину." };
   if (duration < MIN_RECORDING_SECONDS) return { ok: false, message: "Для анализа нужно минимум 30 секунд речи. Расскажите о себе по подсказкам и повторите запись." };
+  if (duration > 300) return { ok: false, message: "Запись длиннее 5 минут. Выберите фрагмент длительностью 30–60 секунд." };
   return { ok: true, message: "" };
 }
 

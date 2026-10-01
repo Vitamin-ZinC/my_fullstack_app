@@ -590,13 +590,13 @@ export const api = {
     storeSession(result);
     return result;
   },
-  createAnalysis: () => withFreshGuestSessionRetry(() => request<{
+  createAnalysis: (audioMimeType = "audio/webm") => withFreshGuestSessionRetry(() => request<{
     analysisId: string;
     audioUploadUrl: string;
     photoUploadUrl: string;
   }>("/api/analyses", {
       method: "POST",
-      body: JSON.stringify({ locale: getStoredLocale(), audioConsent: true })
+      body: JSON.stringify({ locale: getStoredLocale(), audioConsent: true, audioMimeType })
     })),
   confirmAnalysis: (analysisId: string, ikigaiAnswers: IkigaiAnswers, clientMetrics?: AnalysisClientMetrics) => request<{ status: string; jobId: string }>(`/api/analyses/${analysisId}/confirm`, {
     method: "POST",

@@ -109,6 +109,25 @@ function createHabitProgram(overrides = {}) {
   };
 }
 
+function createSilentWav(seconds = 31, sampleRate = 8000) {
+  const dataLength = seconds * sampleRate * 2;
+  const buffer = Buffer.alloc(44 + dataLength);
+  buffer.write("RIFF", 0);
+  buffer.writeUInt32LE(36 + dataLength, 4);
+  buffer.write("WAVE", 8);
+  buffer.write("fmt ", 12);
+  buffer.writeUInt32LE(16, 16);
+  buffer.writeUInt16LE(1, 20);
+  buffer.writeUInt16LE(1, 22);
+  buffer.writeUInt32LE(sampleRate, 24);
+  buffer.writeUInt32LE(sampleRate * 2, 28);
+  buffer.writeUInt16LE(2, 32);
+  buffer.writeUInt16LE(16, 34);
+  buffer.write("data", 36);
+  buffer.writeUInt32LE(dataLength, 40);
+  return buffer;
+}
+
 test.use({
   permissions: ["microphone", "camera"],
   launchOptions: {
@@ -223,6 +242,55 @@ test("voice flow renews an expired guest session before recording", async ({ pag
   await expect(page.getByText("Invalid or expired session")).toHaveCount(0);
   expect(analysisRequests).toBe(2);
   expect(guestRequests).toBe(1);
+});
+
+test("voice flow explains denied microphone access and accepts an uploaded audio file", async ({ page }) => {
+  let analysisRequests = 0;
+  await page.route(`${apiBase}/api/content/ru`, async (route) => fulfillJson(route, { locale: "ru", value: null }));
+  await page.route(`${apiBase}/api/auth/guest`, async (route) => fulfillJson(route, { sessionId: "audio-file-session", guestToken: "audio-file-token" }));
+  await page.route(`${apiBase}/api/analyses`, async (route) => {
+    analysisRequests += 1;
+    expect(route.request().postDataJSON()).toMatchObject({ audioConsent: true, audioMimeType: "audio/wav" });
+    await fulfillJson(route, {
+      analysisId: "analysis-audio-file",
+      audioUploadUrl: `${apiBase}/uploads/audio-file.wav`,
+      photoUploadUrl: `${apiBase}/uploads/photo-audio-file.jpg`
+    });
+  });
+  await page.route(`${apiBase}/uploads/audio-file.wav`, async (route) => {
+    expect(route.request().method()).toBe("PUT");
+    expect(route.request().headers()["content-type"]).toBe("audio/wav");
+    await route.fulfill({ status: 200, body: "ok", headers: corsHeaders });
+  });
+  await page.route(`${apiBase}/api/analyses/analysis-audio-file/audio/validate`, async (route) => {
+    await fulfillJson(route, { suitable: true, cached: false, wordCount: 38 });
+  });
+
+  await page.goto(`${appBase}/flow/voice`);
+  await page.evaluate(() => {
+    Object.defineProperty(navigator.mediaDevices, "getUserMedia", {
+      configurable: true,
+      value: async () => { throw new DOMException("The request is not allowed by the user agent", "NotAllowedError"); }
+    });
+  });
+  await page.getByTestId("voice-consent").getByRole("checkbox").check();
+  await page.getByTestId("voice-record-button").click();
+
+  await expect(page.getByText("Нет доступа к микрофону.")).toBeVisible();
+  await expect(page.getByText(/The request is not allowed/)).toHaveCount(0);
+  await expect(page.getByTestId("voice-record-button")).toContainText("Повторить запрос");
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+  expect(analysisRequests).toBe(0);
+
+  await page.getByTestId("voice-file-input").setInputFiles({
+    name: "voice.wav",
+    mimeType: "audio/wav",
+    buffer: createSilentWav()
+  });
+
+  await expect(page.locator("audio[controls]")).toBeVisible({ timeout: 15000 });
+  await expect(page.getByText("Голос обнаружен. Запись подходит для анализа.")).toBeVisible();
+  expect(analysisRequests).toBe(1);
 });
 
 test("admin business reports show subscription types and export CSV on mobile", async ({ page }) => {

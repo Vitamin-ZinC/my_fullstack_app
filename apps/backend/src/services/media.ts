@@ -45,8 +45,17 @@ async function streamToBuffer(stream: unknown) {
   return Buffer.concat(chunks);
 }
 
-export async function createMediaUploadUrls() {
-  const audioKey = `audio-${randomUUID()}.webm`;
+const AUDIO_EXTENSIONS: Record<string, string> = {
+  "audio/webm": "webm",
+  "audio/mp4": "m4a",
+  "audio/ogg": "ogg",
+  "audio/mpeg": "mp3",
+  "audio/wav": "wav"
+};
+
+export async function createMediaUploadUrls(audioMimeType = "audio/webm") {
+  const normalizedAudioMimeType = AUDIO_EXTENSIONS[audioMimeType] ? audioMimeType : "audio/webm";
+  const audioKey = `audio-${randomUUID()}.${AUDIO_EXTENSIONS[normalizedAudioMimeType]}`;
   const photoKey = `photo-${randomUUID()}.jpg`;
 
   if (!hasS3Config && (env.LOCAL_UPLOADS_ENABLED || env.NODE_ENV !== "production")) {
@@ -61,7 +70,7 @@ export async function createMediaUploadUrls() {
   const audioUploadUrl = await getSignedUrl(client, new PutObjectCommand({
     Bucket: env.S3_BUCKET,
     Key: audioKey,
-    ContentType: "audio/webm"
+    ContentType: normalizedAudioMimeType
   }), { expiresIn: 900 });
   const photoUploadUrl = await getSignedUrl(client, new PutObjectCommand({
     Bucket: env.S3_BUCKET,

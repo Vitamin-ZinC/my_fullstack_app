@@ -298,9 +298,14 @@ failure, stops the release; the current production containers remain running.
 API security regression tests also run in the Linux backend image before the
 production release is switched, including after Node.js runtime upgrades.
 `npm run test:image-runtime` checks PNG, JPEG and WebP conversion in the frontend
-image before switching production. The current VM CPU lacks x64-v2 instructions;
-`@img/sharp-wasm32` 0.35.5 is explicitly installed as sharp's supported fallback.
-Keep its version aligned with sharp when upgrading the image-processing stack.
+image before switching production. The current VM CPU lacks x64-v2 and Wasm SIMD
+instructions. Docker builds sharp 0.35.5 against libvips 8.18.7 from source,
+verifies the upstream tarball SHA-256, and copies only the runtime libraries to
+the final image. Image optimization supports PNG, JPEG and WebP; optional SVG,
+HEIF/AVIF and PDF decoders are not enabled in this build. Diagnostic media upload
+and validation on the backend are independent of Next.js image optimization.
+Keep sharp and libvips versions aligned when upgrading; do not use an old libvips
+or force its minimum-version check off to work around the VM CPU limitation.
 
 Docker uses Node.js 24.21.0 LTS instead of the unsupported Node.js 20 branch.
 Keep the pinned image version current with supported

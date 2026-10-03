@@ -10,6 +10,7 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
+    "@img/sharp-wasm32": "0.35.5",
     "@levelup/contracts": "file:../../packages/contracts",
     "@stripe/stripe-js": "^4.1.0",
     "lucide-react": "^0.468.0",

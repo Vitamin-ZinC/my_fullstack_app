@@ -110,6 +110,10 @@ for service in backend frontend; do
     "$service" npm run security:audit < /dev/null
 done
 
+log "Checking image processing in the production runtime"
+docker compose --env-file .env -f "$COMPOSE_FILE" -p "$PROJECT_NAME" run --rm --no-deps -T \
+  frontend npm run test:image-runtime < /dev/null
+
 log "Checking API security regressions in the production runtime"
 docker compose --env-file .env -f "$COMPOSE_FILE" -p "$PROJECT_NAME" run --rm --no-deps -T \
   backend npm --workspace apps/backend exec -- tsx --test src/lib/httpSecurity.test.ts < /dev/null

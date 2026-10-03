@@ -297,6 +297,10 @@ release. Any known vulnerability (including low severity), or a registry audit
 failure, stops the release; the current production containers remain running.
 API security regression tests also run in the Linux backend image before the
 production release is switched, including after Node.js runtime upgrades.
+`npm run test:image-runtime` checks PNG, JPEG and WebP conversion in the frontend
+image before switching production. The current VM CPU lacks x64-v2 instructions;
+`@img/sharp-wasm32` 0.35.5 is explicitly installed as sharp's supported fallback.
+Keep its version aligned with sharp when upgrading the image-processing stack.
 
 Docker uses Node.js 24.21.0 LTS instead of the unsupported Node.js 20 branch.
 Keep the pinned image version current with supported

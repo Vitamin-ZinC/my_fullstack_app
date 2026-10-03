@@ -15,6 +15,7 @@
     "test": "npm run test --workspaces --if-present",
     "test:partner-boundary": "node scripts/test-partner-portal-client-boundary.mjs",
     "security:audit": "npm audit --audit-level=low",
+    "test:image-runtime": "node scripts/test-image-runtime.mjs",
     "test:e2e": "playwright test \"tests/frontend-flow.spec.js\" --workers=1",
     "smoke:prod": "node scripts/smoke-prod.mjs",
     "telegram:community:configure": "node scripts/configure-telegram-community-webhook.mjs",

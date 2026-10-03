@@ -286,6 +286,31 @@ Docker Compose file:
 
 - `docker-compose.prod.yml`
 
+### Dependency Security Gate
+
+Docker installs the selected workspace and contracts with `npm ci`; the committed
+`package-lock.json` is authoritative. Do not use `npm audit fix --force` for releases.
+Run `npm run security:audit`, workspace lint/build/tests, and
+`npm run test:partner-boundary` before deployment. `scripts/deploy-prod.sh` also
+audits backend and frontend images before migrations or switching the current
+release. Any known vulnerability (including low severity), or a registry audit
+failure, stops the release; the current production containers remain running.
+API security regression tests also run in the Linux backend image before the
+production release is switched, including after Node.js runtime upgrades.
+
+Docker uses Node.js 24.21.0 LTS instead of the unsupported Node.js 20 branch.
+Keep the pinned image version current with supported
+[Node.js releases](https://nodejs.org/en/about/previous-releases).
+Security baseline (2026-10-03): Next.js 16.3.8, Fastify 5.12.5, sharp 0.35.5,
+fast-uri 3.1.8/4.2.1, qs 6.16.0, baseline-browser-mapping 2.11.27.
+See the [Next.js security release](https://github.com/vercel/next.js/releases/tag/v16.3.8)
+and [Fastify security release](https://github.com/fastify/fastify/releases/tag/v5.12.5).
+Regression tests in `apps/backend/src/lib/httpSecurity.test.ts` cover malformed
+URL auth isolation, body validation, CORS/cookie/Helmet compatibility, signed raw
+Stripe webhook bytes, and rate limiting. A clean npm audit is not a complete
+application or infrastructure security assessment. No schema migration, access
+policy, user data, or XP change is needed for this dependency update.
+
 ### Embedded Partner Admin And Portal Release Checklist
 
 Before enabling `/partners` or `partners.orken.life` in production:

@@ -104,15 +104,25 @@ cd "$RELEASE_DIR"
 log "Building services: $SERVICES"
 docker compose --env-file .env -f "$COMPOSE_FILE" -p "$PROJECT_NAME" build $SERVICES
 
+log "Auditing locked dependencies before changing production"
+for service in backend frontend; do
+  docker compose --env-file .env -f "$COMPOSE_FILE" -p "$PROJECT_NAME" run --rm --no-deps -T \
+    "$service" npm run security:audit < /dev/null
+done
+
+log "Checking API security regressions in the production runtime"
+docker compose --env-file .env -f "$COMPOSE_FILE" -p "$PROJECT_NAME" run --rm --no-deps -T \
+  backend npm --workspace apps/backend exec -- tsx --test src/lib/httpSecurity.test.ts < /dev/null
+
 if [[ "$RUN_MIGRATIONS" == "true" ]]; then
   log "Running Prisma migrations"
-  docker compose --env-file .env -f "$COMPOSE_FILE" -p "$PROJECT_NAME" run --rm --no-deps \
-    backend npx prisma migrate deploy --schema apps/backend/prisma/schema.prisma
+  docker compose --env-file .env -f "$COMPOSE_FILE" -p "$PROJECT_NAME" run --rm --no-deps -T \
+    backend npx prisma migrate deploy --schema apps/backend/prisma/schema.prisma < /dev/null
 fi
 
 log "Synchronizing bundled prompt versions"
-docker compose --env-file .env -f "$COMPOSE_FILE" -p "$PROJECT_NAME" run --rm --no-deps \
-  backend npm --workspace apps/backend run prompts:sync
+docker compose --env-file .env -f "$COMPOSE_FILE" -p "$PROJECT_NAME" run --rm --no-deps -T \
+  backend npm --workspace apps/backend run prompts:sync < /dev/null
 
 log "Switching current symlink to $RELEASE_DIR"
 ln -sfnT "$RELEASE_DIR" "$CURRENT_LINK"

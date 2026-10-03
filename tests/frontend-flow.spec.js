@@ -947,7 +947,10 @@ test("password registration opens account with report history", async ({ page })
   await expect(page).toHaveURL(/\/account$/, { timeout: 10000 });
   await expect(page.getByTestId("account-page")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Навигатор привычек" })).toBeVisible();
-  await page.getByText("История диагностик").click();
   await expect(page.getByText("Продуктовый стратег")).toBeVisible();
   await expect(page.getByRole("link", { name: "Открыть PRO" })).toBeVisible();
+  await page.getByText("История диагностик").click();
+  await expect(page.getByText("Продуктовый стратег")).toBeHidden();
+  await page.getByText("История диагностик").click();
+  await expect(page.getByText("Продуктовый стратег")).toBeVisible();
 });

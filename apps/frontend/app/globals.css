@@ -1361,11 +1361,17 @@ svg {
 
 .report-history-card {
   display: grid;
+  min-width: 0;
   gap: 14px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.04);
   padding: 14px;
+}
+
+.report-history-card > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .report-history-card p {
@@ -1377,7 +1383,7 @@ svg {
 
 .report-history-actions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -8391,6 +8397,10 @@ p {
 
   .account-accordion-body {
     padding: 0 16px 16px;
+  }
+
+  .report-history-actions {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .habits-slider {

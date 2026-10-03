@@ -631,6 +631,48 @@ Do not use these in frontend or prompts unless implemented through schema, contr
 
 ## Where To Add New Things
 
+### Diagnosis And Habit Progress Identity
+
+`POST /api/habits/enroll-from-report/:analysisId` updates the current ACTIVE
+`HabitProgram` in place. It must not create a new program or trial when the owner
+already has one. Only diagnostic recommendation fields and the diagnostic part
+of `profile` are updated; name/avatar, enrollments, check-ins, XP, reminders,
+rank history and subscription fields are retained. The first manual-to-report
+personalization awards 20 XP once; subsequent reports do not award startup XP.
+Opening the same or an older analysis does not roll back recommendations.
+
+Manual starts and report activation share a PostgreSQL transaction-scoped owner
+lock in `habitProgramIdentity.ts`. Signed-in owners are scoped by `userId`;
+guest owners by `sessionId` with `userId = null`. Archived programs cannot be
+mutated through the habits routes.
+
+Diagnostic history is stored as separate `Analysis` records and exposed by the
+existing `GET /api/me/reports` (latest 50), shown in `/account`. Updating a program's
+`analysisId` does not delete or overwrite earlier reports. No schema migration
+is needed for this fix.
+
+For legacy duplicate ACTIVE programs, use the conservative recovery utility:
+
+```text
+node apps/backend/dist/scripts/recoverHabitPrograms.js
+node apps/backend/dist/scripts/recoverHabitPrograms.js --apply
+```
+
+The first command is dry-run. Before `--apply`, take a production backup and pause
+backend/worker writes. The utility uses the latest program as the canonical one,
+maps catalog enrollments, consolidates check-ins and metrics, transfers insights,
+earned reward events, wallet references and navigator threads, preserves historical
+ranks and the farthest week, then archives older programs. It never deletes analyses
+or programs, never starts a fresh trial and checks XP conservation in the transaction.
+Original check-ins, metrics and conflicting summaries remain in archived programs.
+Profiles with subscriptions, coaching dependencies, owner or catalog mismatches
+are skipped for manual review. Reruns ignore already archived duplicates.
+
+Regression tests: `habitProgramIdentity.test.ts`, `habitProgramRecovery.test.ts`.
+`habitProgramPersistence.test.ts` additionally runs against PostgreSQL when
+`HABIT_PROGRAM_TEST_DATABASE_URL` is supplied. Its synthetic fixtures are enclosed
+in transactions that always roll back, including on assertion failures.
+
 For new persisted backend state:
 
 1. Add Prisma model/fields in `apps/backend/prisma/schema.prisma`.

@@ -17,6 +17,7 @@ import { createImageUploadKey, readMediaAssetBuffer, writeUploadBuffer } from ".
 import { validatePhotoBuffer } from "../services/imageValidation.js";
 import { applyPendingReferralBonus } from "../services/partnerCore.js";
 import { resolveHabitAccessForUser } from "../services/coachPlatform.js";
+import { ensureHabitProgram, habitProgramOwnerWhere } from "../services/habitProgramIdentity.js";
 
 const stripe = env.STRIPE_SECRET_KEY ? new Stripe(env.STRIPE_SECRET_KEY) : null;
 
@@ -170,18 +171,6 @@ export async function habitsRoutes(app: FastifyInstance) {
     if (!access) return;
     if (access.analysis.status !== "DONE") return reply.code(409).send({ error: "Analysis is not ready" });
 
-    const existing = await prisma.habitProgram.findFirst({
-      where: {
-        analysisId: access.analysis.id,
-        status: "ACTIVE",
-        OR: access.session.userId
-          ? [{ userId: access.session.userId }, { sessionId: access.session.id }]
-          : [{ sessionId: access.session.id }]
-      },
-      include: programInclude()
-    });
-    if (existing) return buildProgramResponse(await ensureProgramEnrollments(existing.id, existing.weakZone));
-
     await ensureHabitDefinitions();
     const definitions = await prisma.habitDefinition.findMany({
       where: { active: true },
@@ -190,58 +179,7 @@ export async function habitsRoutes(app: FastifyInstance) {
     const config = await getHabitSubscriptionConfig();
 
     const profile = buildProgramProfile(access.analysis.reportFull ?? access.analysis.reportFree);
-    const activeProgram = await findActiveProgram(access.session);
-    if (activeProgram && !activeProgram.analysisId && activeProgram.source !== "analysis-report") {
-      const merged = await prisma.habitProgram.update({
-        where: { id: activeProgram.id },
-        data: {
-          analysisId: access.analysis.id,
-          source: "analysis-report",
-          title: profile.title,
-          weakZone: profile.weakZone,
-          archetype: profile.archetype,
-          topRole: profile.topRole,
-          careerAction: profile.careerAction,
-          finalInsight: profile.finalInsight,
-          profile: profile.raw,
-          insights: profile.finalInsight
-            ? {
-              create: [{
-                text: `Программа персонализирована по диагностике: ${profile.finalInsight}`,
-                source: "analysis-report"
-              }]
-            }
-            : undefined,
-          rewards: {
-            create: [{
-              type: "program_personalized",
-              label: "Программа обновлена по отчету без сброса прогресса",
-              xp: 20
-            }]
-          }
-        },
-        include: programInclude()
-      });
-
-      await prisma.analyticsEvent.create({
-        data: {
-          name: "habit_program_personalized",
-          locale: access.analysis.locale,
-          sessionId: access.session.id,
-          userId: access.session.userId,
-          analysisId: access.analysis.id,
-          properties: { programId: merged.id, source: "analysis-report-merge" }
-        }
-      });
-
-      if (access.session.userId) {
-        await applyPendingReferralBonus(access.session.userId, merged.id);
-      }
-      return buildProgramResponse(await ensureProgramEnrollments(merged.id, merged.weakZone));
-    }
-
-    const program = await prisma.habitProgram.create({
-      data: {
+    const { program, action } = await ensureHabitProgram(prisma, access.session, {
         userId: access.session.userId,
         sessionId: access.session.id,
         analysisId: access.analysis.id,
@@ -283,34 +221,29 @@ export async function habitsRoutes(app: FastifyInstance) {
             xp: 25
           }]
         }
-      },
-      include: programInclude()
-    });
+    }, { id: access.analysis.id, createdAt: access.analysis.createdAt, profile });
 
-    await prisma.analyticsEvent.create({
+    if (action !== "unchanged") await prisma.analyticsEvent.create({
       data: {
-        name: "habit_program_started",
+        name: action === "created" ? "habit_program_started" : "habit_program_personalized",
         locale: access.analysis.locale,
         sessionId: access.session.id,
         userId: access.session.userId,
         analysisId: access.analysis.id,
-        properties: { programId: program.id, source: "analysis-report" }
+        properties: { programId: program.id, source: "analysis-report", action }
       }
     });
 
     if (access.session.userId) {
       await applyPendingReferralBonus(access.session.userId, program.id);
     }
-    return buildProgramResponse(await loadProgram(program.id));
+    return buildProgramResponse(await ensureProgramEnrollments(program.id, program.weakZone));
   });
 
   app.post("/api/habits/start", async (request, reply) => {
     const session = await requireSession(request, reply);
     if (!session) return;
     const body = startProgramSchema.parse(request.body ?? {});
-
-    const existing = await findActiveProgram(session);
-    if (existing) return buildProgramResponse(await ensureProgramEnrollments(existing.id, existing.weakZone));
 
     await ensureHabitDefinitions();
     const definitions = await prisma.habitDefinition.findMany({
@@ -320,8 +253,7 @@ export async function habitsRoutes(app: FastifyInstance) {
     const config = await getHabitSubscriptionConfig();
 
     const profile = buildManualProgramProfile(body.focus, { name: body.name, weakZone: body.weakZone });
-    const program = await prisma.habitProgram.create({
-      data: {
+    const { program, action } = await ensureHabitProgram(prisma, session, {
         userId: session.userId,
         sessionId: session.id,
         source: "manual-start",
@@ -361,9 +293,9 @@ export async function habitsRoutes(app: FastifyInstance) {
             xp: 15
           }]
         }
-      },
-      include: programInclude()
     });
+
+    if (action === "unchanged") return buildProgramResponse(await ensureProgramEnrollments(program.id, program.weakZone));
 
     await prisma.analyticsEvent.create({
       data: {
@@ -1115,12 +1047,7 @@ function programInclude() {
 }
 
 function habitProgramWhere(session: SessionContext) {
-  return {
-    OR: [
-      { sessionId: session.id },
-      ...(session.userId ? [{ userId: session.userId }] : [])
-    ]
-  };
+  return habitProgramOwnerWhere(session);
 }
 
 async function findActiveProgram(session: SessionContext) {
@@ -1149,7 +1076,7 @@ async function findLatestReport(session: SessionContext) {
 
 async function requireHabitProgram(session: SessionContext, reply: { code: (statusCode: number) => { send: (payload: unknown) => void } }, programId: string, enforceAccess = true) {
   const program = await prisma.habitProgram.findFirst({
-    where: { id: programId, ...habitProgramWhere(session) },
+    where: { id: programId, status: "ACTIVE", ...habitProgramWhere(session) },
     select: { id: true }
   });
   if (!program) {

@@ -7,12 +7,14 @@ import { Bot, CheckCircle2, CreditCard, ExternalLink, History, LogOut, Send, Spa
 import type { HabitConfigResponse, HabitProgramSummary, MeReportSummary, MeResponse, TelegramStatusResponse } from "@levelup/contracts";
 import { api } from "@/lib/api";
 import { openTelegramConnectUrl } from "@/lib/telegram";
+import { useSiteText } from "@/lib/useSiteText";
 
 type ChatMessage = { role: "user" | "assistant"; text: string };
 type TelegramFrequency = "off" | "daily" | "weekdays" | "weekly";
 
 export default function AccountPage() {
   const router = useRouter();
+  const text = useSiteText().accountDiagnostics;
   const [me, setMe] = useState<MeResponse | null>(null);
   const [reports, setReports] = useState<MeReportSummary[]>([]);
   const [program, setProgram] = useState<HabitProgramSummary | null>(null);
@@ -411,7 +413,8 @@ export default function AccountPage() {
         </button>
       </AccountAccordion>
 
-      <AccountAccordion title="История диагностик" icon={<History size={18} />}>
+      <AccountAccordion title={text.title} icon={<History size={18} />} defaultOpen>
+        <p className="muted">{text.progressNote}</p>
         {reports.length === 0 ? (
           <div className="account-empty-panel">
             <p className="muted">Здесь появятся все ваши отчёты после прохождения диагностики. Привычки уже доступны отдельно, без обязательного теста.</p>

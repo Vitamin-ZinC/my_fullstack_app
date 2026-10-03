@@ -3,6 +3,10 @@ export const BRAND_NAME = "ORKEN.LIFE";
 export type Locale = "ru" | "en";
 
 export const ruSiteText = {
+  accountDiagnostics: {
+    title: "История диагностик",
+    progressNote: "Повторная диагностика обновляет рекомендации, но не сбрасывает XP, достижения и отметки в Навигаторе. Предыдущие отчёты остаются здесь."
+  },
   nav: {
     brand: BRAND_NAME,
     sub: "AI-диагностика ИКИГАЙ",
@@ -1016,6 +1020,10 @@ export const defaultSiteText: Record<Locale, SiteText> = {
   ru: ruSiteText,
   en: {
     ...ruSiteText,
+    accountDiagnostics: {
+      title: "Diagnostic history",
+      progressNote: "A new diagnosis updates recommendations without resetting your XP, achievements or Navigator check-ins. Previous reports remain here."
+    },
     nav: { brand: BRAND_NAME, sub: "AI IKIGAI diagnostics", backHome: "← Home" },
     landing: {
       ...ruSiteText.landing,

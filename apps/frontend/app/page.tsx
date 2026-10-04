@@ -27,6 +27,7 @@ import {
 import { api } from "@/lib/api";
 import { SUPPORT_EMAIL } from "@/lib/legal";
 import { useSiteText } from "@/lib/useSiteText";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 
 function cabinetLinks() { return [
   { href: "/account", label: uiText("Кабинет пользователя"), Icon: UserCircle },
@@ -255,16 +256,6 @@ function LandingNav() {
           <img src="/assets/orken-penguin-transparent.png" alt={uiText("Пингвин ORKEN")} />
           <span>ORKEN.LIFE</span>
         </Link>
-        <button
-          className="landing-v2-menu-button"
-          type="button"
-          aria-label={mobileOpen ? uiText("Закрыть меню") : uiText("Открыть меню")}
-          aria-expanded={mobileOpen}
-          aria-controls="landing-navigation"
-          onClick={() => setMobileOpen((value) => !value)}
-        >
-          {mobileOpen ? <X size={21} aria-hidden="true" /> : <Menu size={21} aria-hidden="true" />}
-        </button>
         <div id="landing-navigation" className={`landing-v2-nav-panel${mobileOpen ? " is-open" : ""}`}>
           <nav className="landing-v2-section-links" aria-label={uiText("Разделы сайта")}>
             {sectionLinks.map(([href, label]) => <a href={href} key={href} onClick={closeMobile}>{label}</a>)}
@@ -288,6 +279,17 @@ function LandingNav() {
             </details>
           </div>
         </div>
+        <LanguageSwitcher />
+        <button
+          className="landing-v2-menu-button"
+          type="button"
+          aria-label={mobileOpen ? uiText("Закрыть меню") : uiText("Открыть меню")}
+          aria-expanded={mobileOpen}
+          aria-controls="landing-navigation"
+          onClick={() => setMobileOpen((value) => !value)}
+        >
+          {mobileOpen ? <X size={21} aria-hidden="true" /> : <Menu size={21} aria-hidden="true" />}
+        </button>
       </div>
     </header>
   );

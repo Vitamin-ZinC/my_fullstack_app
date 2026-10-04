@@ -5,7 +5,7 @@ import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { setStoredLocale, useUiLocale } from "@/lib/locale";
 
-export function LanguageSwitcher() {
+export function GlobalLanguageSwitcher() {
   const locale = useUiLocale();
   const pathname = usePathname();
   useEffect(() => {
@@ -18,6 +18,12 @@ export function LanguageSwitcher() {
     syncTitle();
     return () => observer.disconnect();
   }, [locale, pathname]);
+  if (pathname === "/") return null;
+  return <div className="language-bar"><LanguageSwitcher /></div>;
+}
+
+export function LanguageSwitcher() {
+  const locale = useUiLocale();
   return <div className="language-switcher" role="group" aria-label={locale === "en" ? "Interface language" : "Язык интерфейса"}>
     <Languages size={15} aria-hidden="true" />
     {(["ru", "en"] as const).map(value => <button key={value} type="button" lang={value}

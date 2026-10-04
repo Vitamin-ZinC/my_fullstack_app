@@ -52,8 +52,8 @@ safe_remove_release() {
 }
 
 cleanup_old_releases() {
-  [[ "$KEEP_RELEASES" =~ ^[0-9]+$ ]] || return
-  (( KEEP_RELEASES > 0 )) || return
+  [[ "$KEEP_RELEASES" =~ ^[0-9]+$ ]] || return 0
+  (( KEEP_RELEASES > 0 )) || return 0
 
   mapfile -t releases < <(find "$RELEASES_DIR" -mindepth 1 -maxdepth 1 -type d | sort -r)
   local index=0

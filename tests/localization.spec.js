@@ -54,6 +54,7 @@ for (const width of [360, 768, 1024, 1440]) {
     if (hasMobileMenu) await page.getByRole("link", { name: "About us", exact: true }).first().click();
     await noRussianSystemCopy(page);
     await fits(page);
+    await expect(page).toHaveTitle("Ikigai - ORKEN.LIFE");
     await page.screenshot({ path: info.outputPath(`landing-${width}.png`), fullPage: true });
     for (const [route, heading] of [["/login", /Sign in|Login/], ["/coach", "Coach login"], ["/partners", /Partner|partner/], ["/admin", /Admin|Administration/]]) {
       if (route === "/coach") await page.route(`${apiBase}/api/coach/workspace`, r => json(r, { error: "Partner login required" }, 401));
@@ -62,6 +63,7 @@ for (const width of [360, 768, 1024, 1440]) {
       await expect(page.getByRole("heading", { name: heading }).first()).toBeVisible();
       await noRussianSystemCopy(page);
       await fits(page);
+      await expect(page).toHaveTitle("Ikigai - ORKEN.LIFE");
       await page.screenshot({ path: info.outputPath(`${route.slice(1)}-${width}.png`), fullPage: true });
     }
   });

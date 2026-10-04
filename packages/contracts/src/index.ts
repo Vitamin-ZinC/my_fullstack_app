@@ -1493,3 +1493,4 @@ export type TelegramCommunityChatUpdate = Partial<Pick<AdminTelegramCommunityCha
   | "quietHoursStart"
   | "quietHoursEnd"
 >>;
+export { translateSystemText, translateGeneratedSystemText, localizeStaticText, normalizeUiLocale, type UiLocale } from "#localization";

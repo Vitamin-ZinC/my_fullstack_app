@@ -1,4 +1,6 @@
 "use client";
+import { uiText, getFormatLocale, useUiLocale } from "@/lib/locale";
+
 
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
@@ -23,55 +25,55 @@ import {
   Store,
   UsersRound
 } from "lucide-react";
-import { DEFAULT_COACH_PUBLIC_CONTENT, type CoachPartnershipApplicationInput, type CoachPartnershipInterest, type PublicCoachPlatformConfig } from "@levelup/contracts";
+import { localizeStaticText, DEFAULT_COACH_PUBLIC_CONTENT, type CoachPartnershipApplicationInput, type CoachPartnershipInterest, type PublicCoachPlatformConfig } from "@levelup/contracts";
 import { coachCatalogApi, coachPartnershipApi } from "@/lib/api";
 import styles from "./coaches.module.css";
 
-const interestOptions: Array<{ id: CoachPartnershipInterest; label: string }> = [
-  { id: "wholesale", label: "Подключать ORKEN к своим пакетам" },
-  { id: "referral", label: "Получать доход с рекомендаций" },
-  { id: "marketplace", label: "Разместить программу в витрине" },
-  { id: "white_label", label: "Запустить White Label" },
-  { id: "personal", label: "Вести клиентов лично через ORKEN" }
-];
+function interestOptions(): Array<{ id: CoachPartnershipInterest; label: string }> { return [
+  { id: "wholesale", label: uiText("Подключать ORKEN к своим пакетам") },
+  { id: "referral", label: uiText("Получать доход с рекомендаций") },
+  { id: "marketplace", label: uiText("Разместить программу в витрине") },
+  { id: "white_label", label: uiText("Запустить White Label") },
+  { id: "personal", label: uiText("Вести клиентов лично через ORKEN") }
+]; }
 
-const collaborationCards = [
+function collaborationCards() { return [
   {
     icon: CircleDollarSign,
     accent: "cyan",
-    title: "Экономика для коуча",
-    text: "Добавляйте диагностику и трекер в собственные пакеты на партнёрских условиях. Разница между вашим чеком и стоимостью технологии остаётся в экономике практики.",
-    points: ["Партнёрская стоимость модулей", "Своя цена клиентского пакета", "Без роста количества сессий"]
+    title: uiText("Экономика для коуча"),
+    text: uiText("Добавляйте диагностику и трекер в собственные пакеты на партнёрских условиях. Разница между вашим чеком и стоимостью технологии остаётся в экономике практики."),
+    points: [uiText("Партнёрская стоимость модулей"), uiText("Своя цена клиентского пакета"), uiText("Без роста количества сессий")]
   },
   {
     icon: Link2,
     accent: "violet",
-    title: "Реферальная программа",
-    text: "Получайте доход с оплат пользователей, которые пришли по вашей персональной ссылке. Переходы, регистрации и начисления отражаются в кабинете.",
-    points: ["Персональная ссылка", "Прозрачная атрибуция", "Доход с каждого активного клиента"]
+    title: uiText("Реферальная программа"),
+    text: uiText("Получайте доход с оплат пользователей, которые пришли по вашей персональной ссылке. Переходы, регистрации и начисления отражаются в кабинете."),
+    points: [uiText("Персональная ссылка"), uiText("Прозрачная атрибуция"), uiText("Доход с каждого активного клиента")]
   },
   {
     icon: Store,
     accent: "green",
-    title: "Витрина коучей",
-    text: "Разместите свою программу в ORKEN. Пользователь увидит специализацию, формат работы и доступность сопровождения в понятной карточке.",
-    points: ["Профиль и программа", "Модерация качества", "Управление доступными слотами"]
+    title: uiText("Витрина коучей"),
+    text: uiText("Разместите свою программу в ORKEN. Пользователь увидит специализацию, формат работы и доступность сопровождения в понятной карточке."),
+    points: [uiText("Профиль и программа"), uiText("Модерация качества"), uiText("Управление доступными слотами")]
   },
   {
     icon: Layers3,
     accent: "yellow",
     title: "White Label",
-    text: "Предложите клиентам технологию под своим брендом: логотип, цвета, домен и коммуникации согласуются под формат практики.",
-    points: ["Ваш бренд в интерфейсе", "Свой домен или поддомен", "Единый путь клиента"]
+    text: uiText("Предложите клиентам технологию под своим брендом: логотип, цвета, домен и коммуникации согласуются под формат практики."),
+    points: [uiText("Ваш бренд в интерфейсе"), uiText("Свой домен или поддомен"), uiText("Единый путь клиента")]
   },
   {
     icon: UsersRound,
     accent: "coral",
-    title: "Личное сопровождение",
-    text: "Берите клиентов из платформы в персональную работу. Вознаграждение за ваше время и лимит одновременной нагрузки фиксируются до запуска.",
-    points: ["Оплата личной работы", "Контролируемая загрузка", "Правила закрепления клиента"]
+    title: uiText("Личное сопровождение"),
+    text: uiText("Берите клиентов из платформы в персональную работу. Вознаграждение за ваше время и лимит одновременной нагрузки фиксируются до запуска."),
+    points: [uiText("Оплата личной работы"), uiText("Контролируемая загрузка"), uiText("Правила закрепления клиента")]
   }
-] as const;
+] as const; }
 
 const initialForm = {
   fullName: "",
@@ -93,14 +95,15 @@ function makeIdempotencyKey() {
 }
 
 export function CoachesLandingClient() {
+  const locale = useUiLocale();
   const [form, setForm] = useState(initialForm);
   const [idempotencyKey, setIdempotencyKey] = useState(makeIdempotencyKey);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState<"sent" | "manual_follow_up" | null>(null);
   const [platformConfig, setPlatformConfig] = useState<PublicCoachPlatformConfig | null>(null);
-  const publicContent = platformConfig?.content ?? DEFAULT_COACH_PUBLIC_CONTENT;
-  useEffect(() => { coachCatalogApi.config().then(setPlatformConfig).catch(() => setPlatformConfig(null)); }, []);
+  const publicContent = localizeStaticText(platformConfig?.content ?? DEFAULT_COACH_PUBLIC_CONTENT, locale);
+  useEffect(() => { let cancelled = false; coachCatalogApi.config().then(value => { if (!cancelled) setPlatformConfig(value); }).catch(() => { if (!cancelled) setPlatformConfig(null); }); return () => { cancelled = true; }; }, [locale]);
   const canSubmit = useMemo(() => (
     form.fullName.trim().length >= 2
     && form.email.includes("@")
@@ -142,7 +145,7 @@ export function CoachesLandingClient() {
       setForm(initialForm);
       setIdempotencyKey(makeIdempotencyKey());
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Не удалось отправить заявку. Повторите попытку позже.");
+      setError(reason instanceof Error ? reason.message : uiText("Не удалось отправить заявку. Повторите попытку позже."));
     } finally {
       setSubmitting(false);
     }
@@ -151,11 +154,11 @@ export function CoachesLandingClient() {
   return (
     <main className={styles.page}>
       <header className={styles.header}>
-        <Link className={styles.brand} href="/coaches" aria-label="ORKEN.LIFE для коучей">
+        <Link className={styles.brand} href="/coaches" aria-label={uiText("ORKEN.LIFE для коучей")}>
           <span className={styles.brandMark}><BrainCircuit size={20} /></span>
-          <span><strong>ORKEN.LIFE</strong><small>Для коучей</small></span>
+          <span><strong>ORKEN.LIFE</strong><small>{uiText("Для коучей")}</small></span>
         </Link>
-        <Link className={styles.portalLink} href="/partners">Войти партнёру <ArrowRight size={16} /></Link>
+        <Link className={styles.portalLink} href="/partners">{uiText("Войти партнёру ")}<ArrowRight size={16} /></Link>
       </header>
 
       <section className={styles.hero}>
@@ -169,8 +172,8 @@ export function CoachesLandingClient() {
             <a className={styles.secondaryButton} href="#formats">{publicContent.heroSecondaryCta}</a>
           </div>
           <div className={styles.heroProof}>
-            <span><BadgeCheck size={18} /> Продукт работает между встречами</span>
-            <span><ShieldCheck size={18} /> Условия фиксируются до запуска</span>
+            <span><BadgeCheck size={18} /> {uiText(" Продукт работает между встречами")}</span>
+            <span><ShieldCheck size={18} /> {uiText(" Условия фиксируются до запуска")}</span>
           </div>
         </div>
       </section>
@@ -178,21 +181,21 @@ export function CoachesLandingClient() {
       {platformConfig && <section className={styles.pricingBand}>
         <div className={styles.sectionInner}>
           <div className={styles.sectionHeading}><p className={styles.eyebrow}>{publicContent.pricingEyebrow}</p><h2>{publicContent.pricingTitle}</h2><p>{publicContent.pricingLead}</p></div>
-          <div className={styles.publicPricingGrid}>{platformConfig.plans.map((plan) => <article key={plan.id} className={styles.publicPriceCard}><span>{plan.includedClients ? `До ${plan.includedClients} клиентов` : "Более 30 клиентов"}</span><h3>{plan.customQuote ? "Индивидуально" : `${formatPrice(plan.amount, plan.currency)} / мес`}</h3><p>{plan.description}</p><a href="#application">Оставить заявку <ArrowRight size={16}/></a></article>)}</div>
-          <div className={styles.sitePriceGrid}>{platformConfig.sitePlans.map((plan) => <article key={plan.id}><Globe2/><div><strong>{plan.name}</strong><span>{formatPrice(plan.setupAmount, plan.currency)} разово + {formatPrice(plan.monthlySupportAmount, plan.currency)}/мес</span></div></article>)}</div>
+          <div className={styles.publicPricingGrid}>{platformConfig.plans.map((plan) => <article key={plan.id} className={styles.publicPriceCard}><span>{plan.includedClients ? uiText("До {v0} клиентов", { v0: plan.includedClients }) : uiText("Более 30 клиентов")}</span><h3>{plan.customQuote ? uiText("Индивидуально") : uiText("{v0} / мес", { v0: formatPrice(plan.amount, plan.currency) })}</h3><p>{plan.description ? uiText(plan.description) : ''}</p><a href="#application">{uiText("Оставить заявку ")}<ArrowRight size={16}/></a></article>)}</div>
+          <div className={styles.sitePriceGrid}>{platformConfig.sitePlans.map((plan) => <article key={plan.id}><Globe2/><div><strong>{uiText(plan.name)}</strong><span>{formatPrice(plan.setupAmount, plan.currency)} {uiText(" разово + ")}{formatPrice(plan.monthlySupportAmount, plan.currency)}{uiText("/мес")}</span></div></article>)}</div>
         </div>
       </section>}
 
       <section className={styles.problemBand}>
         <div className={styles.sectionInner}>
           <div className={styles.sectionHeading}>
-            <p className={styles.eyebrow}>Рост практики</p>
-            <h2>То, что тормозит масштабирование, не всегда связано с квалификацией</h2>
+            <p className={styles.eyebrow}>{uiText("Рост практики")}</p>
+            <h2>{uiText("То, что тормозит масштабирование, не всегда связано с квалификацией")}</h2>
           </div>
           <div className={styles.problemGrid}>
-            <div><Clock3 /><h3>Клиент теряет фокус</h3><p>Между сессиями рекомендации растворяются в повседневности.</p></div>
-            <div><BarChart3 /><h3>Прогресс трудно показать</h3><p>Изменения остаются ощущением, а не наблюдаемой динамикой.</p></div>
-            <div><BriefcaseBusiness /><h3>Доход упирается во время</h3><p>Каждый новый клиент требует ещё одного свободного часа в календаре.</p></div>
+            <div><Clock3 /><h3>{uiText("Клиент теряет фокус")}</h3><p>{uiText("Между сессиями рекомендации растворяются в повседневности.")}</p></div>
+            <div><BarChart3 /><h3>{uiText("Прогресс трудно показать")}</h3><p>{uiText("Изменения остаются ощущением, а не наблюдаемой динамикой.")}</p></div>
+            <div><BriefcaseBusiness /><h3>{uiText("Доход упирается во время")}</h3><p>{uiText("Каждый новый клиент требует ещё одного свободного часа в календаре.")}</p></div>
           </div>
         </div>
       </section>
@@ -200,20 +203,20 @@ export function CoachesLandingClient() {
       <section className={styles.productsBand}>
         <div className={styles.sectionInner}>
           <div className={styles.sectionHeading}>
-            <p className={styles.eyebrow}>Продуктовый слой</p>
-            <h2>Два инструмента поддерживают клиента круглосуточно</h2>
-            <p>Вы получаете данные до встречи и сохраняете ритм после неё, не превращая практику в бесконечную переписку.</p>
+            <p className={styles.eyebrow}>{uiText("Продуктовый слой")}</p>
+            <h2>{uiText("Два инструмента поддерживают клиента круглосуточно")}</h2>
+            <p>{uiText("Вы получаете данные до встречи и сохраняете ритм после неё, не превращая практику в бесконечную переписку.")}</p>
           </div>
           <div className={styles.productGrid}>
             <article className={styles.productCard}>
               <div className={`${styles.iconBox} ${styles.cyan}`}><ScanFace /></div>
-              <div><h3>AI-диагностика Икигай</h3><p>Анализирует голос, лицо и ответы, собирая стартовую карту наблюдений для первой сессии.</p></div>
-              <ul><li><Check /> Быстрый вход в контекст</li><li><Check /> Профессиональные направления</li><li><Check /> Точки роста и вопросы коучу</li></ul>
+              <div><h3>{uiText("AI-диагностика Икигай")}</h3><p>{uiText("Анализирует голос, лицо и ответы, собирая стартовую карту наблюдений для первой сессии.")}</p></div>
+              <ul><li><Check /> {uiText(" Быстрый вход в контекст")}</li><li><Check /> {uiText(" Профессиональные направления")}</li><li><Check /> {uiText(" Точки роста и вопросы коучу")}</li></ul>
             </article>
             <article className={styles.productCard}>
               <div className={`${styles.iconBox} ${styles.violet}`}><Bot /></div>
-              <div><h3>AI-трекер состояний</h3><p>Поддерживает выбранные привычки, фиксирует инсайты и показывает динамику энергии, ясности и устойчивости.</p></div>
-              <ul><li><Check /> Микрошаги между сессиями</li><li><Check /> Измеримая динамика</li><li><Check /> Общий контекст с Пингви</li></ul>
+              <div><h3>{uiText("AI-трекер состояний")}</h3><p>{uiText("Поддерживает выбранные привычки, фиксирует инсайты и показывает динамику энергии, ясности и устойчивости.")}</p></div>
+              <ul><li><Check /> {uiText(" Микрошаги между сессиями")}</li><li><Check /> {uiText(" Измеримая динамика")}</li><li><Check /> {uiText(" Общий контекст с Пингви")}</li></ul>
             </article>
           </div>
         </div>
@@ -222,12 +225,12 @@ export function CoachesLandingClient() {
       <section className={styles.formatsBand} id="formats">
         <div className={styles.sectionInner}>
           <div className={styles.sectionHeading}>
-            <p className={styles.eyebrow}>Форматы сотрудничества</p>
-            <h2>Выберите модель под текущий масштаб практики</h2>
-            <p>Можно начать с одного сценария и подключать остальные по мере роста.</p>
+            <p className={styles.eyebrow}>{uiText("Форматы сотрудничества")}</p>
+            <h2>{uiText("Выберите модель под текущий масштаб практики")}</h2>
+            <p>{uiText("Можно начать с одного сценария и подключать остальные по мере роста.")}</p>
           </div>
           <div className={styles.collaborationGrid}>
-            {collaborationCards.map((card) => {
+            {collaborationCards().map((card) => {
               const Icon = card.icon;
               return <article className={styles.collaborationCard} key={card.title}>
                 <div className={`${styles.iconBox} ${styles[card.accent]}`}><Icon /></div>
@@ -245,14 +248,14 @@ export function CoachesLandingClient() {
           <div className={styles.whiteLabelContent}>
             <div>
               <p className={styles.eyebrow}><Globe2 size={17} /> White Label</p>
-              <h2>Ваш бренд остаётся главным для клиента</h2>
-              <p>ORKEN работает как технологический слой внутри вашей программы. Клиент проходит единый путь с вашим именем, визуальным стилем и методологией.</p>
+              <h2>{uiText("Ваш бренд остаётся главным для клиента")}</h2>
+              <p>{uiText("ORKEN работает как технологический слой внутри вашей программы. Клиент проходит единый путь с вашим именем, визуальным стилем и методологией.")}</p>
             </div>
             <div className={styles.whiteLabelList}>
-              <span><Boxes /> Брендированный интерфейс</span>
-              <span><Globe2 /> Домен или поддомен</span>
-              <span><MailCheck /> Свои коммуникации</span>
-              <span><BrainCircuit /> AI-контекст методологии</span>
+              <span><Boxes /> {uiText(" Брендированный интерфейс")}</span>
+              <span><Globe2 /> {uiText(" Домен или поддомен")}</span>
+              <span><MailCheck /> {uiText(" Свои коммуникации")}</span>
+              <span><BrainCircuit /> {uiText(" AI-контекст методологии")}</span>
             </div>
           </div>
         </div>
@@ -261,14 +264,14 @@ export function CoachesLandingClient() {
       <section className={styles.stepsBand}>
         <div className={styles.sectionInner}>
           <div className={styles.sectionHeading}>
-            <p className={styles.eyebrow}>Подключение</p>
-            <h2>От заявки до первого клиента</h2>
+            <p className={styles.eyebrow}>{uiText("Подключение")}</p>
+            <h2>{uiText("От заявки до первого клиента")}</h2>
           </div>
           <ol className={styles.steps}>
-            <li><span>01</span><div><h3>Оставьте заявку</h3><p>Расскажите о формате практики и интересующей модели.</p></div></li>
-            <li><span>02</span><div><h3>Получите закрытые условия</h3><p>На e-mail придут экономика, правила витрины и лимиты сопровождения.</p></div></li>
-            <li><span>03</span><div><h3>Согласуйте программу</h3><p>Команда проверит профиль и зафиксирует индивидуальные параметры.</p></div></li>
-            <li><span>04</span><div><h3>Запустите партнёрский кабинет</h3><p>Ссылки, конверсии, начисления и предложения появятся в одном месте.</p></div></li>
+            <li><span>01</span><div><h3>{uiText("Оставьте заявку")}</h3><p>{uiText("Расскажите о формате практики и интересующей модели.")}</p></div></li>
+            <li><span>02</span><div><h3>{uiText("Получите закрытые условия")}</h3><p>{uiText("На e-mail придут экономика, правила витрины и лимиты сопровождения.")}</p></div></li>
+            <li><span>03</span><div><h3>{uiText("Согласуйте программу")}</h3><p>{uiText("Команда проверит профиль и зафиксирует индивидуальные параметры.")}</p></div></li>
+            <li><span>04</span><div><h3>{uiText("Запустите партнёрский кабинет")}</h3><p>{uiText("Ссылки, конверсии, начисления и предложения появятся в одном месте.")}</p></div></li>
           </ol>
         </div>
       </section>
@@ -280,55 +283,55 @@ export function CoachesLandingClient() {
             <h2>{publicContent.applicationTitle}</h2>
             <p>{publicContent.applicationLead}</p>
             <ul>
-              <li><Check /> Никаких публичных обещаний без соглашения</li>
-              <li><Check /> Условия под ваш формат и нагрузку</li>
-              <li><Check /> Единый аккаунт в партнёрской системе студии</li>
+              <li><Check /> {uiText(" Никаких публичных обещаний без соглашения")}</li>
+              <li><Check /> {uiText(" Условия под ваш формат и нагрузку")}</li>
+              <li><Check /> {uiText(" Единый аккаунт в партнёрской системе студии")}</li>
             </ul>
           </div>
 
           {success ? (
             <div className={styles.successPanel} role="status">
               <MailCheck size={42} />
-              <h3>Заявка принята</h3>
+              <h3>{uiText("Заявка принята")}</h3>
               <p>{success === "sent"
-                ? "Закрытые условия отправлены на указанный e-mail. Проверьте также папку «Спам»."
-                : "Команда получила заявку и отправит закрытые условия вручную после проверки контакта."}</p>
-              <button className={styles.secondaryButton} type="button" onClick={() => setSuccess(null)}>Отправить ещё одну заявку</button>
+                ? uiText("Закрытые условия отправлены на указанный e-mail. Проверьте также папку «Спам».")
+                : uiText("Команда получила заявку и отправит закрытые условия вручную после проверки контакта.")}</p>
+              <button className={styles.secondaryButton} type="button" onClick={() => setSuccess(null)}>{uiText("Отправить ещё одну заявку")}</button>
             </div>
           ) : (
             <form className={styles.applicationForm} onSubmit={submitApplication} noValidate>
               <div className={styles.formGrid}>
-                <label><span>Имя и фамилия *</span><input value={form.fullName} onChange={(event) => setForm({ ...form, fullName: event.target.value })} autoComplete="name" maxLength={120} required /></label>
+                <label><span>{uiText("Имя и фамилия *")}</span><input value={form.fullName} onChange={(event) => setForm({ ...form, fullName: event.target.value })} autoComplete="name" maxLength={120} required /></label>
                 <label><span>E-mail *</span><input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} autoComplete="email" maxLength={320} required /></label>
                 <label><span>Telegram</span><input value={form.telegram} onChange={(event) => setForm({ ...form, telegram: event.target.value })} placeholder="@username" maxLength={80} /></label>
-                <label><span>Город</span><input value={form.city} onChange={(event) => setForm({ ...form, city: event.target.value })} autoComplete="address-level2" maxLength={120} /></label>
-                <label><span>Формат практики *</span><select value={form.practiceFormat} onChange={(event) => setForm({ ...form, practiceFormat: event.target.value as CoachPartnershipApplicationInput["practiceFormat"] })}><option value="individual">Индивидуальная работа</option><option value="groups">Групповые программы</option><option value="corporate">Корпоративные клиенты</option><option value="education">Обучение и наставничество</option><option value="mixed">Смешанный формат</option></select></label>
-                <label><span>Лет практики</span><input type="number" min="0" max="80" value={form.experienceYears} onChange={(event) => setForm({ ...form, experienceYears: event.target.value })} inputMode="numeric" /></label>
-                <label className={styles.fullField}><span>Активных клиентов сейчас</span><input type="number" min="0" max="100000" value={form.activeClients} onChange={(event) => setForm({ ...form, activeClients: event.target.value })} inputMode="numeric" /></label>
+                <label><span>{uiText("Город")}</span><input value={form.city} onChange={(event) => setForm({ ...form, city: event.target.value })} autoComplete="address-level2" maxLength={120} /></label>
+                <label><span>{uiText("Формат практики *")}</span><select value={form.practiceFormat} onChange={(event) => setForm({ ...form, practiceFormat: event.target.value as CoachPartnershipApplicationInput["practiceFormat"] })}><option value="individual">{uiText("Индивидуальная работа")}</option><option value="groups">{uiText("Групповые программы")}</option><option value="corporate">{uiText("Корпоративные клиенты")}</option><option value="education">{uiText("Обучение и наставничество")}</option><option value="mixed">{uiText("Смешанный формат")}</option></select></label>
+                <label><span>{uiText("Лет практики")}</span><input type="number" min="0" max="80" value={form.experienceYears} onChange={(event) => setForm({ ...form, experienceYears: event.target.value })} inputMode="numeric" /></label>
+                <label className={styles.fullField}><span>{uiText("Активных клиентов сейчас")}</span><input type="number" min="0" max="100000" value={form.activeClients} onChange={(event) => setForm({ ...form, activeClients: event.target.value })} inputMode="numeric" /></label>
               </div>
               <fieldset className={styles.interests}>
-                <legend>Что вас интересует? *</legend>
-                {interestOptions.map((item) => <label key={item.id}><input type="checkbox" checked={form.interests.includes(item.id)} onChange={() => toggleInterest(item.id)} /><span>{item.label}</span></label>)}
+                <legend>{uiText("Что вас интересует? *")}</legend>
+                {interestOptions().map((item) => <label key={item.id}><input type="checkbox" checked={form.interests.includes(item.id)} onChange={() => toggleInterest(item.id)} /><span>{item.label}</span></label>)}
               </fieldset>
-              <label className={styles.messageField}><span>О практике или задаче</span><textarea value={form.message} onChange={(event) => setForm({ ...form, message: event.target.value })} rows={4} maxLength={2000} placeholder="Например: веду карьерные группы и хочу добавить диагностику до старта программы" /></label>
-              <label className={styles.honeypot} aria-hidden="true"><span>Ваш сайт</span><input value={form.website} onChange={(event) => setForm({ ...form, website: event.target.value })} tabIndex={-1} autoComplete="off" /></label>
-              <label className={styles.consent}><input type="checkbox" checked={form.consent} onChange={(event) => setForm({ ...form, consent: event.target.checked })} /><span>Я согласен(на) на обработку данных для рассмотрения заявки согласно <Link href="/privacy" target="_blank">Политике конфиденциальности</Link>.</span></label>
+              <label className={styles.messageField}><span>{uiText("О практике или задаче")}</span><textarea value={form.message} onChange={(event) => setForm({ ...form, message: event.target.value })} rows={4} maxLength={2000} placeholder={uiText("Например: веду карьерные группы и хочу добавить диагностику до старта программы")} /></label>
+              <label className={styles.honeypot} aria-hidden="true"><span>{uiText("Ваш сайт")}</span><input value={form.website} onChange={(event) => setForm({ ...form, website: event.target.value })} tabIndex={-1} autoComplete="off" /></label>
+              <label className={styles.consent}><input type="checkbox" checked={form.consent} onChange={(event) => setForm({ ...form, consent: event.target.checked })} /><span>{uiText("Я согласен(на) на обработку данных для рассмотрения заявки согласно ")}<Link href="/privacy" target="_blank">{uiText("Политике конфиденциальности")}</Link>.</span></label>
               {error && <p className={styles.formError} role="alert">{error}</p>}
-              <button className={styles.submitButton} type="submit" disabled={!canSubmit}>{submitting ? "Отправляем..." : publicContent.applicationSubmitLabel} <ArrowRight size={18} /></button>
-              <p className={styles.formNote}>Точные ставки и коммерческие расчёты отправляются только на подтверждённый в заявке e-mail.</p>
+              <button className={styles.submitButton} type="submit" disabled={!canSubmit}>{submitting ? uiText("Отправляем...") : publicContent.applicationSubmitLabel} <ArrowRight size={18} /></button>
+              <p className={styles.formNote}>{uiText("Точные ставки и коммерческие расчёты отправляются только на подтверждённый в заявке e-mail.")}</p>
             </form>
           )}
         </div>
       </section>
 
       <footer className={styles.footer}>
-        <div><strong>ORKEN.LIFE</strong><span>AI-платформа развития и профориентации</span></div>
-        <nav><a href="mailto:orken.eco@gmail.com">orken.eco@gmail.com</a><Link href="/offer">Оферта</Link><Link href="/privacy">Политика</Link><Link href="/partners">Кабинет партнёра</Link></nav>
+        <div><strong>ORKEN.LIFE</strong><span>{uiText("AI-платформа развития и профориентации")}</span></div>
+        <nav><a href="mailto:orken.eco@gmail.com">orken.eco@gmail.com</a><Link href="/offer">{uiText("Оферта")}</Link><Link href="/privacy">{uiText("Политика")}</Link><Link href="/partners">{uiText("Кабинет партнёра")}</Link></nav>
       </footer>
     </main>
   );
 }
 
 function formatPrice(amount: number, currency: string) {
-  return new Intl.NumberFormat("ru-RU", { style: "currency", currency: currency.toUpperCase(), maximumFractionDigits: 0 }).format(amount / 100);
+  return new Intl.NumberFormat(getFormatLocale(), { style: "currency", currency: currency.toUpperCase(), maximumFractionDigits: 0 }).format(amount / 100);
 }

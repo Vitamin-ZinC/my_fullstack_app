@@ -7,6 +7,7 @@ module.exports = defineConfig({
   testDir: "tests",
   timeout: 120000,
   workers: 1,
+  use: { locale: "ru-RU" },
   webServer: {
     command: `npm --workspace apps/frontend run build && npm --workspace apps/frontend exec -- next start -p ${port}`,
     reuseExistingServer: true,

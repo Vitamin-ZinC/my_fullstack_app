@@ -70,11 +70,13 @@ import type {
   PromptTemplateInput,
   PromptTemplate
 } from "@levelup/contracts";
+import { getStoredLocale } from "@/lib/locale";
+import { translateSystemText } from "@levelup/contracts";
+export { getStoredLocale, setStoredLocale } from "@/lib/locale";
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 const SESSION_ID_KEY = "levelup_session_id";
 const GUEST_TOKEN_KEY = "levelup_guest_token";
-const LOCALE_KEY = "levelup_locale";
 const REFERRAL_CODE_KEY = "orken_referral_code";
 
 export type TextLocale = "ru" | "en";
@@ -157,24 +159,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     } catch {
       // Keep the original response text when the API did not return JSON.
     }
-    throw new ApiRequestError(message, res.status);
+    throw new ApiRequestError(translateSystemText(message, getStoredLocale()), res.status);
   }
   return res.json();
 }
 
 function hasWindow() {
   return typeof window !== "undefined";
-}
-
-export function getStoredLocale(): TextLocale {
-  if (!hasWindow()) return "ru";
-  const locale = window.localStorage.getItem(LOCALE_KEY) ?? navigator.language?.slice(0, 2) ?? "ru";
-  return locale === "en" ? "en" : "ru";
-}
-
-export function setStoredLocale(locale: TextLocale) {
-  if (!hasWindow()) return;
-  window.localStorage.setItem(LOCALE_KEY, locale);
 }
 
 export function captureReferralFromUrl() {

@@ -3,24 +3,26 @@
 import { useEffect, useState } from "react";
 import { API_URL } from "@/lib/api";
 import { defaultSiteText, mergeSiteText, parseLocale, type Locale, type SiteText } from "@/lib/messages";
+import { useUiLocale } from "@/lib/locale";
 
-export function useSiteText(locale: Locale = "ru"): SiteText {
-  const resolvedLocale = parseLocale(locale);
-  const [text, setText] = useState<SiteText>(defaultSiteText[resolvedLocale]);
+export function useSiteText(locale?: Locale): SiteText {
+  const selectedLocale = useUiLocale();
+  const resolvedLocale = parseLocale(locale ?? selectedLocale);
+  const [text, setText] = useState<{ locale: Locale; value: SiteText }>({ locale: resolvedLocale, value: defaultSiteText[resolvedLocale] });
 
   useEffect(() => {
     let cancelled = false;
-    setText(defaultSiteText[resolvedLocale]);
+    setText({ locale: resolvedLocale, value: defaultSiteText[resolvedLocale] });
 
     fetch(`${API_URL}/api/content/${resolvedLocale}`)
       .then((response) => response.ok ? response.json() : null)
       .then((payload) => {
         if (!cancelled && payload?.value) {
-          setText(mergeSiteText(defaultSiteText[resolvedLocale], payload.value));
+          setText({ locale: resolvedLocale, value: mergeSiteText(defaultSiteText[resolvedLocale], payload.value) });
         }
       })
       .catch(() => {
-        if (!cancelled) setText(defaultSiteText[resolvedLocale]);
+        if (!cancelled) setText({ locale: resolvedLocale, value: defaultSiteText[resolvedLocale] });
       });
 
     return () => {
@@ -28,5 +30,5 @@ export function useSiteText(locale: Locale = "ru"): SiteText {
     };
   }, [resolvedLocale]);
 
-  return text;
+  return text.locale === resolvedLocale ? text.value : defaultSiteText[resolvedLocale];
 }

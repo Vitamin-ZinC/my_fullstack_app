@@ -1,0 +1,10 @@
+import fs from "node:fs";
+const values = JSON.parse(fs.readFileSync("output/localization/english-draft.json", "utf8"));
+Object.assign(values, JSON.parse(fs.readFileSync("packages/contracts/src/localization/english-overrides.json", "utf8")));
+const inventory = JSON.parse(fs.readFileSync("output/localization/inventory.json", "utf8"));
+const missing = inventory.filter(item => !values[item.text]);
+if (missing.length && !process.argv.includes("--partial")) throw new Error(`${missing.length} untranslated phrases`);
+fs.mkdirSync("packages/contracts/src/localization", { recursive: true });
+const catalog = Object.fromEntries(inventory.filter(item => values[item.text]).map(item => [item.text, values[item.text]]));
+fs.writeFileSync("packages/contracts/src/localization/english.ts", "// Static English UI copy. Preserve source keys and named placeholders.\nexport const englishCatalog: Record<string, string> = " + JSON.stringify(catalog, null, 2) + ";\n");
+console.log(`Catalog: ${Object.keys(values).length} translations; ${missing.length} remaining`);

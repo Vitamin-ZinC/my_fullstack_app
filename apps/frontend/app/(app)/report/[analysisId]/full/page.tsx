@@ -1,4 +1,6 @@
 "use client";
+import { uiText, getFormatLocale, useUiLocale } from "@/lib/locale";
+
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -11,6 +13,7 @@ import { useSiteText } from "@/lib/useSiteText";
 type DiagnosticMapKey = keyof Pick<IkigaiScores, "love" | "good_at" | "paid_for" | "world_needs">;
 
 export default function FullReportPage() {
+  useUiLocale();
   const siteText = useSiteText();
   const text = siteText.report.full;
   const habitsText = siteText.habits;
@@ -25,7 +28,7 @@ export default function FullReportPage() {
     restoreSessionFromUrl();
     api.getFullReport(analysisId)
       .then((result) => setReport(result.reportFull))
-      .catch((reason) => setError(reason instanceof Error ? reason.message : "Не удалось загрузить отчет"));
+      .catch((reason) => setError(reason instanceof Error ? reason.message : uiText("Не удалось загрузить отчет")));
     api.habitConfig()
       .then((config) => setHabitConfig(config))
       .catch(() => setHabitConfig(null));
@@ -133,8 +136,8 @@ export default function FullReportPage() {
           <section className="habit-bridge-card">
             <div className="habit-bridge-kicker">
               {habitConfig?.trialDays
-                ? `${habitConfig.trialDays} дней trial · затем ${habitConfig.priceLabel} в месяц`
-                : `${habitConfig?.priceLabel ?? "$8"} в месяц`}
+                ? uiText("{v0} дней trial · затем {v1} в месяц", { v0: habitConfig.trialDays, v1: habitConfig.priceLabel })
+                : uiText("{v0} в месяц", { v0: habitConfig?.priceLabel ?? "$8" })}
             </div>
             <div className="habit-bridge-title">{habitsText.currentHabit.title}</div>
             <div className="habit-bridge-text">{habitsText.currentHabit.essence}</div>
@@ -149,7 +152,7 @@ export default function FullReportPage() {
               href={`/habits?from=ikigai&analysisId=${analysisId}`}
               onClick={() => storeHabitProfile(report, habitConfig)}
             >
-              {habitConfig?.trialDays ? `Активировать трекер привычек — ${habitConfig.trialDays} дней trial` : "Активировать трекер привычек"}
+              {habitConfig?.trialDays ? uiText("Активировать трекер привычек — {v0} дней trial", { v0: habitConfig.trialDays }) : uiText("Активировать трекер привычек")}
             </Link>
           </section>
           <div className="print-actions">
@@ -169,10 +172,11 @@ function formatDiagnosticValue(label: string, value: string) {
   const trimmed = value.trim();
   if (trimmed.length > 24 && trimmed.toLowerCase() !== label.toLowerCase()) return value;
 
-  return `По параметру "${label}" для старых отчетов не было сохранено развернутое пояснение. Новые диагностики ORKEN.LIFE формируют здесь персональную интерпретацию: что сигнал может означать в работе, где он помогает, какой риск создает и какой шаг развития выбрать.`;
+  return uiText("По параметру \"{v0}\" для старых отчетов не было сохранено развернутое пояснение. Новые диагностики ORKEN.LIFE формируют здесь персональную интерпретацию: что сигнал может означать в работе, где он помогает, какой риск создает и какой шаг развития выбрать.", { v0: label });
 }
 
 function DiagnosticValue({ label, value }: { label: string; value: string }) {
+  useUiLocale();
   const formatted = formatDiagnosticValue(label, value);
   const parts = splitDiagnosticParts(formatted);
   if (!parts) return <p>{formatted}</p>;
@@ -190,7 +194,11 @@ function DiagnosticValue({ label, value }: { label: string; value: string }) {
 }
 
 function splitDiagnosticParts(value: string) {
-  const labels = ["Ваш результат:", "Что это значит:", "Рекомендация:"];
+  const labels = [
+    ["Ваш результат:", "Что это значит:", "Рекомендация:"],
+    ["Your result:", "What it means:", "Recommendation:"]
+  ].find(group => group.every(label => value.includes(label))) ?? [];
+  if (!labels.length) return null;
   const indexes = labels.map((label) => ({ label, index: value.indexOf(label) }));
   if (indexes.some((item) => item.index === -1)) return null;
 
@@ -198,7 +206,7 @@ function splitDiagnosticParts(value: string) {
     const start = item.index + item.label.length;
     const end = indexes[index + 1]?.index ?? value.length;
     return {
-      label: item.label,
+      label: uiText(item.label),
       text: value.slice(start, end).trim()
     };
   });
@@ -243,5 +251,5 @@ function splitStrengths(value: string) {
     .map((item) => item.trim())
     .filter(Boolean)
     .slice(0, 4);
-  return parts.length > 0 ? parts : ["ясность", "структурирование", "практическая польза"];
+  return parts.length > 0 ? parts : [uiText("ясность"), uiText("структурирование"), uiText("практическая польза")];
 }

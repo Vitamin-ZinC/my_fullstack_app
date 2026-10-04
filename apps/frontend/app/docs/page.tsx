@@ -1,4 +1,6 @@
 "use client";
+import { uiText, getFormatLocale, useUiLocale } from "@/lib/locale";
+
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -7,6 +9,7 @@ import { api, type FounderIntakeBatchResponse, type HandoffDoc } from "@/lib/api
 const passwordKey = "orken_docs_password";
 
 export default function DocsPage() {
+  useUiLocale();
   const [password, setPassword] = useState("");
   const [docs, setDocs] = useState<HandoffDoc[]>([]);
   const [updatedAt, setUpdatedAt] = useState("");
@@ -40,7 +43,7 @@ export default function DocsPage() {
     } catch (reason) {
       setDocs([]);
       window.sessionStorage.removeItem(passwordKey);
-      setError(reason instanceof Error ? reason.message : "Не удалось открыть документацию");
+      setError(reason instanceof Error ? reason.message : uiText("Не удалось открыть документацию"));
     } finally {
       setLoading(false);
     }
@@ -83,7 +86,7 @@ export default function DocsPage() {
     } catch (reason) {
       setChatMessages((items) => [...items, {
         role: "system",
-        text: reason instanceof Error ? reason.message : "Не удалось сохранить сообщение"
+        text: reason instanceof Error ? reason.message : uiText("Не удалось сохранить сообщение")
       }]);
     } finally {
       setChatBusy(false);
@@ -95,8 +98,8 @@ export default function DocsPage() {
       <header className="docs-header">
         <Link href="/" className="docs-brand">ORKEN.LIFE</Link>
         <div>
-          <h1>Техническая документация</h1>
-          <p>Постоянная защищенная ссылка для передачи Codex/разработчику.</p>
+          <h1>{uiText("Техническая документация")}</h1>
+          <p>{uiText("Постоянная защищенная ссылка для передачи Codex/разработчику.")}</p>
         </div>
         <Link className="button secondary" href="/founder-chat">Founder chat</Link>
       </header>
@@ -104,17 +107,17 @@ export default function DocsPage() {
       <section className="docs-panel">
         <form className="docs-form" onSubmit={submit}>
           <label>
-            <span>Пароль</span>
+            <span>{uiText("Пароль")}</span>
             <input
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              placeholder="Введите пароль документации"
+              placeholder={uiText("Введите пароль документации")}
               type="password"
               autoComplete="current-password"
             />
           </label>
           <button type="submit" disabled={loading || !password.trim()}>
-            {loading ? "Открываем..." : "Открыть документацию"}
+            {loading ? uiText("Открываем...") : uiText("Открыть документацию")}
           </button>
         </form>
         {error && <p className="docs-error">{error}</p>}
@@ -124,29 +127,29 @@ export default function DocsPage() {
         <>
           <section className="docs-toolbar">
             <div>
-              <strong>Доступ открыт</strong>
-              <span>Обновлено: {updatedAt ? new Date(updatedAt).toLocaleString("ru-RU") : "сейчас"}</span>
+              <strong>{uiText("Доступ открыт")}</strong>
+              <span>{uiText("Обновлено: ")}{updatedAt ? new Date(updatedAt).toLocaleString(getFormatLocale()) : uiText("сейчас")}</span>
             </div>
-            <button type="button" onClick={() => loadDocs(password)} disabled={loading}>Обновить</button>
-            <button type="button" onClick={copyAll}>{copied ? "Скопировано" : "Скопировать все"}</button>
-            <button type="button" onClick={lock}>Закрыть доступ</button>
+            <button type="button" onClick={() => loadDocs(password)} disabled={loading}>{uiText("Обновить")}</button>
+            <button type="button" onClick={copyAll}>{copied ? uiText("Скопировано") : uiText("Скопировать все")}</button>
+            <button type="button" onClick={lock}>{uiText("Закрыть доступ")}</button>
           </section>
 
           <section className="docs-chat" id="founder-chat">
             <div className="docs-chat-head">
               <div>
                 <span>Founder intake</span>
-                <h2>Миничат задач и багрепортов</h2>
+                <h2>{uiText("Миничат задач и багрепортов")}</h2>
               </div>
               <select value={chatType} onChange={(event) => setChatType(event.target.value as "bug" | "task" | "idea")}>
-                <option value="bug">Баг</option>
-                <option value="task">Задача</option>
-                <option value="idea">Идея</option>
+                <option value="bug">{uiText("Баг")}</option>
+                <option value="task">{uiText("Задача")}</option>
+                <option value="idea">{uiText("Идея")}</option>
               </select>
             </div>
             <div className="docs-chat-feed" aria-live="polite">
               {chatMessages.length === 0 ? (
-                <p className="docs-chat-empty">Напиши проблему обычным языком. Система сохранит запись, замаскирует секреты и отметит, можно ли брать в работу сразу.</p>
+                <p className="docs-chat-empty">{uiText("Напиши проблему обычным языком. Система сохранит запись, замаскирует секреты и отметит, можно ли брать в работу сразу.")}</p>
               ) : chatMessages.map((message, index) => (
                 <div className={`docs-chat-message ${message.role}`} key={`${message.role}-${index}`}>
                   <strong>{message.role === "founder" ? "Founder" : "Safety intake"}</strong>
@@ -159,11 +162,11 @@ export default function DocsPage() {
                             {audit.decision}{audit.queueStatus === "QUEUED" ? " · QUEUED" : ""}
                           </div>
                           <span>{audit.title}</span>
-                          {audit.answer && <small>Ответ: {audit.answer}</small>}
-                          {audit.risks.length > 0 && <small>Риски: {audit.risks.join(", ")}</small>}
-                          {audit.blockedReasons.length > 0 && <small>Блокеры: {audit.blockedReasons.join(", ")}</small>}
-                          {audit.clarifyingQuestions.length > 0 && <small>Уточнить: {audit.clarifyingQuestions.join(" ")}</small>}
-                          {audit.howToMakeWorkable.length > 0 && <small>Как сделать рабочим: {audit.howToMakeWorkable.join(" ")}</small>}
+                          {audit.answer && <small>{uiText("Ответ: ")}{audit.answer}</small>}
+                          {audit.risks.length > 0 && <small>{uiText("Риски: ")}{audit.risks.join(", ")}</small>}
+                          {audit.blockedReasons.length > 0 && <small>{uiText("Блокеры: ")}{audit.blockedReasons.join(", ")}</small>}
+                          {audit.clarifyingQuestions.length > 0 && <small>{uiText("Уточнить: ")}{audit.clarifyingQuestions.join(" ")}</small>}
+                          {audit.howToMakeWorkable.length > 0 && <small>{uiText("Как сделать рабочим: ")}{audit.howToMakeWorkable.join(" ")}</small>}
                         </div>
                       ))}
                     </div>
@@ -175,11 +178,11 @@ export default function DocsPage() {
               <textarea
                 value={chatInput}
                 onChange={(event) => setChatInput(event.target.value)}
-                placeholder="Например: на мобильном в привычках кнопка не нажимается, шаги: открыть /habits..."
+                placeholder={uiText("Например: на мобильном в привычках кнопка не нажимается, шаги: открыть /habits...")}
                 rows={4}
               />
               <button type="submit" disabled={chatBusy || !chatInput.trim()}>
-                {chatBusy ? "Сохраняем..." : "Отправить"}
+                {chatBusy ? uiText("Сохраняем...") : uiText("Отправить")}
               </button>
             </form>
           </section>

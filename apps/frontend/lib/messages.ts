@@ -1,3 +1,4 @@
+import { localizeStaticText } from "@levelup/contracts";
 export const BRAND_NAME = "ORKEN.LIFE";
 
 export type Locale = "ru" | "en";
@@ -1018,26 +1019,7 @@ export type SiteText = Widen<typeof ruSiteText>;
 
 export const defaultSiteText: Record<Locale, SiteText> = {
   ru: ruSiteText,
-  en: {
-    ...ruSiteText,
-    accountDiagnostics: {
-      title: "Diagnostic history",
-      progressNote: "A new diagnosis updates recommendations without resetting your XP, achievements or Navigator check-ins. Previous reports remain here."
-    },
-    nav: { brand: BRAND_NAME, sub: "AI IKIGAI diagnostics", backHome: "← Home" },
-    landing: {
-      ...ruSiteText.landing,
-      titlePrefix: "Why is it so hard to understand",
-      titleAccent: "what is happening to you?",
-      cta: "Start diagnostics",
-      habitsCta: "Open habit navigator",
-      finalNote: "3 minutes · Free report · No registration"
-    },
-    admin: {
-      ...ruSiteText.admin,
-      textCopy: "Edit the JSON dictionary. Saved values override messages.ts without redeploying."
-    }
-  }
+  en: localizeStaticText(ruSiteText, "en")
 };
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -1061,5 +1043,5 @@ export function mergeSiteText(base: SiteText, overrides: unknown): SiteText {
 }
 
 export function parseLocale(value: string | null | undefined): Locale {
-  return value === "en" ? "en" : "ru";
+  return value?.toLowerCase().startsWith("en") ? "en" : "ru";
 }

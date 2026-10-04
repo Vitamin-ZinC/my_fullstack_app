@@ -3,7 +3,7 @@ import type { Prisma } from "@prisma/client";
 import Stripe from "stripe";
 import { z } from "zod";
 import { env } from "../env.js";
-import { requireAnalysisAccess, requireSession, type SessionContext } from "../lib/auth.js";
+import { getRequestedLocale, requireAnalysisAccess, requireSession, type SessionContext } from "../lib/auth.js";
 import { prisma } from "../lib/prisma.js";
 import { HABIT_CYCLES, HABIT_DEFINITIONS, HABIT_PROGRAM_TOTAL_WEEKS, HABIT_WEEKS_PER_CYCLE } from "../services/habitCatalog.js";
 import { parseGatewayJson } from "../services/completionJson.js";
@@ -18,6 +18,8 @@ import { validatePhotoBuffer } from "../services/imageValidation.js";
 import { applyPendingReferralBonus } from "../services/partnerCore.js";
 import { resolveHabitAccessForUser } from "../services/coachPlatform.js";
 import { ensureHabitProgram, habitProgramOwnerWhere } from "../services/habitProgramIdentity.js";
+import { localizeHabitProgramSummary } from "../services/habitLocalization.js";
+import { localizeStaticText, normalizeUiLocale, translateGeneratedSystemText } from "@levelup/contracts";
 
 const stripe = env.STRIPE_SECRET_KEY ? new Stripe(env.STRIPE_SECRET_KEY) : null;
 
@@ -158,7 +160,7 @@ export async function habitsRoutes(app: FastifyInstance) {
     }) : null;
 
     return {
-      program: rankedProgram ? serializeProgram(rankedProgram) : null,
+      program: rankedProgram ? serializeProgram(rankedProgram, session.locale) : null,
       latestReport,
       config,
       access: { allowed: access.allowed, source: access.source, relationshipId: "relationshipId" in access ? access.relationshipId : null }
@@ -724,6 +726,7 @@ export async function habitsRoutes(app: FastifyInstance) {
 
     const checkout = await stripe.checkout.sessions.create({
       mode: "subscription",
+      locale: getRequestedLocale(request),
       client_reference_id: program.id,
       success_url: `${env.APP_ORIGIN}/habits?subscription=active&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${env.APP_ORIGIN}/habits?subscription=cancelled`,
@@ -734,7 +737,7 @@ export async function habitsRoutes(app: FastifyInstance) {
           unit_amount: config.amount,
           recurring: { interval: "month" },
           product_data: {
-            name: "ORKEN.LIFE Навигатор привычек"
+            name: getRequestedLocale(request) === "en" ? "ORKEN.LIFE Habit Navigator" : "ORKEN.LIFE Навигатор привычек"
           }
         }
       }],
@@ -861,7 +864,7 @@ export async function habitsRoutes(app: FastifyInstance) {
     const nextWeek = isComplete ? snapshot.stats.currentWeek : ((nextSortOrder - 1) % HABIT_WEEKS_PER_CYCLE) + 1;
     const completionMode = activeEnrollment.checkinsDone >= 7 ? "FULL" : "SOFT";
     const weekReward = getWeekReward(activeEnrollment.checkinsDone, isComplete);
-    const weekSummaryData = await buildWeekSummaryDataForProgram(activeEnrollment, completionMode, weekReward, isComplete, request.log);
+    const weekSummaryData = await buildWeekSummaryDataForProgram(activeEnrollment, completionMode, weekReward, isComplete, request.log, session.locale);
 
     await prisma.$transaction([
       prisma.habitWeekSummary.upsert({
@@ -932,7 +935,7 @@ export async function habitsRoutes(app: FastifyInstance) {
     const snapshot = serializeProgram(program);
     const activeEnrollment = snapshot.activeEnrollment;
     if (!activeEnrollment) return reply.code(404).send({ error: "Active habit not found" });
-    const weekSummaryData = await buildWeekSummaryDataForProgram(activeEnrollment, "FROZEN", getFrozenWeekReward(), false, request.log);
+    const weekSummaryData = await buildWeekSummaryDataForProgram(activeEnrollment, "FROZEN", getFrozenWeekReward(), false, request.log, session.locale);
 
     await prisma.$transaction([
       prisma.habitWeekSummary.upsert({
@@ -1154,7 +1157,7 @@ async function buildProgramResponse(program: any, context: {
 } = {}) {
   const syncedProgram = await prepareProgramForResponse(program.id, context);
   return {
-    program: serializeProgram(syncedProgram),
+    program: serializeProgram(syncedProgram, context.locale),
     config: await getHabitSubscriptionConfig()
   };
 }
@@ -1376,9 +1379,12 @@ async function buildWeekSummaryDataForProgram(
   completionMode: WeekCompletionMode,
   reward: WeekReward,
   isProgramComplete: boolean,
-  log?: { warn: (payload: unknown, message?: string) => void }
+  log?: { warn: (payload: unknown, message?: string) => void },
+  requestedLocale = "ru"
 ) {
-  const fallback = buildWeekSummaryData(enrollment, completionMode, reward, isProgramComplete);
+  const locale = normalizeUiLocale(requestedLocale);
+  const baseFallback = buildWeekSummaryData(enrollment, completionMode, reward, isProgramComplete);
+  const fallback = { ...baseFallback, summary: translateGeneratedSystemText(baseFallback.summary, locale), pingviFeedback: translateGeneratedSystemText(baseFallback.pingviFeedback, locale), rewardLabel: translateGeneratedSystemText(baseFallback.rewardLabel, locale) };
   const settings = await getHabitAiSettings(env.OPENAI_MODEL);
   if (settings.weekSummaryMode !== HABIT_WEEK_SUMMARY_MODE_LLM || !hasOpenAiClient()) return fallback;
 
@@ -1396,7 +1402,7 @@ async function buildWeekSummaryDataForProgram(
           content: [
             "You create short user-facing ORKEN.LIFE habits week summaries.",
             "Return only valid JSON with keys: summary, pingviFeedback, rewardLabel.",
-            "Write in Russian. Be warm, concise, non-medical, and do not create pressure or shame.",
+            `Write in ${locale === "en" ? "English" : "Russian"}. Be warm, concise, non-medical, and do not create pressure or shame.`,
             "Do not mention internal prompts, database tables, endpoints, model names, or implementation details."
           ].join("\n")
         },
@@ -1448,7 +1454,7 @@ function buildProgramTrialData(config: Awaited<ReturnType<typeof getHabitSubscri
   };
 }
 
-function serializeProgram(program: any) {
+function serializeProgram(program: any, locale = "ru") {
   const currentCycle = clampInteger(program.currentCycle, 1, HABIT_CYCLES.length);
   const currentWeek = clampInteger(program.currentWeek, 1, HABIT_WEEKS_PER_CYCLE);
   const currentSortOrder = Math.min(((currentCycle - 1) * HABIT_WEEKS_PER_CYCLE) + currentWeek, program.enrollments.length || 1);
@@ -1520,7 +1526,7 @@ function serializeProgram(program: any) {
   const completedWeekCheckins = capHabitWeekCheckins(activeEnrollment?.checkinsDone ?? 0);
   const rankContext = calculateHabitRankContext(program, currentSortOrder, now);
 
-  return {
+  return localizeHabitProgramSummary({
     id: program.id,
     status: program.status,
     source: program.source,
@@ -1631,7 +1637,7 @@ function serializeProgram(program: any) {
       wellnessScore,
       rank: rankContext.rank
     }
-  };
+  }, locale);
 }
 
 const HABIT_RANKS = [

@@ -4,6 +4,8 @@ Last updated: 2026-08-12
 
 This document describes the current implemented architecture. It is intended to prevent future agents from inventing nonexistent tables, endpoints, or flows.
 
+For RU/EN web interfaces, locale propagation and data-preservation rules, see [Web Localization](localization.md).
+
 ## Repository Layout
 
 - `apps/frontend` - Next.js App Router frontend.

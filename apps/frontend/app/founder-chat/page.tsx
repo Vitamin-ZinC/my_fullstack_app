@@ -1,4 +1,6 @@
 "use client";
+import { uiText, getFormatLocale, useUiLocale } from "@/lib/locale";
+
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -13,6 +15,7 @@ type ChatMessage = {
 };
 
 export default function FounderChatPage() {
+  useUiLocale();
   const [password, setPassword] = useState("");
   const [chatType, setChatType] = useState<"bug" | "task" | "idea">("bug");
   const [priority, setPriority] = useState<"NORMAL" | "URGENT">("NORMAL");
@@ -47,7 +50,7 @@ export default function FounderChatPage() {
       window.sessionStorage.setItem(passwordKey, nextPassword);
     } catch (reason) {
       setItems([]);
-      setError(reason instanceof Error ? reason.message : "Не удалось загрузить очередь");
+      setError(reason instanceof Error ? reason.message : uiText("Не удалось загрузить очередь"));
     } finally {
       setLoadingBoard(false);
     }
@@ -73,7 +76,7 @@ export default function FounderChatPage() {
     } catch (reason) {
       setMessages((current) => [...current, {
         role: "system",
-        text: reason instanceof Error ? reason.message : "Не удалось отправить сообщение"
+        text: reason instanceof Error ? reason.message : uiText("Не удалось отправить сообщение")
       }]);
     } finally {
       setChatBusy(false);
@@ -94,7 +97,7 @@ export default function FounderChatPage() {
       await api.updateFounderIntakeStatus({ password, id, codexStatus });
       await loadBoard(password);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Не удалось обновить статус");
+      setError(reason instanceof Error ? reason.message : uiText("Не удалось обновить статус"));
     }
   }
 
@@ -104,27 +107,27 @@ export default function FounderChatPage() {
         <Link href="/" className="docs-brand">ORKEN.LIFE</Link>
         <div>
           <h1>Founder chat</h1>
-          <p>Миничат для задач, вопросов и багрепортов. Safe intake сохраняет историю, статусы и отправляет sanitized payload в Codex bridge.</p>
+          <p>{uiText("Миничат для задач, вопросов и багрепортов. Safe intake сохраняет историю, статусы и отправляет sanitized payload в Codex bridge.")}</p>
         </div>
-        <Link className="button secondary" href="/docs">Документация</Link>
+        <Link className="button secondary" href="/docs">{uiText("Документация")}</Link>
       </header>
 
       <section className="docs-panel">
         <form className="docs-form" onSubmit={unlock}>
           <label>
-            <span>Пароль</span>
+            <span>{uiText("Пароль")}</span>
             <input
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              placeholder="Введите пароль документации"
+              placeholder={uiText("Введите пароль документации")}
               type="password"
               autoComplete="current-password"
             />
           </label>
           <button type="submit" disabled={loadingBoard || !password.trim()}>
-            {loadingBoard ? "Загружаем..." : "Открыть чат"}
+            {loadingBoard ? uiText("Загружаем...") : uiText("Открыть чат")}
           </button>
-          {items.length > 0 && <button type="button" onClick={lock}>Закрыть доступ</button>}
+          {items.length > 0 && <button type="button" onClick={lock}>{uiText("Закрыть доступ")}</button>}
         </form>
         {error && <p className="docs-error">{error}</p>}
       </section>
@@ -135,21 +138,21 @@ export default function FounderChatPage() {
             <div className="docs-chat-head">
               <div>
                 <span>Codex bridge intake</span>
-                <h2>Сообщение founder-а</h2>
+                <h2>{uiText("Сообщение founder-а")}</h2>
               </div>
               <select value={chatType} onChange={(event) => setChatType(event.target.value as "bug" | "task" | "idea")}>
-                <option value="bug">Баг</option>
-                <option value="task">Задача</option>
-                <option value="idea">Идея</option>
+                <option value="bug">{uiText("Баг")}</option>
+                <option value="task">{uiText("Задача")}</option>
+                <option value="idea">{uiText("Идея")}</option>
               </select>
               <select value={priority} onChange={(event) => setPriority(event.target.value as "NORMAL" | "URGENT")}>
-                <option value="NORMAL">Обычный</option>
-                <option value="URGENT">Срочно</option>
+                <option value="NORMAL">{uiText("Обычный")}</option>
+                <option value="URGENT">{uiText("Срочно")}</option>
               </select>
             </div>
             <div className="docs-chat-feed" aria-live="polite">
               {messages.length === 0 ? (
-                <p className="docs-chat-empty">Напиши обычным языком. Приветствие или вопрос не попадут в работу; неполная задача получит уточняющие вопросы; безопасная конкретная задача попадёт в очередь и в Codex bridge.</p>
+                <p className="docs-chat-empty">{uiText("Напиши обычным языком. Приветствие или вопрос не попадут в работу; неполная задача получит уточняющие вопросы; безопасная конкретная задача попадёт в очередь и в Codex bridge.")}</p>
               ) : messages.map((message, index) => (
                 <div className={`docs-chat-message ${message.role}`} key={`${message.role}-${index}`}>
                   <strong>{message.role === "founder" ? "Founder" : "Intake"}</strong>
@@ -162,10 +165,10 @@ export default function FounderChatPage() {
                             {audit.decision}{audit.queueStatus === "QUEUED" ? " · QUEUED" : ""}
                           </div>
                           <span>{audit.title}</span>
-                          {audit.answer && <small>Ответ: {audit.answer}</small>}
-                          {audit.clarifyingQuestions.length > 0 && <small>Уточнить: {audit.clarifyingQuestions.join(" ")}</small>}
-                          {audit.risks.length > 0 && <small>Риски: {audit.risks.join(", ")}</small>}
-                          {audit.blockedReasons.length > 0 && <small>Блокеры: {audit.blockedReasons.join(", ")}</small>}
+                          {audit.answer && <small>{uiText("Ответ: ")}{audit.answer}</small>}
+                          {audit.clarifyingQuestions.length > 0 && <small>{uiText("Уточнить: ")}{audit.clarifyingQuestions.join(" ")}</small>}
+                          {audit.risks.length > 0 && <small>{uiText("Риски: ")}{audit.risks.join(", ")}</small>}
+                          {audit.blockedReasons.length > 0 && <small>{uiText("Блокеры: ")}{audit.blockedReasons.join(", ")}</small>}
                         </div>
                       ))}
                     </div>
@@ -177,11 +180,11 @@ export default function FounderChatPage() {
               <textarea
                 value={chatInput}
                 onChange={(event) => setChatInput(event.target.value)}
-                placeholder="Например: на /habits кнопка «Сохранить инсайт» не нажимается. Ожидаю сохранение, сейчас ничего не происходит. Шаги: открыть /habits, ввести текст, нажать кнопку."
+                placeholder={uiText("Например: на /habits кнопка «Сохранить инсайт» не нажимается. Ожидаю сохранение, сейчас ничего не происходит. Шаги: открыть /habits, ввести текст, нажать кнопку.")}
                 rows={4}
               />
               <button type="submit" disabled={chatBusy || !chatInput.trim()}>
-                {chatBusy ? "Отправляем..." : "Отправить"}
+                {chatBusy ? uiText("Отправляем...") : uiText("Отправить")}
               </button>
             </form>
           </section>
@@ -190,16 +193,16 @@ export default function FounderChatPage() {
             <div className="founder-board-head">
               <div>
                 <span>Codex bridge inbox</span>
-                <h2>Задачи и статусы</h2>
+                <h2>{uiText("Задачи и статусы")}</h2>
               </div>
               <button type="button" onClick={() => loadBoard(password)} disabled={loadingBoard}>
-                {loadingBoard ? "Обновляем..." : "Обновить"}
+                {loadingBoard ? uiText("Обновляем...") : uiText("Обновить")}
               </button>
             </div>
             <div className="founder-board-grid">
-              <TaskColumn title="В очереди" items={columns.queued} empty="Нет задач в очереди" updateStatus={updateStatus} />
-              <TaskColumn title="В процессе" items={columns.progress} empty="Нет задач в работе" updateStatus={updateStatus} />
-              <TaskColumn title="Готово" items={columns.done} empty="Нет завершённых записей" updateStatus={updateStatus} />
+              <TaskColumn title={uiText("В очереди")} items={columns.queued} empty={uiText("Нет задач в очереди")} updateStatus={updateStatus} />
+              <TaskColumn title={uiText("В процессе")} items={columns.progress} empty={uiText("Нет задач в работе")} updateStatus={updateStatus} />
+              <TaskColumn title={uiText("Готово")} items={columns.done} empty={uiText("Нет завершённых записей")} updateStatus={updateStatus} />
             </div>
           </section>
         </>
@@ -214,6 +217,7 @@ function TaskColumn(props: {
   empty: string;
   updateStatus: (id: string, codexStatus: "IN_PROGRESS" | "DONE" | "IGNORED") => Promise<void>;
 }) {
+  useUiLocale();
   return (
     <div className="founder-board-column">
       <h3>{props.title}</h3>
@@ -224,21 +228,21 @@ function TaskColumn(props: {
         return (
           <article className="founder-task-card" key={item.id}>
             <div className={`docs-decision ${item.decision.toLowerCase()}`}>{item.decision}</div>
-            {item.priority === "URGENT" && <div className="founder-priority">Срочно</div>}
+            {item.priority === "URGENT" && <div className="founder-priority">{uiText("Срочно")}</div>}
             <strong>{item.title}</strong>
             <p>{item.summary || item.sanitizedBody}</p>
             <small>ID: {item.id}</small>
             <small>Codex: {item.codexStatus}</small>
             <small>Bridge: {item.bridgeStatus}{item.bridgeAttempts ? ` · ${item.bridgeAttempts}` : ""}</small>
-            {item.codexReply && <small>Ответ Codex: {item.codexReply}</small>}
+            {item.codexReply && <small>{uiText("Ответ Codex: ")}{item.codexReply}</small>}
             {item.bridgeLastError && <small className="docs-error">Bridge error: {item.bridgeLastError}</small>}
             {!terminal && (
               <div className="founder-task-actions">
                 {item.codexStatus !== "IN_PROGRESS" && (
-                  <button type="button" onClick={() => props.updateStatus(item.id, "IN_PROGRESS")}>Взять в работу</button>
+                  <button type="button" onClick={() => props.updateStatus(item.id, "IN_PROGRESS")}>{uiText("Взять в работу")}</button>
                 )}
-                <button type="button" onClick={() => props.updateStatus(item.id, "DONE")}>Готово</button>
-                <button type="button" onClick={() => props.updateStatus(item.id, "IGNORED")}>Игнорировать</button>
+                <button type="button" onClick={() => props.updateStatus(item.id, "DONE")}>{uiText("Готово")}</button>
+                <button type="button" onClick={() => props.updateStatus(item.id, "IGNORED")}>{uiText("Игнорировать")}</button>
               </div>
             )}
           </article>

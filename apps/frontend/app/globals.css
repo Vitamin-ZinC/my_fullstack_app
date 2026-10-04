@@ -9676,3 +9676,35 @@ p {
   }
 }
 .habits-nav-link,.habits-mobile-more-link{min-height:44px;display:flex;align-items:center;gap:12px;padding:0 14px;color:#8295ad;text-decoration:none;border-radius:6px;font-size:14px}.habits-nav-link:hover,.habits-mobile-more-link:hover{background:#0c2636;color:#20d7ee}.habits-mobile-more-link{width:100%;box-sizing:border-box}
+/* Shared language controls stay in normal flow above every role's navigation. */
+.language-switcher {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  width: min(100%, 1440px);
+  min-height: 38px;
+  margin: 0 auto;
+  padding: 4px 20px;
+  color: #b4c2d2;
+}
+.language-switcher button {
+  width: 36px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  letter-spacing: 0;
+}
+.language-switcher button[aria-pressed="true"] {
+  border-color: #315667;
+  background: #11252c;
+  color: #39d7e5;
+}
+.language-switcher button:focus-visible { outline: 2px solid #39d7e5; outline-offset: 2px; }
+@media (max-width: 480px) { .language-switcher { padding-inline: 12px; } }

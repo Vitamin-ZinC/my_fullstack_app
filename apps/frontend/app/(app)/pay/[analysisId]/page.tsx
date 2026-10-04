@@ -1,4 +1,6 @@
 "use client";
+import { uiText, getFormatLocale, useUiLocale } from "@/lib/locale";
+
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -8,6 +10,7 @@ import { api, restoreSessionFromUrl } from "@/lib/api";
 import { useSiteText } from "@/lib/useSiteText";
 
 export default function PayPage() {
+  useUiLocale();
   const text = useSiteText().report.payment;
   const { analysisId } = useParams<{ analysisId: string }>();
   const [promoCode, setPromoCode] = useState("");
@@ -102,7 +105,7 @@ export default function PayPage() {
         <CreditCard size={18} /> {busy ? text.busy : text.checkoutExternal}
       </button>
       <p className="legal-inline-links">
-        Нажимая кнопку оплаты, вы принимаете <Link href="/offer" target="_blank">публичную оферту</Link> и соглашаетесь с <Link href="/privacy" target="_blank">политикой конфиденциальности</Link>.
+        {uiText(" Нажимая кнопку оплаты, вы принимаете ")}<Link href="/offer" target="_blank">{uiText("публичную оферту")}</Link> {uiText(" и соглашаетесь с ")}<Link href="/privacy" target="_blank">{uiText("политикой конфиденциальности")}</Link>.
       </p>
       {message && <div className="card">{message}</div>}
       <Link className="button secondary" href={`/report/${analysisId}/free`}>{text.backToFree}</Link>

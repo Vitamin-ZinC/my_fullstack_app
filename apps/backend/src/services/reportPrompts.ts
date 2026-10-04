@@ -281,7 +281,7 @@ export async function buildReportPromptMessages(
   };
 
   return {
-    systemPrompt: systemPrompt.content,
+    systemPrompt: `${systemPrompt.content}\nOutput language is ${language}. All user-facing prose, role names, labels and fallback content must be in ${language}. ${language === "English" ? "For every voice_analysis and face_analysis paragraph use exactly: 'Your result:', 'What it means:', 'Recommendation:'. This language rule overrides Russian-only formatting instructions, but never overrides safety rules or the JSON schema." : "Use the required Russian result/meaning/recommendation labels."}`,
     userPrompt: renderPromptTemplate(userPrompt.content, variables),
     promptVersion: Math.max(systemPrompt.version, userPrompt.version),
     promptSources: {

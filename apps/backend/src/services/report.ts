@@ -1,12 +1,9 @@
-import type { IkigaiAnswers, ReportFree, ReportFull } from "@levelup/contracts";
+import { localizeStaticText, translateSystemText, type UiLocale, type IkigaiAnswers, type ReportFree, type ReportFull } from "@levelup/contracts";
 
-export function buildFallbackFreeReport(report: ReportFull): ReportFree {
-  return {
+export function buildFallbackFreeReport(report: ReportFull, locale: UiLocale = "ru"): ReportFree {
+  const copy = localizeStaticText({
     profession: report.profession,
-    summary: [
-      report.summary,
-      "Бесплатный результат показывает главный вектор и один следующий шаг. Полный отчет раскрывает, почему именно этот путь подходит по голосу, визуальному сигналу, карте Икигай и ролевым сценариям."
-    ].join(" "),
+    summary: "Бесплатный результат показывает главный вектор и один следующий шаг. Полный отчет раскрывает, почему именно этот путь подходит по голосу, визуальному сигналу, карте Икигай и ролевым сценариям.",
     ikigai_scores: report.ikigai_scores,
     key_insight: "Сейчас самый полезный шаг - проверить, где Ваши сильные навыки уже можно превратить в понятный результат для конкретной аудитории.",
     paid_report_teaser: "В полном отчете ORKEN.LIFE откроются персональные зоны Икигай, расширенный разбор голоса и лица, проценты совпадения по ролям, риски и 30-дневный маршрут развития.",
@@ -18,18 +15,20 @@ export function buildFallbackFreeReport(report: ReportFull): ReportFree {
       "Карьерные риски и точки роста",
       "30-дневный маршрут внедрения"
     ]
-  };
+  }, locale);
+  // A report may contain user-supplied text; only the fixed teaser copy is localized.
+  return { ...copy, profession: report.profession, summary: `${report.summary} ${copy.summary}` };
 }
 
-export function buildFallbackReport(answers: IkigaiAnswers): ReportFull {
-  const strongestSkill = answers.good_at[0] || "структурирование сложных задач";
-  const strongestInterest = answers.love[0] || "исследование и развитие идей";
-  const marketNeed = answers.world_needs[0] || "ясность и практическая польза";
-  const paidFor = answers.paid_for[0] || "консультации и внедрение решений";
+export function buildFallbackReport(answers: IkigaiAnswers, locale: UiLocale = "ru"): ReportFull {
+  const strongestSkill = answers.good_at[0] || translateSystemText("структурирование сложных задач", locale);
+  const strongestInterest = answers.love[0] || translateSystemText("исследование и развитие идей", locale);
+  const marketNeed = answers.world_needs[0] || translateSystemText("ясность и практическая польза", locale);
+  const paidFor = answers.paid_for[0] || translateSystemText("консультации и внедрение решений", locale);
 
-  return {
+  const report: ReportFull = localizeStaticText({
     profession: "Продуктовый стратег",
-    summary: `Профиль показывает сочетание аналитичности, спокойной уверенности и ориентации на практическую пользу. Сильнее всего раскрывается зона профессии: навык "${strongestSkill}" можно превратить в понятную рыночную ценность, если связать его с запросом "${marketNeed}" и предложением, за которое готовы платить: "${paidFor}".`,
+    summary: 'Профиль показывает сочетание аналитичности, спокойной уверенности и ориентации на практическую пользу. Сильнее всего раскрывается зона профессии: навык "{v0}" можно превратить в понятную рыночную ценность, если связать его с запросом "{v1}" и предложением, за которое готовы платить: "{v2}".',
     ikigai_scores: { love: 78, good_at: 74, paid_for: 68, world_needs: 83 },
     voice_analysis: {
       timbre: "Тембр воспринимается как собранный и надежный сигнал. В рабочем контексте это помогает спокойно объяснять сложные идеи и удерживать доверие. Риск в том, что подача может звучать слишком сдержанно, поэтому полезно добавлять больше конкретных примеров и живых акцентов.",
@@ -84,22 +83,22 @@ export function buildFallbackReport(answers: IkigaiAnswers): ReportFull {
     ikigai_zones: {
       passion: {
         title: "Страсть",
-        insight: `Зона страсти связана с темами, где есть живой интерес: ${strongestInterest}. Здесь энергия появляется не от внешнего давления, а от ощущения смысла и исследования.`,
+        insight: "Зона страсти связана с темами, где есть живой интерес: {v0}. Здесь энергия появляется не от внешнего давления, а от ощущения смысла и исследования.",
         recommendation: "Выберите один формат, где интерес можно превратить в регулярную практику: заметки, разборы, короткие консультации или публичные наблюдения."
       },
       mission: {
         title: "Миссия",
-        insight: `Зона миссии опирается на пользу, которую Вы можете дать людям и рынку: ${marketNeed}. Сильная сторона - переводить неопределенность в понятные решения.`,
+        insight: "Зона миссии опирается на пользу, которую Вы можете дать людям и рынку: {v0}. Сильная сторона - переводить неопределенность в понятные решения.",
         recommendation: "Сформулируйте одну проблему аудитории и результат, который человек получит после взаимодействия с Вами."
       },
       profession: {
         title: "Профессия",
-        insight: `Профессиональная зона сейчас выглядит самой сильной: ${strongestSkill} уже можно соединять с задачами, где нужна структура, ясность и внедрение.`,
+        insight: "Профессиональная зона сейчас выглядит самой сильной: {v0} уже можно соединять с задачами, где нужна структура, ясность и внедрение.",
         recommendation: "Соберите короткое предложение: кому Вы помогаете, какую задачу решаете и какой измеримый результат даете."
       },
       vocation: {
         title: "Призвание",
-        insight: `Зона монетизации связана с направлением "${paidFor}". Здесь важно не просто быть полезным, а упаковать пользу в конкретный продукт или услугу.`,
+        insight: 'Зона монетизации связана с направлением "{v0}". Здесь важно не просто быть полезным, а упаковать пользу в конкретный продукт или услугу.',
         recommendation: "Проверьте платную гипотезу на 3-5 людях: предложите маленький результат за ограниченное время и соберите обратную связь."
       },
       ikigai: {
@@ -110,5 +109,14 @@ export function buildFallbackReport(answers: IkigaiAnswers): ReportFull {
     },
     career_action: "Неделя 1: сформулируйте один оффер и критерий результата. Неделя 2: покажите оффер 5 потенциальным клиентам или коллегам. Неделя 3: проведите 1-2 пилотных разбора и соберите обратную связь. Неделя 4: улучшите упаковку, цену и следующий шаг на основе реальных реакций.",
     final_insight: "Комплексный AI-анализ показывает хорошую синхронизацию между вашим внешним проявлением и внутренним потенциалом: голосовой сигнал поддерживает спокойную экспертность, а визуальная собранность помогает считываться как человек, который умеет структурировать сложное. Это создает фундамент для карьеры в аналитике, продуктовой стратегии, консультировании и обучении. Однако ваш истинный Икигай лежит глубже: чтобы получать больше удовлетворения от деятельности, важно развивать лидерские качества, навык передачи знаний и способность превращать личные результаты в систему для других. Смещение фокуса с индивидуальной эффективности на создание сильных решений, команд и обучающих форматов позволит раскрыть потенциал и найти более устойчивый баланс в профессии."
-  };
+  }, locale);
+  const insert = (text: string, values: string[]) => text.replace(/\{v(\d+)\}/g, (placeholder, index: string) => values[Number(index)] ?? placeholder);
+  report.summary = insert(report.summary, [strongestSkill, marketNeed, paidFor]);
+  if (report.ikigai_zones) {
+    report.ikigai_zones.passion.insight = insert(report.ikigai_zones.passion.insight, [strongestInterest]);
+    report.ikigai_zones.mission.insight = insert(report.ikigai_zones.mission.insight, [marketNeed]);
+    report.ikigai_zones.profession.insight = insert(report.ikigai_zones.profession.insight, [strongestSkill]);
+    report.ikigai_zones.vocation.insight = insert(report.ikigai_zones.vocation.insight, [paidFor]);
+  }
+  return report;
 }

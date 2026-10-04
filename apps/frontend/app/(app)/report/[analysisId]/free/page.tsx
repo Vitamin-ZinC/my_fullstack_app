@@ -1,4 +1,6 @@
 "use client";
+import { uiText, getFormatLocale, useUiLocale } from "@/lib/locale";
+
 
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -8,6 +10,7 @@ import { api, restoreSessionFromUrl } from "@/lib/api";
 import { useSiteText } from "@/lib/useSiteText";
 
 export default function FreeReportPage() {
+  useUiLocale();
   const text = useSiteText().report.free;
   const { analysisId } = useParams<{ analysisId: string }>();
   const [report, setReport] = useState<ReportFree | null>(null);

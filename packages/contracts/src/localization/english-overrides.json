@@ -1,0 +1,19 @@
+{
+  "Награды": "Rewards",
+  "Пройти диагностику": "Start assessment",
+  "Пройти диагностику →": "Start assessment →",
+  "ИИ-диагностика лица и голоса": "AI face and voice assessment",
+  "AI-диагностика Икигай": "AI Ikigai assessment",
+  "Начать без диагностики": "Start without an assessment",
+  "Диагностика и навигатор — для разных моментов одного пути.": "Assessment and Navigator support different stages of the same journey.",
+  "Отдельное приложение для ежедневных шагов, состояния, XP и архива инсайтов. Можно начать без повторной диагностики.": "A separate space for daily steps, state tracking, XP and your insight archive. You can start without repeating the assessment.",
+  "Email нужен, чтобы сохранить результат, восстановить доступ к отчёту и связать оплату с вашей диагностикой.": "Your email saves your result, restores access to your report and links payment to your assessment.",
+  "Стартовый вывод из диагностики: {v0}": "Initial assessment insight: {v0}",
+  "Passion / Страсть": "Passion",
+  "Mission / Миссия": "Mission",
+  "Vocation / Призвание": "Vocation",
+  "Profession / Профессия": "Profession",
+  "🔍 Твоя конфигурация ИКИГАЙ": "🔍 Your Ikigai configuration",
+  "Сон как фундамент": "Sleep as a foundation",
+  "Что сделать: {v0} Время: {v1} мин. Если совсем нет сил: {v2} за 30 секунд.": "What to do: {v0} Time: {v1} min. If you have no energy: {v2} for 30 seconds."
+}

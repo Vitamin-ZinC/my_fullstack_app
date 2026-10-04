@@ -1,4 +1,6 @@
 "use client";
+import { uiText, getFormatLocale, useUiLocale } from "@/lib/locale";
+
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
@@ -11,49 +13,50 @@ import styles from "../catalog.module.css";
 type PublicCoach = CoachCatalogResponse["coaches"][number] & { rewards?: Array<{ id: string; title: string; description: string; pointsCost: number }>; site?: { slug?: string } | null; siteUrl?: string | null; telegramBotUsername?: string | null };
 
 export default function CoachProfilePage() {
+  useUiLocale();
   const { slug } = useParams<{ slug: string }>();
   const [coach, setCoach] = useState<PublicCoach | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
   const [servicesCommerceEnabled, setServicesCommerceEnabled] = useState(false);
-  useEffect(() => { coachCatalogApi.get(slug).then((result) => { setCoach(result.coach as PublicCoach); setServicesCommerceEnabled(result.servicesCommerceEnabled); }).catch((reason) => setError(reason instanceof Error ? reason.message : "Коуч не найден")); }, [slug]);
+  useEffect(() => { coachCatalogApi.get(slug).then((result) => { setCoach(result.coach as PublicCoach); setServicesCommerceEnabled(result.servicesCommerceEnabled); }).catch((reason) => setError(reason instanceof Error ? reason.message : uiText("Коуч не найден"))); }, [slug]);
 
   async function buy(offerId: string) {
     setBusy(offerId); setError("");
     try {
       const result = await coachCatalogApi.checkout(offerId, crypto.randomUUID());
       if (result.url) window.location.assign(result.url);
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Не удалось открыть оплату"); }
+    } catch (reason) { setError(reason instanceof Error ? reason.message : uiText("Не удалось открыть оплату")); }
     finally { setBusy(""); }
   }
 
-  if (error && !coach) return <main className={styles.page}><div className={styles.error}>{error}</div><Link href="/coaches">Вернуться в каталог</Link></main>;
-  if (!coach) return <main className={styles.page}><div className={styles.state}>Загружаем профиль...</div></main>;
+  if (error && !coach) return <main className={styles.page}><div className={styles.error}>{error}</div><Link href="/coaches">{uiText("Вернуться в каталог")}</Link></main>;
+  if (!coach) return <main className={styles.page}><div className={styles.state}>{uiText("Загружаем профиль...")}</div></main>;
   return (
     <main className={styles.page}>
-      <header className={styles.header}><Link className={styles.brand} href="/">ORKEN.LIFE</Link><Link href="/coaches"><ArrowLeft size={17}/> Каталог</Link></header>
+      <header className={styles.header}><Link className={styles.brand} href="/">ORKEN.LIFE</Link><Link href="/coaches"><ArrowLeft size={17}/> {uiText(" Каталог")}</Link></header>
       <section className="coach-public-profile">
         <div className="coach-public-photo">{coach.avatarUrl ? <img src={coach.avatarUrl} alt={coach.displayName}/> : <UserRound size={64}/>}</div>
         <div className="coach-public-main">
-          <div className={styles.eyebrow}><ShieldCheck size={17}/> Профиль проверен ORKEN</div>
+          <div className={styles.eyebrow}><ShieldCheck size={17}/> {uiText(" Профиль проверен ORKEN")}</div>
           <h1>{coach.displayName}</h1><p className="coach-public-headline">{coach.headline}</p>
-          <div className={styles.meta}>{coach.city && <span><MapPin size={16}/>{coach.city}</span>}<span><MessageCircle size={16}/>{coach.acceptingOrders ? "Принимает новых клиентов" : "Запись временно закрыта"}</span></div>
+          <div className={styles.meta}>{coach.city && <span><MapPin size={16}/>{coach.city}</span>}<span><MessageCircle size={16}/>{coach.acceptingOrders ? uiText("Принимает новых клиентов") : uiText("Запись временно закрыта")}</span></div>
           <div className={styles.tags}>{coach.specializations.map((item) => <span key={item}>{item}</span>)}</div>
-          <p className="coach-public-bio">{coach.bio || "Коуч использует ORKEN для прозрачного сопровождения, обратной связи и наблюдения динамики между сессиями."}</p>
-          <div className="coach-public-links">{coach.siteUrl && <a href={coach.siteUrl} target="_blank"><ExternalLink size={17} /> Сайт коуча</a>}{coach.telegramBotUsername && <a href={`https://t.me/${coach.telegramBotUsername}?start=coach_${coach.slug}`} target="_blank"><Bot size={17} /> Открыть в Telegram</a>}</div>
+          <p className="coach-public-bio">{coach.bio || uiText("Коуч использует ORKEN для прозрачного сопровождения, обратной связи и наблюдения динамики между сессиями.")}</p>
+          <div className="coach-public-links">{coach.siteUrl && <a href={coach.siteUrl} target="_blank"><ExternalLink size={17} /> {uiText(" Сайт коуча")}</a>}{coach.telegramBotUsername && <a href={`https://t.me/${coach.telegramBotUsername}?start=coach_${coach.slug}`} target="_blank"><Bot size={17} /> {uiText(" Открыть в Telegram")}</a>}</div>
         </div>
       </section>
       <section className="coach-public-services">
-        <div><h2>Форматы работы</h2><p>Оплата проходит через ORKEN. Условия и распределение оплаты зафиксированы до покупки.</p></div>
+        <div><h2>{uiText("Форматы работы")}</h2><p>{uiText("Оплата проходит через ORKEN. Условия и распределение оплаты зафиксированы до покупки.")}</p></div>
         <div className="coach-public-service-grid">
           {coach.services.map((offer) => <article key={offer.id} className="coach-public-service">
-            <div>{offer.type === "CONSULTATION" ? <CalendarDays/> : <MessageCircle/>}<span>{offer.type === "CONSULTATION" ? "Консультация" : "Ведение"}</span></div>
+            <div>{offer.type === "CONSULTATION" ? <CalendarDays/> : <MessageCircle/>}<span>{offer.type === "CONSULTATION" ? uiText("Консультация") : uiText("Ведение")}</span></div>
             <h3>{offer.title}</h3><p>{offer.description}</p>
-            <ul><li><Check size={15}/> Оплата внутри ORKEN</li>{offer.type === "CONSULTATION" && <li><Clock3 size={15}/> Запись через календарь после оплаты</li>}</ul>
-            <strong>{money(offer.amount, offer.currency)}{offer.type === "ONGOING_SUPPORT" && offer.paymentModel === "CLIENT_PAID" ? " / месяц" : ""}</strong>
-            <button disabled={!coach.acceptingOrders || !servicesCommerceEnabled || busy === offer.id} onClick={() => buy(offer.id)}>{busy === offer.id ? "Открываем оплату..." : servicesCommerceEnabled ? "Выбрать" : "Скоро доступно"}</button>
+            <ul><li><Check size={15}/> {uiText(" Оплата внутри ORKEN")}</li>{offer.type === "CONSULTATION" && <li><Clock3 size={15}/> {uiText(" Запись через календарь после оплаты")}</li>}</ul>
+            <strong>{money(offer.amount, offer.currency)}{offer.type === "ONGOING_SUPPORT" && offer.paymentModel === "CLIENT_PAID" ? uiText(" / месяц") : ""}</strong>
+            <button disabled={!coach.acceptingOrders || !servicesCommerceEnabled || busy === offer.id} onClick={() => buy(offer.id)}>{busy === offer.id ? uiText("Открываем оплату...") : servicesCommerceEnabled ? uiText("Выбрать") : uiText("Скоро доступно")}</button>
           </article>)}
-          {coach.services.length === 0 && <div className={styles.state}>Коуч ещё не опубликовал услуги.</div>}
+          {coach.services.length === 0 && <div className={styles.state}>{uiText("Коуч ещё не опубликовал услуги.")}</div>}
         </div>
       </section>
       {error && <div className={styles.error}>{error}</div>}
@@ -64,4 +67,4 @@ export default function CoachProfilePage() {
   );
 }
 
-function money(amount:number,currency:string){return new Intl.NumberFormat("ru-RU",{style:"currency",currency:currency.toUpperCase(),maximumFractionDigits:0}).format(amount/100)}
+function money(amount:number,currency:string){return new Intl.NumberFormat(getFormatLocale(),{style:"currency",currency:currency.toUpperCase(),maximumFractionDigits:0}).format(amount/100)}

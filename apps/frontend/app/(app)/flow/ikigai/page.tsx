@@ -1,4 +1,6 @@
 "use client";
+import { uiText, getFormatLocale, useUiLocale } from "@/lib/locale";
+
 
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -13,6 +15,7 @@ const emptyIkigaiAnswers = {
 };
 
 export default function IkigaiPage() {
+  useUiLocale();
   const router = useRouter();
   const text = useSiteText();
   const [error, setError] = useState("");
@@ -35,8 +38,8 @@ export default function IkigaiPage() {
   return (
     <div className="flow-inner" data-testid="ikigai-redirect-page">
       <div className="ub very-muted analysis-kicker">{text.flow.analysis.eyebrow}</div>
-      <h1 className="ub flow-title">Запускаем анализ</h1>
-      <p className="muted flow-copy">Собираем голос и фото в единый отчет.</p>
+      <h1 className="ub flow-title">{uiText("Запускаем анализ")}</h1>
+      <p className="muted flow-copy">{uiText("Собираем голос и фото в единый отчет.")}</p>
       {error && <div className="card error-card">{error}</div>}
     </div>
   );

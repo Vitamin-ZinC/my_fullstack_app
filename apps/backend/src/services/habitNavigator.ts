@@ -3,6 +3,7 @@ import { prisma } from "../lib/prisma.js";
 import { getHabitAiSettings } from "./habitSettings.js";
 import { getOpenAiClient, hasOpenAiClient } from "./openaiClient.js";
 import { HABIT_NAVIGATOR_SYSTEM_PROMPT_KEY, renderPromptTemplate, resolveActivePrompt } from "./reportPrompts.js";
+import { normalizeUiLocale, translateGeneratedSystemText } from "@levelup/contracts";
 
 export type HabitNavigatorIdentity = {
   userId?: string | null;
@@ -64,7 +65,7 @@ export async function askHabitNavigator(request: HabitNavigatorRequest): Promise
 
   if (!userText) {
     return {
-      reply: "Напиши один вопрос или выбери быстрый сценарий.",
+      reply: normalizeUiLocale(request.identity.locale) === "en" ? "Ask a question or choose a quick prompt." : "Напиши один вопрос или выбери быстрый сценарий.",
       model: "fallback",
       threadId: thread?.id
     };
@@ -77,7 +78,7 @@ export async function askHabitNavigator(request: HabitNavigatorRequest): Promise
   }
 
   const memory = program ? buildNavigatorMemory(program) : null;
-  const fallback = buildFallbackReply(request.context, memory);
+  const fallback = buildFallbackReply(request.context, memory, request.identity.locale);
 
   if (!hasOpenAiClient()) {
     if (thread) {
@@ -263,7 +264,7 @@ async function buildNavigatorSystemPrompt(context: Record<string, unknown> | und
     channel,
     frontendContext: clipText(JSON.stringify(context ?? {}), 1600),
     backendContext: memory ? formatNavigatorMemory(memory) : "No linked habits program is available."
-  });
+  }) + `\nOutput language: ${normalizeUiLocale(locale) === "en" ? "English" : "Russian"}. Write the entire reply in this language, even if stored context is in another language.`;
 }
 
 function formatNavigatorMemory(memory: ReturnType<typeof buildNavigatorMemory>) {
@@ -309,9 +310,14 @@ function formatNavigatorMemory(memory: ReturnType<typeof buildNavigatorMemory>) 
   return lines.join("\n");
 }
 
-function buildFallbackReply(context: Record<string, unknown> | undefined, memory: ReturnType<typeof buildNavigatorMemory> | null) {
+export function buildFallbackReply(context: Record<string, unknown> | undefined, memory: ReturnType<typeof buildNavigatorMemory> | null, locale = "ru") {
   const mode = typeof context?.mode === "string" ? context.mode : "chat";
   const habit = memory?.activeHabit?.title;
+  if (normalizeUiLocale(locale) === "en") {
+    if (mode === "state") return `Your current habit${habit ? ` is "${translateGeneratedSystemText(habit, "en")}"` : " is ready"}. Start small: check in with yourself, choose one manageable action and mark it without pressure.`;
+    if (memory?.todayTask) return `Today's step: ${translateGeneratedSystemText(memory.todayTask.microAction, "en")}. Try the smallest version, then check in.`;
+    return "I'm here. Ask about your current habit, how you feel or your next step, and I'll use the information in your workspace.";
+  }
   if (mode === "state") {
     return `Я вижу текущую привычку${habit ? ` "${habit}"` : ""}. Начни с одного маленького шага: оцени состояние, выбери минимальное действие и отметь его без давления.`;
   }

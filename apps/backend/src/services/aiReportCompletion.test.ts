@@ -77,3 +77,20 @@ test("free report normalizes incorrect premium role count and route duration", a
   assert.match(report.paid_report_teaser ?? "", /30-дневный/);
   assert.doesNotMatch(JSON.stringify(report), /Топ-3|90-дневный/);
 });
+
+test("English normalization preserves English diagnostics and localizes every generated fallback", async () => {
+  process.env.DATABASE_URL ??= "postgresql://levelup:dev_password@localhost:5432/levelup";
+  const { normalizeFullReportValue } = await import("./aiReport.js");
+  const existing = "Your result: Clear delivery. What it means: This can help explain an idea without pressure. Recommendation: Test one short presentation and ask for feedback.";
+  const report = normalizeFullReportValue({
+    profession: "Product strategist",
+    summary: "A working hypothesis about a professional direction based on the questionnaire and practical experiments.",
+    voice_analysis: { communication: existing }, top_roles: []
+  }, "en");
+  assert.equal(report.voice_analysis.communication, existing);
+  assert.equal(report.top_roles.length, 5);
+  assert.doesNotMatch(JSON.stringify(report), /[А-Яа-яЁё]/);
+  assert.match(report.face_analysis.communication, /Your result:/);
+  assert.match(report.face_analysis.communication, /What it means:/);
+  assert.match(report.face_analysis.communication, /Recommendation:/);
+});

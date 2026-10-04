@@ -1,4 +1,6 @@
 "use client";
+import { uiText, getFormatLocale, useUiLocale } from "@/lib/locale";
+
 
 import type { CSSProperties } from "react";
 import { useEffect, useMemo, useState } from "react";
@@ -10,6 +12,7 @@ const logThresholds = [5, 18, 32, 48, 64, 80, 94];
 const emailPattern = /^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}$/;
 
 export default function AnalysisPage() {
+  useUiLocale();
   const text = useSiteText().flow.analysis;
   const [progress, setProgress] = useState(0);
   const [status, setStatus] = useState("QUEUED");

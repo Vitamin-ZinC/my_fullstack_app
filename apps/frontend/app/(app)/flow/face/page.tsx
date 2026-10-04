@@ -1,4 +1,6 @@
 "use client";
+import { uiText, getFormatLocale, useUiLocale } from "@/lib/locale";
+
 
 import { Camera, ImagePlus, Upload } from "lucide-react";
 import type { ChangeEvent } from "react";
@@ -16,9 +18,10 @@ type FaceMetrics = {
 const MIN_PHOTO_BYTES = 8 * 1024;
 const MIN_PHOTO_DIMENSION = 160;
 const MAX_PHOTO_DIMENSION = 1280;
-const PHOTO_TOO_SMALL_ERROR = "Фото получилось слишком маленьким или пустым. Загрузите реальное фото или переснимите при хорошем освещении.";
+function PHOTO_TOO_SMALL_ERROR() { return uiText("Фото получилось слишком маленьким или пустым. Загрузите реальное фото или переснимите при хорошем освещении."); }
 
 export default function FacePage() {
+  useUiLocale();
   const text = useSiteText().flow.face;
   const fileInput = useRef<HTMLInputElement>(null);
   const video = useRef<HTMLVideoElement>(null);
@@ -109,7 +112,7 @@ export default function FacePage() {
       return;
     }
     if (video.current.videoWidth < MIN_PHOTO_DIMENSION || video.current.videoHeight < MIN_PHOTO_DIMENSION) {
-      setError(PHOTO_TOO_SMALL_ERROR);
+      setError(PHOTO_TOO_SMALL_ERROR());
       return;
     }
 
@@ -124,7 +127,7 @@ export default function FacePage() {
       return;
     }
     if (blob.size < MIN_PHOTO_BYTES) {
-      setError(PHOTO_TOO_SMALL_ERROR);
+      setError(PHOTO_TOO_SMALL_ERROR());
       return;
     }
     await uploadPhoto(blob, dataUrl);
@@ -186,7 +189,7 @@ export default function FacePage() {
       await api.confirmAnalysis(draft.analysisId, ikigaiAnswers, getStoredVoiceMetrics());
       window.location.assign("/flow/analysis");
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Не удалось запустить анализ");
+      setError(reason instanceof Error ? reason.message : uiText("Не удалось запустить анализ"));
     } finally {
       setBusy(false);
     }
@@ -286,7 +289,7 @@ export default function FacePage() {
 
       {uploaded && (
         <button className="button" data-testid="face-next-link" type="button" onClick={launchAnalysis} disabled={busy || !consent}>
-          {busy ? "Запускаем анализ..." : "Узнать результат"}
+          {busy ? uiText("Запускаем анализ...") : uiText("Узнать результат")}
         </button>
       )}
     </div>
@@ -294,6 +297,7 @@ export default function FacePage() {
 }
 
 function Metric({ label, value }: { label: string; value: number }) {
+  useUiLocale();
   return (
     <div>
       <span>{label}</span>
@@ -309,7 +313,7 @@ async function preparePhotoFile(file: File) {
     const width = image.naturalWidth || image.width;
     const height = image.naturalHeight || image.height;
     if (width < MIN_PHOTO_DIMENSION || height < MIN_PHOTO_DIMENSION) {
-      throw new Error(PHOTO_TOO_SMALL_ERROR);
+      throw new Error(PHOTO_TOO_SMALL_ERROR());
     }
 
     const scale = Math.min(1, MAX_PHOTO_DIMENSION / Math.max(width, height));
@@ -319,11 +323,11 @@ async function preparePhotoFile(file: File) {
     canvas.width = targetWidth;
     canvas.height = targetHeight;
     const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error(PHOTO_TOO_SMALL_ERROR);
+    if (!ctx) throw new Error(PHOTO_TOO_SMALL_ERROR());
     ctx.drawImage(image, 0, 0, targetWidth, targetHeight);
 
     const blob = await canvasToJpegBlob(canvas);
-    if (blob.size < MIN_PHOTO_BYTES) throw new Error(PHOTO_TOO_SMALL_ERROR);
+    if (blob.size < MIN_PHOTO_BYTES) throw new Error(PHOTO_TOO_SMALL_ERROR());
     return { blob, dataUrl: canvas.toDataURL("image/jpeg", 0.9) };
   } finally {
     URL.revokeObjectURL(objectUrl);
@@ -334,7 +338,7 @@ function canvasToJpegBlob(canvas: HTMLCanvasElement) {
   return new Promise<Blob>((resolve, reject) => {
     canvas.toBlob((blob) => {
       if (!blob) {
-        reject(new Error(PHOTO_TOO_SMALL_ERROR));
+        reject(new Error(PHOTO_TOO_SMALL_ERROR()));
         return;
       }
       resolve(blob);

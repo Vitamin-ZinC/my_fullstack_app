@@ -18,7 +18,8 @@ import {
   User
 } from "lucide-react";
 import type { HabitConfigResponse, HabitEnrollmentSummary, HabitProgramResponse, HabitProgramSummary, PartnerMarketplaceResponse, TelegramStatusResponse } from "@levelup/contracts";
-import { api, getStoredLocale, restoreSessionFromUrl, type TextLocale } from "@/lib/api";
+import { api, restoreSessionFromUrl } from "@/lib/api";
+import { uiText, getFormatLocale, useUiLocale } from "@/lib/locale";
 import { openTelegramConnectUrl } from "@/lib/telegram";
 import { useSiteText } from "@/lib/useSiteText";
 
@@ -63,6 +64,7 @@ const onboardingZones: OnboardingZone[] = ["passion", "mission", "profession", "
 const todayIso = () => new Date().toISOString().slice(0, 10);
 
 export default function HabitsPage() {
+  useUiLocale();
   return (
     <Suspense fallback={<HabitsLoading />}>
       <HabitsContent />
@@ -71,6 +73,7 @@ export default function HabitsPage() {
 }
 
 function PenguinIcon({ size = 24, className = "" }: { size?: number; className?: string }) {
+  useUiLocale();
   return (
     <img
       src={orkenAvatarSrc}
@@ -84,6 +87,7 @@ function PenguinIcon({ size = 24, className = "" }: { size?: number; className?:
 }
 
 function PenguinHeadIcon({ size = 24 }: { size?: number }) {
+  useUiLocale();
   return (
     <span className="habits-penguin-head" style={{ width: size, height: size }}>
       <img
@@ -97,26 +101,29 @@ function PenguinHeadIcon({ size = 24 }: { size?: number }) {
 }
 
 function NavIcon({ item, size }: { item: NavItem; size: number }) {
+  useUiLocale();
   if ("penguin" in item) return <PenguinHeadIcon size={size + 5} />;
   return <span className="habits-nav-symbol" style={{ width: size + 5, height: size + 5 }}>{item.icon}</span>;
 }
 
 function HabitsLoading() {
+  useUiLocale();
   return (
     <main className="habits-app habits-single">
       <section className="habits-panel habits-insight-panel">
         <div className="eyebrow">ORKEN.LIFE</div>
-        <h1>Загружаем кабинет привычек...</h1>
+        <h1>{uiText("Загружаем кабинет привычек...")}</h1>
       </section>
     </main>
   );
 }
 
 function HabitsContent() {
+  useUiLocale();
   const searchParams = useSearchParams();
   const analysisId = searchParams.get("analysisId");
   const entryPoint = searchParams.get("from");
-  const [locale, setLocale] = useState<TextLocale>("ru");
+  const locale = useUiLocale();
   const t = useSiteText(locale).habits.app;
 
   const [tab, setTab] = useState<Tab>("dashboard");
@@ -166,10 +173,6 @@ function HabitsContent() {
   const [reminderTime, setReminderTime] = useState("09:00");
 
   useEffect(() => {
-    setLocale(getStoredLocale());
-  }, []);
-
-  useEffect(() => {
     let cancelled = false;
     async function load() {
       setLoading(true);
@@ -209,7 +212,17 @@ function HabitsContent() {
     return () => {
       cancelled = true;
     };
-  }, [analysisId, entryPoint, t.errors.open]);
+  }, [analysisId, entryPoint]);
+
+  useEffect(() => {
+    if (!program) return;
+    let cancelled = false;
+    // A language change only reloads the read model, never activates a new program.
+    api.habitsMe().then((result) => {
+      if (!cancelled) { setProgram(result.program); setConfig(result.config); }
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [locale]);
 
   useEffect(() => {
     if (!program) return;
@@ -218,7 +231,7 @@ function HabitsContent() {
     setSettingsAvatar(readProfileString(program.profile, "avatar") || "P");
     setReminderEnabled(program.settings.reminderEnabled);
     setReminderTime(program.settings.reminderTime || "09:00");
-  }, [program]);
+  }, [program?.id]);
 
   useEffect(() => {
     if (!program || typeof window === "undefined") return;
@@ -621,7 +634,7 @@ function HabitsContent() {
       setThreadId(result.threadId);
       setMessages([...nextMessages, { role: "assistant", text: result.reply }]);
     } catch (reason) {
-      setMessages([...nextMessages, { role: "assistant", text: reason instanceof Error ? reason.message : "Навигатор временно недоступен" }]);
+      setMessages([...nextMessages, { role: "assistant", text: reason instanceof Error ? reason.message : uiText("Навигатор временно недоступен") }]);
     }
   }
 
@@ -667,7 +680,7 @@ function HabitsContent() {
           <PenguinIcon size={38} />
           <div>
             <div className="habits-brand-title">ORKEN.LIFE</div>
-            <div className="habits-brand-sub">Кабинет привычек</div>
+            <div className="habits-brand-sub">{uiText("Кабинет привычек")}</div>
           </div>
         </Link>
         <nav className="habits-nav">
@@ -679,9 +692,9 @@ function HabitsContent() {
               </button>
             );
           })}
-          <Link className="habits-nav-link" href="/habits/progress"><Activity size={19} />Прогресс</Link>
-          <Link className="habits-nav-link" href="/habits/coaching"><MessagesSquare size={19} />Мой коуч</Link>
-          <Link className="habits-nav-link" href="/habits/archive"><Archive size={19} />Архив с поиском</Link>
+          <Link className="habits-nav-link" href="/habits/progress"><Activity size={19} />{uiText("Прогресс")}</Link>
+          <Link className="habits-nav-link" href="/habits/coaching"><MessagesSquare size={19} />{uiText("Мой коуч")}</Link>
+          <Link className="habits-nav-link" href="/habits/archive"><Archive size={19} />{uiText("Архив с поиском")}</Link>
         </nav>
         <div className="habits-sidebar-profile">
           <div className="habits-sidebar-avatar-wrap">
@@ -696,7 +709,7 @@ function HabitsContent() {
         <Link className="btn-back habits-account-link" href="/account">{t.account}</Link>
       </aside>
 
-      <nav className="habits-bottom-nav" aria-label="Навигация привычек">
+      <nav className="habits-bottom-nav" aria-label={uiText("Навигация привычек")}>
         {mobileNavItems.map((item) => {
           return (
             <button key={item.id} className={tab === item.id ? "active" : ""} type="button" title={t.habitsUx.tooltips[item.id]} onClick={() => {
@@ -714,9 +727,9 @@ function HabitsContent() {
         </button>
         {showMobileMore && (
           <div className="habits-mobile-more-menu">
-            <Link className="habits-mobile-more-link" href="/habits/progress"><Activity size={18} /><span>Прогресс</span></Link>
-            <Link className="habits-mobile-more-link" href="/habits/coaching"><MessagesSquare size={18} /><span>Мой коуч</span></Link>
-            <Link className="habits-mobile-more-link" href="/habits/archive"><Archive size={18} /><span>Архив с поиском</span></Link>
+            <Link className="habits-mobile-more-link" href="/habits/progress"><Activity size={18} /><span>{uiText("Прогресс")}</span></Link>
+            <Link className="habits-mobile-more-link" href="/habits/coaching"><MessagesSquare size={18} /><span>{uiText("Мой коуч")}</span></Link>
+            <Link className="habits-mobile-more-link" href="/habits/archive"><Archive size={18} /><span>{uiText("Архив с поиском")}</span></Link>
             {navItems.filter((item) => !mobileNavItems.some((mobileItem) => mobileItem.id === item.id)).map((item) => (
               <button key={item.id} className={tab === item.id ? "active" : ""} type="button" title={t.habitsUx.tooltips[item.id]} onClick={() => {
                 setTab(item.id);
@@ -879,10 +892,11 @@ function OnboardingPanel(props: {
   startQuestions: () => void;
   answerQuestion: (score: number) => void;
 }) {
+  useUiLocale();
   const enteredName = props.name.trim();
   const trialDays = props.config?.trialDays ?? 30;
   const price = props.config?.priceLabel ?? "$8";
-  const focus = props.latestReport?.profession || "Продуктовый стратег";
+  const focus = props.latestReport?.profession || uiText("Продуктовый стратег");
   const useReportCopy = trialDays > 0 ? props.t.onboarding.useReportCopy : props.t.onboarding.useReportCopyNoTrial;
   const activatingCopy = trialDays > 0 ? props.t.onboarding.activatingCopy : props.t.onboarding.activatingCopyNoTrial;
   const currentQuestion = props.t.onboarding.questions[props.questionIndex];
@@ -960,8 +974,9 @@ function OnboardingPanel(props: {
 }
 
 function OnboardingSegments({ active, total }: { active: number; total: number }) {
+  useUiLocale();
   return (
-    <div className="habits-onboarding-segments" aria-label="Прогресс настройки плана">
+    <div className="habits-onboarding-segments" aria-label={uiText("Прогресс настройки плана")}>
       {Array.from({ length: total }, (_, index) => (
         <span className={index <= active ? "active" : ""} key={index} />
       ))}
@@ -1021,6 +1036,7 @@ function DashboardTab(props: {
   openJourney: () => void;
   openNavigator: () => void;
 }) {
+  useUiLocale();
   const currentCycle = Math.max(1, Math.round(finiteNumber(props.program.currentCycle, props.program.stats.currentCycle ?? 1)));
   const currentWeek = Math.max(1, Math.round(finiteNumber(props.program.currentWeek, props.program.stats.currentWeek ?? 1)));
   const currentSortOrder = Math.max(1, Math.round(finiteNumber(props.program.stats.currentSortOrder, props.program.currentSortOrder ?? 1)));
@@ -1084,7 +1100,7 @@ function DashboardTab(props: {
             <div>
               <span>{props.t.dashboard.currentRank}</span>
               <h3>{props.program.stats.rank.title}</h3>
-              <p>{xpToNextRank > 0 ? `${xpToNextRank} XP до «${nextRank}»` : props.t.dashboard.rankComplete}</p>
+              <p>{xpToNextRank > 0 ? uiText("{v0} XP до «{v1}»", { v0: xpToNextRank, v1: nextRank }) : props.t.dashboard.rankComplete}</p>
             </div>
             <strong>{monthPercent}%</strong>
           </article>
@@ -1092,8 +1108,8 @@ function DashboardTab(props: {
             <div className="habits-rank-reward-icon">{weekProgress >= 100 ? "🏆" : weekProgress >= 70 ? "🎁" : "💠"}</div>
             <div>
               <span>{props.t.dashboard.weeklyReward}</span>
-              <h3>{weekProgress >= 100 ? "Золотой сундук" : weekProgress >= 70 ? "Серебряный сундук" : "Недельный ритм"}</h3>
-            <p>{completedWeekCheckins}/7 отметок · {weekProgress}%</p>
+              <h3>{weekProgress >= 100 ? uiText("Золотой сундук") : weekProgress >= 70 ? uiText("Серебряный сундук") : uiText("Недельный ритм")}</h3>
+            <p>{completedWeekCheckins}{uiText("/7 отметок · ")}{weekProgress}%</p>
             </div>
             <strong>{weekProgress >= 100 ? "+50" : weekProgress >= 70 ? "+20" : "+0"} XP</strong>
           </article>
@@ -1121,7 +1137,7 @@ function DashboardTab(props: {
           <div className="habits-status-card">
             <span><span className="habits-inline-icon">{rankIcon}</span>{props.t.dashboard.currentRank}</span>
             <strong>{props.program.stats.rank.title}</strong>
-            <small>{monthXp}/{monthMaxXp} XP месяца · {xpToNextRank > 0 ? `${xpToNextRank} XP до ${nextRank}` : props.t.dashboard.rankComplete}</small>
+            <small>{monthXp}/{monthMaxXp} {uiText(" XP месяца · ")}{xpToNextRank > 0 ? uiText("{v0} XP до {v1}", { v0: xpToNextRank, v1: nextRank }) : props.t.dashboard.rankComplete}</small>
           </div>
           <div className="habits-status-card">
             <span><span className="habits-inline-icon">🧭</span>{props.t.dashboard.totalRoute}</span>
@@ -1276,6 +1292,7 @@ function JourneyTab(props: {
   connectTelegram: () => void;
   addCalendarEvent: () => void;
 }) {
+  useUiLocale();
   const activeHabit = props.activeHabit;
   const todayTask = activeHabit?.todayTask ?? props.program.todayTask ?? null;
   const dailyPlan = buildDailyPlan(todayTask, activeHabit, props.t);
@@ -1287,7 +1304,7 @@ function JourneyTab(props: {
     ?? null;
   const habitDay = todayTask?.dayIndex ?? Math.min(7, (activeHabit?.checkinsDone ?? 0) + 1);
   const habitTitle = activeHabit?.title
-    ? `${activeHabit.title}: день ${habitDay}`
+    ? uiText("{v0}: день {v1}", { v0: activeHabit.title, v1: habitDay })
     : todayTask?.title ?? props.t.journey.title;
   return (
     <div className="habits-grid">
@@ -1441,6 +1458,7 @@ function HabitsCatalogTab(props: {
   setExpandedHabitId: (id: string | null) => void;
   openJourney: () => void;
 }) {
+  useUiLocale();
   const habits = props.selectedCycle === "all"
     ? props.program.enrollments
     : props.program.enrollments.filter((habit) => habit.cycle === props.selectedCycle);
@@ -1491,6 +1509,7 @@ function NavigatorTab(props: {
   setInput: (value: string) => void;
   askNavigator: (prompt?: string) => void;
 }) {
+  useUiLocale();
   return (
     <section className="habits-panel habits-chat">
       <div className="habits-navigator-head">
@@ -1538,6 +1557,7 @@ function ArchiveTab(props: {
   setFilter: (filter: ArchiveFilter) => void;
   markSaved: (message: string) => void;
 }) {
+  useUiLocale();
   const showInsights = props.filter === "all" || props.filter === "insights";
   const showRewards = props.filter === "all" || props.filter === "rewards";
   const showWeeks = props.filter === "all" || props.filter === "weeks";
@@ -1623,7 +1643,7 @@ function ArchiveTab(props: {
                       <span>{group.label}</span>
                       <strong>{monthRank?.rankTitle ?? props.program.stats.rank.title}</strong>
                     </div>
-                    <em>{group.summaries.length} нед.</em>
+                    <em>{group.summaries.length} {uiText(" нед.")}</em>
                   </div>
                   {group.summaries.map((summary) => (
                     <article className="habits-card habits-closed-week" key={summary.id}>
@@ -1669,7 +1689,7 @@ function ArchiveTab(props: {
         <section className="habits-panel habits-wide">
           <h2>{props.t.archive.hall}</h2>
           <div className="habits-rank-ladder">
-            {["Новичок пути", "Искатель баланса", "Практик осознанности", "Хранитель энергии", "Мастер равновесия", "Гуру Икигай"].map((rank, index) => (
+            {[uiText("Новичок пути"), uiText("Искатель баланса"), uiText("Практик осознанности"), uiText("Хранитель энергии"), uiText("Мастер равновесия"), uiText("Гуру Икигай")].map((rank, index) => (
               <div className={`habits-rank-step ${props.program.stats.rank.level === index + 1 ? "active" : ""}`} key={rank}>
                 <span>{index + 1}</span>
                 <strong>{rank}</strong>
@@ -1690,6 +1710,7 @@ function RewardsMarketplaceTab(props: {
   refresh: () => void;
   redeem: (offerId: string) => void;
 }) {
+  useUiLocale();
   const balance = props.marketplace?.balance ?? 0;
   const currency = props.marketplace?.currency ?? "orken_points";
   const offers = props.marketplace?.offers ?? [];
@@ -1761,20 +1782,21 @@ function RewardsMarketplaceTab(props: {
 }
 
 function GuideTab({ t, program }: { t: ReturnType<typeof useSiteText>["habits"]["app"]; program: HabitProgramSummary }) {
+  useUiLocale();
   const [activeSection, setActiveSection] = useState<"start" | "xp" | "rank" | "metrics">("start");
   const rewardRows = [
-    ["100%", "Золотой сундук", "+50 XP"],
-    ["70-99%", "Серебряный сундук", "+20 XP"],
-    ["40-69%", "Бронзовый значок", "+0 XP"],
-    ["<40%", "Без бонусной награды", "+0 XP"]
+    ["100%", uiText("Золотой сундук"), "+50 XP"],
+    ["70-99%", uiText("Серебряный сундук"), "+20 XP"],
+    ["40-69%", uiText("Бронзовый значок"), "+0 XP"],
+    ["<40%", uiText("Без бонусной награды"), "+0 XP"]
   ];
   const rankRows = [
-    ["0-20%", "Новичок пути"],
-    ["20-40%", "Искатель баланса"],
-    ["40-60%", "Практик осознанности"],
-    ["60-80%", "Хранитель энергии"],
-    ["80-95%", "Мастер равновесия"],
-    ["95-100%", "Гуру Икигай"]
+    ["0-20%", uiText("Новичок пути")],
+    ["20-40%", uiText("Искатель баланса")],
+    ["40-60%", uiText("Практик осознанности")],
+    ["60-80%", uiText("Хранитель энергии")],
+    ["80-95%", uiText("Мастер равновесия")],
+    ["95-100%", uiText("Гуру Икигай")]
   ];
   const sections = [
     { id: "start" as const, title: t.guide.quickStartTitle },
@@ -1894,6 +1916,7 @@ function SettingsTab(props: {
   pauseSubscription: () => void;
   cancelSubscription: () => void;
 }) {
+  useUiLocale();
   const telegramEnabled = props.telegramStatus?.preferences?.telegramEnabled ?? false;
   const telegramFrequency = normalizeTelegramFrequency(props.telegramStatus?.preferences?.motivationFrequency);
   const telegramLinked = Boolean(props.telegramStatus?.linked);
@@ -2037,6 +2060,7 @@ function SettingsTab(props: {
 }
 
 function HabitDetailsCard({ habit, t }: { habit: HabitEnrollmentSummary; t: ReturnType<typeof useSiteText>["habits"]["app"] }) {
+  useUiLocale();
   return (
     <div className="habits-current">
       <div className="habit-detail"><strong>{t.journey.essence}</strong>{habit.essence}</div>
@@ -2052,6 +2076,7 @@ function Coachmark(props: {
   onClose: () => void;
   onGuide: () => void;
 }) {
+  useUiLocale();
   return (
     <section className="habits-coachmark" aria-label={props.t.habitsUx.coachmark.title}>
       <div>
@@ -2070,6 +2095,7 @@ function Coachmark(props: {
 }
 
 function HelpTip({ label }: { label: string }) {
+  useUiLocale();
   const [open, setOpen] = useState(false);
   return (
     <span className="habits-help-wrap">
@@ -2089,6 +2115,7 @@ function HelpTip({ label }: { label: string }) {
 }
 
 function AvatarView({ value, fallback, className }: { value: string; fallback: string; className: string }) {
+  useUiLocale();
   const avatar = value.trim();
   const isImage = /^data:image\//.test(avatar) || /^https?:\/\//.test(avatar);
   return (
@@ -2115,7 +2142,7 @@ function rankVisual(rank: RankLike) {
   ] as const;
   return {
     level,
-    title: rank.title ?? rank.rankTitle ?? "Новичок пути",
+    title: rank.title ?? rank.rankTitle ?? uiText("Новичок пути"),
     color: rank.color ?? visuals[level - 1].color,
     badge: rank.badge ?? visuals[level - 1].badge,
     shape: rank.shape ?? visuals[level - 1].shape
@@ -2123,6 +2150,7 @@ function rankVisual(rank: RankLike) {
 }
 
 function RankEmblem({ rank, size = "normal" }: { rank: RankLike; size?: "normal" | "large" }) {
+  useUiLocale();
   const visual = rankVisual(rank);
   return (
     <span
@@ -2137,6 +2165,7 @@ function RankEmblem({ rank, size = "normal" }: { rank: RankLike; size?: "normal"
 }
 
 function RankBadge({ rank }: { rank: HabitProgramSummary["stats"]["rank"] }) {
+  useUiLocale();
   return (
     <span className="habits-rank-badge" style={{ "--rank-color": rankVisual(rank).color } as CSSProperties} title={rank.title}>
       {rank.level}
@@ -2159,13 +2188,13 @@ function rewardIcon(value: string) {
 
 function buildDailyPlan(task: HabitProgramSummary["todayTask"] | null | undefined, habit: HabitEnrollmentSummary | null, t: ReturnType<typeof useSiteText>["habits"]["app"]) {
   const rawAction = task?.microAction ?? habit?.practice ?? t.dashboard.firstStep;
-  const actionText = rawAction.replace(/^Что сделать:\s*/i, "");
-  const [beforeTime, afterTimeRaw = ""] = actionText.split(/\sВремя:\s/i);
-  const [timeRaw = "", afterSoftRaw = ""] = afterTimeRaw.split(/\sЕсли совсем нет сил:\s/i);
-  const why = (task?.whyToday ?? habit?.why ?? t.journey.copy).replace(/^Зачем:\s*/i, "");
+  const actionText = rawAction.replace(/^(?:Что сделать|What to do):\s*/i, "");
+  const [beforeTime, afterTimeRaw = ""] = actionText.split(/\s(?:Время|Time):\s/i);
+  const [timeRaw = "", afterSoftRaw = ""] = afterTimeRaw.split(/\s(?:Если совсем нет сил|If you have no energy):\s/i);
+  const why = (task?.whyToday ?? habit?.why ?? t.journey.copy).replace(/^(?:Зачем|Why):\s*/i, "");
   return {
     action: beforeTime.trim().replace(/\.$/, ""),
-    time: (timeRaw || "5-10 мин").trim().replace(/\.$/, ""),
+    time: (timeRaw || uiText("5-10 мин")).trim().replace(/\.$/, ""),
     soft: (afterSoftRaw || t.journey.lowEnergyFallback).trim().replace(/\.$/, ""),
     why: why.trim().replace(/\.$/, "")
   };
@@ -2224,7 +2253,7 @@ function groupByMonth<T>(items: T[], getDate: (item: T) => string) {
   for (const item of items) {
     const date = new Date(getDate(item));
     const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-    const label = new Intl.DateTimeFormat("ru-RU", { month: "long", year: "numeric" }).format(date);
+    const label = new Intl.DateTimeFormat(getFormatLocale(), { month: "long", year: "numeric" }).format(date);
     const group = groups.get(key) ?? { key, label, items: [] };
     group.items.push(item);
     groups.set(key, group);
@@ -2237,7 +2266,7 @@ function groupWeekSummariesByMonth(summaries: HabitProgramSummary["weekSummaries
   for (const summary of summaries) {
     const date = new Date(summary.createdAt);
     const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-    const label = new Intl.DateTimeFormat("ru-RU", { month: "long", year: "numeric" }).format(date);
+    const label = new Intl.DateTimeFormat(getFormatLocale(), { month: "long", year: "numeric" }).format(date);
     const group = groups.get(key) ?? { key, label, summaries: [] };
     group.summaries.push(summary);
     groups.set(key, group);
@@ -2246,6 +2275,7 @@ function groupWeekSummariesByMonth(summaries: HabitProgramSummary["weekSummaries
 }
 
 function MetricSlider(props: { icon: string; color: string; label: string; value: number; hint: string; scale: readonly string[]; numberHints: readonly string[]; onChange: (value: number) => void }) {
+  useUiLocale();
   const progress = Math.max(0, Math.min(100, ((props.value - 1) / 9) * 100));
   const selectedNumberHint = props.numberHints[Math.max(0, props.value - 1)] ?? props.hint;
   const helpText = `${selectedNumberHint}\n\n${props.scale.join("\n")}`;
@@ -2273,6 +2303,7 @@ function metricValueHint(value: number, hints: readonly string[]) {
 }
 
 function Stat({ label, value }: { label: string; value: string | number }) {
+  useUiLocale();
   return (
     <div className="habits-metric">
       <span>{label}</span>
@@ -2292,7 +2323,7 @@ function buildNextHabitEventStart(reminderTime: string) {
 }
 
 function formatCalendarDateTime(value: Date) {
-  return new Intl.DateTimeFormat("ru-RU", {
+  return new Intl.DateTimeFormat(getFormatLocale(), {
     day: "2-digit",
     month: "2-digit",
     hour: "2-digit",
@@ -2304,10 +2335,10 @@ function buildWeekShareText(program: HabitProgramSummary, habit: HabitEnrollment
   return [
     `ORKEN.LIFE - ${program.title}`,
     `\u0426\u0438\u043a\u043b ${habit.cycle}, \u043d\u0435\u0434\u0435\u043b\u044f ${habit.week}: ${habit.title}`,
-    `Фокус: ${habit.focus}`,
-    `Отметки: ${habit.checkinsDone}/7`,
+    uiText("Фокус: {v0}", { v0: habit.focus }),
+    uiText("Отметки: {v0}/7", { v0: habit.checkinsDone }),
     `XP: ${program.stats.xp}`,
-    `Ранг: ${program.stats.rank.title}`
+    uiText("Ранг: {v0}", { v0: program.stats.rank.title })
   ].join("\n");
 }
 
@@ -2327,17 +2358,17 @@ function readProfileString(profile: Record<string, unknown>, key: string) {
 }
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(value));
+  return new Intl.DateTimeFormat(getFormatLocale(), { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(value));
 }
 
 function formatTime(value: Date) {
-  return new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit" }).format(value);
+  return new Intl.DateTimeFormat(getFormatLocale(), { hour: "2-digit", minute: "2-digit" }).format(value);
 }
 
 function readableError(reason: unknown, fallback: string) {
   if (!(reason instanceof Error)) return fallback;
   if (reason.message === "Failed to fetch" || reason.message.includes("fetch")) {
-    return "Сервер кабинета временно недоступен. Попробуйте позже.";
+    return uiText("Сервер кабинета временно недоступен. Попробуйте позже.");
   }
   return reason.message || fallback;
 }

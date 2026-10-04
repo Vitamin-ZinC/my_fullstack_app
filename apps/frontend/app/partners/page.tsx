@@ -1,4 +1,6 @@
 "use client";
+import { uiText, getFormatLocale, useUiLocale } from "@/lib/locale";
+
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -39,32 +41,32 @@ type OfferKind = "paid_service" | "qualified_lead" | "portfolio_credit" | "rewar
 type OfferSurface = "rewards_tab" | "milestone_modal" | "home_module" | "admin_recommendation";
 type OfferForm = { offer: string; kind: OfferKind; surface: OfferSurface; price: string; cap: string; partnerPayoutCents: string };
 
-const defaultOfferForm: OfferForm = {
+function defaultOfferForm(): OfferForm { return {
   offer: "",
   kind: "qualified_lead",
   surface: "rewards_tab",
   price: "120",
-  cap: "25 в месяц",
+  cap: uiText("25 в месяц"),
   partnerPayoutCents: "0"
-};
+}; }
 
-const tabs: Array<{ id: Tab; label: string; icon: typeof BarChart3 }> = [
-  { id: "overview", label: "Главная", icon: BarChart3 },
-  { id: "links", label: "Мои ссылки", icon: Link2 },
-  { id: "offers", label: "Предложения", icon: HandCoins },
-  { id: "results", label: "Результаты", icon: ClipboardList },
-  { id: "finances", label: "Финансы", icon: WalletCards },
-  { id: "profile", label: "Профиль", icon: UserRound }
-];
+function tabs(): Array<{ id: Tab; label: string; icon: typeof BarChart3 }> { return [
+  { id: "overview", label: uiText("Главная"), icon: BarChart3 },
+  { id: "links", label: uiText("Мои ссылки"), icon: Link2 },
+  { id: "offers", label: uiText("Предложения"), icon: HandCoins },
+  { id: "results", label: uiText("Результаты"), icon: ClipboardList },
+  { id: "finances", label: uiText("Финансы"), icon: WalletCards },
+  { id: "profile", label: uiText("Профиль"), icon: UserRound }
+]; }
 
-const tabDescriptions: Record<Tab, string> = {
-  overview: "Что сделать сейчас и как работает ваша партнёрская программа.",
-  links: "Создавайте отдельную ссылку для каждого канала и делитесь ею.",
-  offers: "Предлагайте пользователям Orken свои услуги и бонусы.",
-  results: "Регистрации и оплаты, пришедшие по вашим ссылкам.",
-  finances: "Начисленные комиссии и статусы выплат.",
-  profile: "Данные аккаунта и статус доступа к программе."
-};
+function tabDescriptions(): Record<Tab, string> { return {
+  overview: uiText("Что сделать сейчас и как работает ваша партнёрская программа."),
+  links: uiText("Создавайте отдельную ссылку для каждого канала и делитесь ею."),
+  offers: uiText("Предлагайте пользователям Orken свои услуги и бонусы."),
+  results: uiText("Регистрации и оплаты, пришедшие по вашим ссылкам."),
+  finances: uiText("Начисленные комиссии и статусы выплат."),
+  profile: uiText("Данные аккаунта и статус доступа к программе.")
+}; }
 
 function makeIdempotencyKey() {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") return crypto.randomUUID();
@@ -93,15 +95,15 @@ function readValue(record: DataRecord, keys: string[]) {
 }
 
 function textValue(value: unknown) {
-  if (typeof value === "number") return new Intl.NumberFormat("ru-RU").format(value);
+  if (typeof value === "number") return new Intl.NumberFormat(getFormatLocale()).format(value);
   if (typeof value === "string") return value;
-  if (typeof value === "boolean") return value ? "Да" : "Нет";
+  if (typeof value === "boolean") return value ? uiText("Да") : uiText("Нет");
   return "—";
 }
 
 function displayReference(value: unknown) {
   const text = String(value ?? "").trim();
-  if (!text) return "Пользователь Orken";
+  if (!text) return uiText("Пользователь Orken");
   if (text.includes("@") || text.length <= 24) return text;
   return `${text.slice(0, 8)}…${text.slice(-4)}`;
 }
@@ -117,7 +119,7 @@ function formatPartnerDate(value: unknown) {
   if (typeof value !== "string" && typeof value !== "number" && !(value instanceof Date)) return "—";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return textValue(value);
-  return new Intl.DateTimeFormat("ru-RU", { dateStyle: "medium", timeStyle: "short" }).format(date);
+  return new Intl.DateTimeFormat(getFormatLocale(), { dateStyle: "medium", timeStyle: "short" }).format(date);
 }
 
 function currencyCode(row: DataRecord) {
@@ -135,12 +137,12 @@ function formatMoney(row: DataRecord, kind: "payment" | "commission") {
     : ["commission", "commissionAmount", "commission_amount", "reward", "rewardAmount", "reward_amount"];
   const minorValue = readValue(row, minorKeys);
   if (typeof minorValue === "number" && Number.isFinite(minorValue)) {
-    if (!currency) return `${new Intl.NumberFormat("ru-RU").format(minorValue)} в мин. ед.`;
-    return new Intl.NumberFormat("ru-RU", { style: "currency", currency }).format(minorValue / 100);
+    if (!currency) return uiText("{v0} в мин. ед.", { v0: new Intl.NumberFormat(getFormatLocale()).format(minorValue) });
+    return new Intl.NumberFormat(getFormatLocale(), { style: "currency", currency }).format(minorValue / 100);
   }
   const value = readValue(row, regularKeys);
   if (typeof value === "number" && Number.isFinite(value) && currency) {
-    return new Intl.NumberFormat("ru-RU", { style: "currency", currency }).format(value);
+    return new Intl.NumberFormat(getFormatLocale(), { style: "currency", currency }).format(value);
   }
   return textValue(value);
 }
@@ -238,26 +240,26 @@ function rowId(row: DataRecord) {
 
 function statusCopy(status: string) {
   const normalized = status.toUpperCase();
-  if (normalized === "APPROVED" || normalized === "PUBLISHED") return { label: "Одобрено", tone: "approved" };
-  if (normalized === "REGISTERED") return { label: "Зарегистрирован", tone: "approved" };
-  if (["SUCCEEDED", "COMPLETED", "CONFIRMED", "CONVERTED"].includes(normalized)) return { label: "Подтверждено", tone: "approved" };
-  if (normalized === "ACTIVE") return { label: "Активна", tone: "approved" };
-  if (normalized === "PAID") return { label: "Выплачено", tone: "approved" };
-  if (normalized === "AVAILABLE") return { label: "Доступно", tone: "approved" };
-  if (normalized === "NEW") return { label: "Новый", tone: "pending" };
-  if (normalized === "PENDING" || normalized === "PROCESSING") return { label: "Ожидает", tone: "pending" };
-  if (normalized === "REJECTED") return { label: "Нужны изменения", tone: "rejected" };
-  if (normalized === "REFUNDED" || normalized === "REVERSED") return { label: "Возврат", tone: "rejected" };
-  if (["FAILED", "CANCELLED", "CANCELED"].includes(normalized)) return { label: "Не завершено", tone: "rejected" };
-  if (normalized === "SUSPENDED") return { label: "Доступ приостановлен", tone: "suspended" };
-  if (normalized === "DRAFT") return { label: "Черновик", tone: "draft" };
-  return { label: "На проверке", tone: "pending" };
+  if (normalized === "APPROVED" || normalized === "PUBLISHED") return { label: uiText("Одобрено"), tone: "approved" };
+  if (normalized === "REGISTERED") return { label: uiText("Зарегистрирован"), tone: "approved" };
+  if (["SUCCEEDED", "COMPLETED", "CONFIRMED", "CONVERTED"].includes(normalized)) return { label: uiText("Подтверждено"), tone: "approved" };
+  if (normalized === "ACTIVE") return { label: uiText("Активна"), tone: "approved" };
+  if (normalized === "PAID") return { label: uiText("Выплачено"), tone: "approved" };
+  if (normalized === "AVAILABLE") return { label: uiText("Доступно"), tone: "approved" };
+  if (normalized === "NEW") return { label: uiText("Новый"), tone: "pending" };
+  if (normalized === "PENDING" || normalized === "PROCESSING") return { label: uiText("Ожидает"), tone: "pending" };
+  if (normalized === "REJECTED") return { label: uiText("Нужны изменения"), tone: "rejected" };
+  if (normalized === "REFUNDED" || normalized === "REVERSED") return { label: uiText("Возврат"), tone: "rejected" };
+  if (["FAILED", "CANCELLED", "CANCELED"].includes(normalized)) return { label: uiText("Не завершено"), tone: "rejected" };
+  if (normalized === "SUSPENDED") return { label: uiText("Доступ приостановлен"), tone: "suspended" };
+  if (normalized === "DRAFT") return { label: uiText("Черновик"), tone: "draft" };
+  return { label: uiText("На проверке"), tone: "pending" };
 }
 
 function paymentStatusCopy(status: string) {
   const normalized = status.toUpperCase();
   if (["PAID", "SUCCEEDED", "COMPLETED", "CONFIRMED", "CONVERTED"].includes(normalized)) {
-    return { label: "Оплачено", tone: "approved" };
+    return { label: uiText("Оплачено"), tone: "approved" };
   }
   return statusCopy(status);
 }
@@ -265,16 +267,17 @@ function paymentStatusCopy(status: string) {
 function metricsFromDashboard(dashboard: PartnerPortalDashboard | null) {
   const metrics = dashboard?.metrics ?? {};
   return [
-    { label: "Переходы по ссылкам", value: readValue(metrics, ["clicks", "linkClicks", "link_clicks"]) },
-    { label: "Новые пользователи", value: readValue(metrics, ["signups", "registrations", "leads"]) },
-    { label: "Оплаты", value: readValue(metrics, ["paidConversions", "paid_conversions", "payments", "conversions"]) },
-    { label: "Начислено", value: readValue(metrics, ["earned", "accrued", "ledgerBalance", "ledger_balance"]) },
-    { label: "Выплаты в ожидании", value: readValue(metrics, ["pendingPayouts", "pending_payouts", "payoutsPending", "payouts_pending"]) },
-    { label: "Выплачено", value: readValue(metrics, ["paidPayouts", "paid_payouts", "payoutsPaid", "payouts_paid"]) }
+    { label: uiText("Переходы по ссылкам"), value: readValue(metrics, ["clicks", "linkClicks", "link_clicks"]) },
+    { label: uiText("Новые пользователи"), value: readValue(metrics, ["signups", "registrations", "leads"]) },
+    { label: uiText("Оплаты"), value: readValue(metrics, ["paidConversions", "paid_conversions", "payments", "conversions"]) },
+    { label: uiText("Начислено"), value: readValue(metrics, ["earned", "accrued", "ledgerBalance", "ledger_balance"]) },
+    { label: uiText("Выплаты в ожидании"), value: readValue(metrics, ["pendingPayouts", "pending_payouts", "payoutsPending", "payouts_pending"]) },
+    { label: uiText("Выплачено"), value: readValue(metrics, ["paidPayouts", "paid_payouts", "payoutsPaid", "payouts_paid"]) }
   ];
 }
 
 export default function PartnersPage() {
+  useUiLocale();
   const [portalSession, setPortalSession] = useState<PartnerPortalSessionResponse | null>(null);
   const [dashboard, setDashboard] = useState<PartnerPortalDashboard | null>(null);
   const [ledger, setLedger] = useState<PartnerPortalLedgerResponse | null>(null);
@@ -288,7 +291,7 @@ export default function PartnersPage() {
   const [registerKey, setRegisterKey] = useState(makeIdempotencyKey);
   const [authForm, setAuthForm] = useState({ email: "", password: "", displayName: "", accountName: "", accountType: "organization" as "organization" | "individual" });
   const [linkName, setLinkName] = useState("");
-  const [offerForm, setOfferForm] = useState<OfferForm>(defaultOfferForm);
+  const [offerForm, setOfferForm] = useState<OfferForm>(defaultOfferForm());
   const [editingOfferId, setEditingOfferId] = useState<string | null>(null);
 
   const loadPortal = useCallback(async (options?: { initial?: boolean }) => {
@@ -306,7 +309,7 @@ export default function PartnersPage() {
       setLedger(nextLedger.ledger);
       setPayouts(nextPayouts.payouts);
     } catch (nextError) {
-      const message = nextError instanceof Error ? nextError.message : "Не удалось загрузить кабинет";
+      const message = nextError instanceof Error ? nextError.message : uiText("Не удалось загрузить кабинет");
       if (/login required|session expired|401/i.test(message)) {
         setPortalSession(null);
         setDashboard(null);
@@ -344,7 +347,7 @@ export default function PartnersPage() {
       setRegisterKey(makeIdempotencyKey());
       await loadPortal();
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Не удалось продолжить");
+      setError(nextError instanceof Error ? nextError.message : uiText("Не удалось продолжить"));
     } finally {
       setSubmitting(false);
     }
@@ -361,7 +364,7 @@ export default function PartnersPage() {
       setNotice("");
       setTab("overview");
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Не удалось завершить сессию");
+      setError(nextError instanceof Error ? nextError.message : uiText("Не удалось завершить сессию"));
     } finally {
       setSubmitting(false);
     }
@@ -371,7 +374,7 @@ export default function PartnersPage() {
     event.preventDefault();
     if (!linkName.trim()) return;
     if (looksLikeUrl(linkName.trim())) {
-      setError("Введите короткое название источника, например «Instagram». Адрес страницы вставлять не нужно.");
+      setError(uiText("Введите короткое название источника, например «Instagram». Адрес страницы вставлять не нужно."));
       return;
     }
     setSubmitting(true);
@@ -380,11 +383,11 @@ export default function PartnersPage() {
       const result = await partnerPortalApi.createReferralLink({ channel: linkName.trim(), idempotencyKey: makeIdempotencyKey() });
       const link = asRecord(result.link);
       const url = readValue(link, ["url", "href", "referralUrl", "referral_url"]);
-      setNotice(typeof url === "string" ? "Ссылка создана." : "Ссылка создана и появится после обновления данных.");
+      setNotice(typeof url === "string" ? uiText("Ссылка создана.") : uiText("Ссылка создана и появится после обновления данных."));
       setLinkName("");
       await loadPortal();
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Не удалось создать ссылку");
+      setError(nextError instanceof Error ? nextError.message : uiText("Не удалось создать ссылку"));
     } finally {
       setSubmitting(false);
     }
@@ -394,7 +397,7 @@ export default function PartnersPage() {
     event.preventDefault();
     const xpPrice = Number(offerForm.price);
     if (!Number.isInteger(xpPrice) || xpPrice < 1) {
-      setError("Укажите стоимость предложения целым числом XP.");
+      setError(uiText("Укажите стоимость предложения целым числом XP."));
       return;
     }
     setSubmitting(true);
@@ -411,16 +414,16 @@ export default function PartnersPage() {
       };
       if (editingOfferId) {
         await partnerPortalApi.updateOffer(editingOfferId, payload);
-        setNotice("Изменения предложения сохранены.");
+        setNotice(uiText("Изменения предложения сохранены."));
       } else {
         await partnerPortalApi.createOffer(payload);
-        setNotice("Предложение сохранено как черновик.");
+        setNotice(uiText("Предложение сохранено как черновик."));
       }
-      setOfferForm(defaultOfferForm);
+      setOfferForm(defaultOfferForm());
       setEditingOfferId(null);
       await loadPortal();
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Не удалось сохранить предложение");
+      setError(nextError instanceof Error ? nextError.message : uiText("Не удалось сохранить предложение"));
     } finally {
       setSubmitting(false);
     }
@@ -444,7 +447,7 @@ export default function PartnersPage() {
 
   function cancelOfferEdit() {
     setEditingOfferId(null);
-    setOfferForm(defaultOfferForm);
+    setOfferForm(defaultOfferForm());
   }
 
   async function submitOfferReview(offerId: string) {
@@ -452,10 +455,10 @@ export default function PartnersPage() {
     setError("");
     try {
       await partnerPortalApi.submitOfferReview(offerId, makeIdempotencyKey());
-      setNotice("Предложение отправлено на модерацию.");
+      setNotice(uiText("Предложение отправлено на модерацию."));
       await loadPortal();
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Не удалось отправить предложение");
+      setError(nextError instanceof Error ? nextError.message : uiText("Не удалось отправить предложение"));
     } finally {
       setSubmitting(false);
     }
@@ -465,9 +468,9 @@ export default function PartnersPage() {
     if (typeof value !== "string" || !value) return;
     try {
       await navigator.clipboard.writeText(value);
-      setNotice("Ссылка скопирована.");
+      setNotice(uiText("Ссылка скопирована."));
     } catch {
-      setError("Не удалось скопировать ссылку");
+      setError(uiText("Не удалось скопировать ссылку"));
     }
   }
 
@@ -477,26 +480,26 @@ export default function PartnersPage() {
         <section className="partner-auth-shell" aria-labelledby="partner-auth-title">
           <a className="partner-brand" href="/">ORKEN.LIFE</a>
           <div className="partner-auth-copy">
-            <span className="partner-eyebrow">Партнёрская программа</span>
-            <h1 id="partner-auth-title">Кабинет партнёра</h1>
-            <p>Ссылки, новые пользователи, оплаты и вознаграждения по программе Orken.</p>
+            <span className="partner-eyebrow">{uiText("Партнёрская программа")}</span>
+            <h1 id="partner-auth-title">{uiText("Кабинет партнёра")}</h1>
+            <p>{uiText("Ссылки, новые пользователи, оплаты и вознаграждения по программе Orken.")}</p>
           </div>
-          <div className="partner-auth-tabs" role="tablist" aria-label="Доступ к кабинету">
-            <button className={authMode === "login" ? "active" : ""} onClick={() => setAuthMode("login")} type="button">Войти</button>
-            <button className={authMode === "register" ? "active" : ""} onClick={() => setAuthMode("register")} type="button">Стать партнёром</button>
+          <div className="partner-auth-tabs" role="tablist" aria-label={uiText("Доступ к кабинету")}>
+            <button className={authMode === "login" ? "active" : ""} onClick={() => setAuthMode("login")} type="button">{uiText("Войти")}</button>
+            <button className={authMode === "register" ? "active" : ""} onClick={() => setAuthMode("register")} type="button">{uiText("Стать партнёром")}</button>
           </div>
           <form className="partner-auth-form" onSubmit={submitAuth}>
             {authMode === "register" && <>
-              <label>Ваше имя<input value={authForm.displayName} onChange={(event) => setAuthForm({ ...authForm, displayName: event.target.value })} required autoComplete="name" /></label>
-              <label>Название аккаунта<input value={authForm.accountName} onChange={(event) => setAuthForm({ ...authForm, accountName: event.target.value })} required autoComplete="organization" /></label>
-              <label>Тип аккаунта<select value={authForm.accountType} onChange={(event) => setAuthForm({ ...authForm, accountType: event.target.value as "organization" | "individual" })}><option value="organization">Компания</option><option value="individual">Частный партнёр</option></select></label>
+              <label>{uiText("Ваше имя")}<input value={authForm.displayName} onChange={(event) => setAuthForm({ ...authForm, displayName: event.target.value })} required autoComplete="name" /></label>
+              <label>{uiText("Название аккаунта")}<input value={authForm.accountName} onChange={(event) => setAuthForm({ ...authForm, accountName: event.target.value })} required autoComplete="organization" /></label>
+              <label>{uiText("Тип аккаунта")}<select value={authForm.accountType} onChange={(event) => setAuthForm({ ...authForm, accountType: event.target.value as "organization" | "individual" })}><option value="organization">{uiText("Компания")}</option><option value="individual">{uiText("Частный партнёр")}</option></select></label>
             </>}
             <label>Email<input value={authForm.email} onChange={(event) => setAuthForm({ ...authForm, email: event.target.value })} type="email" required autoComplete="email" /></label>
-            <label>Пароль<input value={authForm.password} onChange={(event) => setAuthForm({ ...authForm, password: event.target.value })} type="password" required minLength={authMode === "register" ? 12 : undefined} autoComplete={authMode === "register" ? "new-password" : "current-password"} /></label>
+            <label>{uiText("Пароль")}<input value={authForm.password} onChange={(event) => setAuthForm({ ...authForm, password: event.target.value })} type="password" required minLength={authMode === "register" ? 12 : undefined} autoComplete={authMode === "register" ? "new-password" : "current-password"} /></label>
             {error && <p className="partner-form-error" role="alert">{error}</p>}
-            <button className="partner-primary-button" disabled={submitting} type="submit"><LogIn size={17} />{submitting ? "Проверяем..." : authMode === "register" ? "Создать кабинет" : "Войти в кабинет"}</button>
+            <button className="partner-primary-button" disabled={submitting} type="submit"><LogIn size={17} />{submitting ? uiText("Проверяем...") : authMode === "register" ? uiText("Создать кабинет") : uiText("Войти в кабинет")}</button>
           </form>
-          <p className="partner-auth-note"><ShieldCheck size={15} /> Учётная запись хранится в общей партнёрской системе студии.</p>
+          <p className="partner-auth-note"><ShieldCheck size={15} /> {uiText(" Учётная запись хранится в общей партнёрской системе студии.")}</p>
         </section>
       </main>
     );
@@ -508,30 +511,30 @@ export default function PartnersPage() {
         <a className="partner-brand" href="/">ORKEN.LIFE</a>
         <div className="partner-user-summary">
           <div className="partner-avatar">{(identity?.displayName ?? identity?.accountName ?? "P").slice(0, 1).toUpperCase()}</div>
-          <div><strong>{identity?.accountName ?? identity?.displayName ?? "Партнёр"}</strong><span className={`partner-status ${status.tone}`}>{status.label}</span></div>
+          <div><strong>{identity?.accountName ?? identity?.displayName ?? uiText("Партнёр")}</strong><span className={`partner-status ${status.tone}`}>{status.label}</span></div>
         </div>
-        <nav className="partner-nav" aria-label="Разделы кабинета">
-          {tabs.map((item) => {
+        <nav className="partner-nav" aria-label={uiText("Разделы кабинета")}>
+          {tabs().map((item) => {
             const Icon = item.icon;
             return <button className={tab === item.id ? "active" : ""} key={item.id} onClick={() => navigate(item.id)} type="button"><Icon size={17} />{item.label}</button>;
           })}
         </nav>
-        <button className="partner-logout" onClick={logout} disabled={submitting} type="button"><LogOut size={16} />Выйти</button>
+        <button className="partner-logout" onClick={logout} disabled={submitting} type="button"><LogOut size={16} />{uiText("Выйти")}</button>
       </aside>
 
       <section className="partner-main">
         <header className="partner-header">
           <div>
-            <span className="partner-eyebrow">Orken · партнёрская программа</span>
-            <h1>{tabs.find((item) => item.id === tab)?.label}</h1>
-            <p className="partner-header-copy">{tabDescriptions[tab]}</p>
+            <span className="partner-eyebrow">{uiText("Orken · партнёрская программа")}</span>
+            <h1>{tabs().find((item) => item.id === tab)?.label}</h1>
+            <p className="partner-header-copy">{tabDescriptions()[tab]}</p>
           </div>
-          <button className="partner-icon-button" onClick={() => void loadPortal()} disabled={loading || submitting} type="button" title="Обновить данные"><RefreshCw size={18} /></button>
+          <button className="partner-icon-button" onClick={() => void loadPortal()} disabled={loading || submitting} type="button" title={uiText("Обновить данные")}><RefreshCw size={18} /></button>
         </header>
 
         {error && <p className="partner-inline-error" role="alert">{error}</p>}
         {notice && <p className="partner-notice"><CheckCircle2 size={17} />{notice}</p>}
-        {identity && status.tone !== "approved" && <section className={`partner-review-banner ${status.tone}`}><ShieldCheck size={20} /><div><strong>{status.label}</strong><span>{status.tone === "rejected" ? "Проверьте комментарии модератора и обновите предложение перед повторной отправкой." : "Доступ к данным сохранён. Публикация ссылок и предложений станет доступна после одобрения."}</span></div></section>}
+        {identity && status.tone !== "approved" && <section className={`partner-review-banner ${status.tone}`}><ShieldCheck size={20} /><div><strong>{status.label}</strong><span>{status.tone === "rejected" ? uiText("Проверьте комментарии модератора и обновите предложение перед повторной отправкой.") : uiText("Доступ к данным сохранён. Публикация ссылок и предложений станет доступна после одобрения.")}</span></div></section>}
 
         {tab === "overview" && <Overview metrics={metrics} dashboard={dashboard} onNavigate={navigate} />}
         {tab === "links" && <LinksSection links={dashboard?.referralLinks ?? []} linkName={linkName} setLinkName={setLinkName} submitting={submitting} onCreate={createLink} onCopy={copyLink} />}
@@ -549,31 +552,32 @@ function Overview({ metrics, dashboard, onNavigate }: {
   dashboard: PartnerPortalDashboard | null;
   onNavigate: (tab: Tab) => void;
 }) {
+  useUiLocale();
   const links = dashboard?.referralLinks.length ?? 0;
   const offers = dashboard?.offers.length ?? 0;
   const primaryMetrics = metrics.slice(0, 4);
   const registrations = Number(metrics[1]?.value) || 0;
   const paidConversions = Number(metrics[2]?.value) || 0;
   const steps = [
-    { done: links > 0, title: "Создайте партнёрскую ссылку", copy: "Отдельная ссылка поможет понять, откуда приходят пользователи.", action: "Создать ссылку", tab: "links" as Tab },
-    { done: registrations > 0, title: "Поделитесь ссылкой", copy: "Разместите её в Telegram, соцсетях, рассылке или на своём сайте.", action: "Открыть ссылки", tab: "links" as Tab },
-    { done: paidConversions > 0, title: "Следите за результатом", copy: "Регистрации и оплаты автоматически появятся в кабинете.", action: "Смотреть результаты", tab: "results" as Tab }
+    { done: links > 0, title: uiText("Создайте партнёрскую ссылку"), copy: uiText("Отдельная ссылка поможет понять, откуда приходят пользователи."), action: uiText("Создать ссылку"), tab: "links" as Tab },
+    { done: registrations > 0, title: uiText("Поделитесь ссылкой"), copy: uiText("Разместите её в Telegram, соцсетях, рассылке или на своём сайте."), action: uiText("Открыть ссылки"), tab: "links" as Tab },
+    { done: paidConversions > 0, title: uiText("Следите за результатом"), copy: uiText("Регистрации и оплаты автоматически появятся в кабинете."), action: uiText("Смотреть результаты"), tab: "results" as Tab }
   ];
 
   return <div className="partner-section-stack">
     <section className="partner-panel partner-start-panel">
       <div className="partner-start-copy">
-        <span className="partner-eyebrow">Начните отсюда</span>
-        <h2>Привлекайте пользователей Orken и получайте вознаграждение</h2>
-        <p>Создайте ссылку, поделитесь ею и отслеживайте регистрации, оплаты и начисления в одном месте.</p>
+        <span className="partner-eyebrow">{uiText("Начните отсюда")}</span>
+        <h2>{uiText("Привлекайте пользователей Orken и получайте вознаграждение")}</h2>
+        <p>{uiText("Создайте ссылку, поделитесь ею и отслеживайте регистрации, оплаты и начисления в одном месте.")}</p>
         <div className="partner-start-actions">
-          <button className="partner-primary-button" onClick={() => onNavigate("links")} type="button"><Link2 size={17} />Создать ссылку</button>
-          <button className="partner-secondary-button" onClick={() => onNavigate("results")} type="button">Посмотреть результаты<ArrowRight size={16} /></button>
+          <button className="partner-primary-button" onClick={() => onNavigate("links")} type="button"><Link2 size={17} />{uiText("Создать ссылку")}</button>
+          <button className="partner-secondary-button" onClick={() => onNavigate("results")} type="button">{uiText("Посмотреть результаты")}<ArrowRight size={16} /></button>
         </div>
       </div>
-      <div className="partner-start-facts" aria-label="Состояние программы">
-        <strong>{links}</strong><span>активных ссылок</span>
-        <strong>{offers}</strong><span>предложений</span>
+      <div className="partner-start-facts" aria-label={uiText("Состояние программы")}>
+        <strong>{links}</strong><span>{uiText("активных ссылок")}</span>
+        <strong>{offers}</strong><span>{uiText("предложений")}</span>
       </div>
     </section>
 
@@ -582,7 +586,7 @@ function Overview({ metrics, dashboard, onNavigate }: {
     </section>
 
     <section className="partner-panel">
-      <div className="partner-panel-head"><div><h2>Как начать</h2><p>Три шага от ссылки до первого вознаграждения.</p></div></div>
+      <div className="partner-panel-head"><div><h2>{uiText("Как начать")}</h2><p>{uiText("Три шага от ссылки до первого вознаграждения.")}</p></div></div>
       <div className="partner-journey-list">
         {steps.map((step, index) => <div className={`partner-journey-step ${step.done ? "done" : ""}`} key={step.title}>
           <span className="partner-step-marker">{step.done ? <CircleCheckBig size={18} /> : index + 1}</span>
@@ -593,42 +597,42 @@ function Overview({ metrics, dashboard, onNavigate }: {
     </section>
 
     <section className="partner-panel partner-finance-preview">
-      <div><span className="partner-eyebrow">Вознаграждение</span><h2>{textValue(metrics[3]?.value)}</h2><p>Всего начислено по программе Orken.</p></div>
+      <div><span className="partner-eyebrow">{uiText("Вознаграждение")}</span><h2>{textValue(metrics[3]?.value)}</h2><p>{uiText("Всего начислено по программе Orken.")}</p></div>
       <div className="partner-finance-preview-values">
-        <span>Ожидает выплаты<strong>{textValue(metrics[4]?.value)}</strong></span>
-        <span>Уже выплачено<strong>{textValue(metrics[5]?.value)}</strong></span>
-        <button className="partner-secondary-button" onClick={() => onNavigate("finances")} type="button">Подробнее<ArrowRight size={15} /></button>
+        <span>{uiText("Ожидает выплаты")}<strong>{textValue(metrics[4]?.value)}</strong></span>
+        <span>{uiText("Уже выплачено")}<strong>{textValue(metrics[5]?.value)}</strong></span>
+        <button className="partner-secondary-button" onClick={() => onNavigate("finances")} type="button">{uiText("Подробнее")}<ArrowRight size={15} /></button>
       </div>
     </section>
   </div>;
 }
 
 function LinksSection({ links, linkName, setLinkName, submitting, onCreate, onCopy }: { links: DataRecord[]; linkName: string; setLinkName: (value: string) => void; submitting: boolean; onCreate: (event: React.FormEvent) => Promise<void>; onCopy: (value: unknown) => Promise<void> }) {
+  useUiLocale();
   return <div className="partner-section-stack">
     <section className="partner-panel partner-link-create-panel">
       <div className="partner-panel-head">
-        <div><h2>Создать новую ссылку</h2><p>Назовите источник, где будете размещать ссылку. Это название увидите только вы.</p></div>
+        <div><h2>{uiText("Создать новую ссылку")}</h2><p>{uiText("Назовите источник, где будете размещать ссылку. Это название увидите только вы.")}</p></div>
       </div>
       <form className="partner-inline-form" onSubmit={onCreate}>
         <label className="partner-field-label">
-          Название источника
-          <input value={linkName} onChange={(event) => setLinkName(event.target.value)} placeholder="Например: Telegram, Instagram или сайт" maxLength={60} required />
+          {uiText(" Название источника ")}<input value={linkName} onChange={(event) => setLinkName(event.target.value)} placeholder={uiText("Например: Telegram, Instagram или сайт")} maxLength={60} required />
         </label>
-        <button className="partner-primary-button" disabled={submitting} type="submit"><Plus size={17} />Создать ссылку</button>
+        <button className="partner-primary-button" disabled={submitting} type="submit"><Plus size={17} />{uiText("Создать ссылку")}</button>
       </form>
-      <p className="partner-field-help">Введите только короткое название. Не вставляйте сюда адрес профиля или сайта: готовую ссылку Orken создаст автоматически.</p>
+      <p className="partner-field-help">{uiText("Введите только короткое название. Не вставляйте сюда адрес профиля или сайта: готовую ссылку Orken создаст автоматически.")}</p>
     </section>
 
     <section className="partner-panel">
-      <div className="partner-panel-head"><div><h2>Готовые ссылки</h2><p>Используйте отдельную ссылку для каждого канала, чтобы сравнивать результат.</p></div></div>
-      <div className="partner-row-list">{links.length === 0 ? <EmptyState text="Пока нет ссылок. Создайте первую ссылку выше." /> : links.map((link, index) => {
+      <div className="partner-panel-head"><div><h2>{uiText("Готовые ссылки")}</h2><p>{uiText("Используйте отдельную ссылку для каждого канала, чтобы сравнивать результат.")}</p></div></div>
+      <div className="partner-row-list">{links.length === 0 ? <EmptyState text={uiText("Пока нет ссылок. Создайте первую ссылку выше.")} /> : links.map((link, index) => {
         const url = readValue(link, ["url", "href", "referralUrl", "referral_url"]);
         const status = statusCopy(rowStatus(link));
         return <article className="partner-row" key={rowId(link) ?? index}>
-          <div><strong>{referralSourceTitle(link)}</strong><span>{typeof url === "string" ? url : "Ссылка готовится"}</span></div>
+          <div><strong>{referralSourceTitle(link)}</strong><span>{typeof url === "string" ? url : uiText("Ссылка готовится")}</span></div>
           <div className="partner-row-actions">
             <span className={`partner-status ${status.tone}`}>{status.label}</span>
-            {typeof url === "string" && <button className="partner-secondary-button" onClick={() => void onCopy(url)} type="button"><Copy size={16} />Скопировать</button>}
+            {typeof url === "string" && <button className="partner-secondary-button" onClick={() => void onCopy(url)} type="button"><Copy size={16} />{uiText("Скопировать")}</button>}
           </div>
         </article>;
       })}</div>
@@ -647,13 +651,14 @@ function OffersSection({ offers, form, setForm, editingOfferId, submitting, onSa
   onCancelEdit: () => void;
   onReview: (offerId: string) => Promise<void>;
 }) {
+  useUiLocale();
   return <div className="partner-section-stack">
     <section className="partner-panel">
       <div className="partner-panel-head">
-        <div><h2>Ваши предложения</h2><p>После создания отправьте предложение на проверку. Одобренные предложения увидят пользователи Orken.</p></div>
+        <div><h2>{uiText("Ваши предложения")}</h2><p>{uiText("После создания отправьте предложение на проверку. Одобренные предложения увидят пользователи Orken.")}</p></div>
       </div>
-      <div className="partner-context-note"><Info size={17} /><span>Предложения активируются за накопленные XP. Комиссия за приведённые оплаты Orken рассчитывается отдельно по условиям партнёрской программы.</span></div>
-      <div className="partner-row-list">{offers.length === 0 ? <EmptyState text="Предложений пока нет. Создайте первое ниже." /> : offers.map((offer, index) => {
+      <div className="partner-context-note"><Info size={17} /><span>{uiText("Предложения активируются за накопленные XP. Комиссия за приведённые оплаты Orken рассчитывается отдельно по условиям партнёрской программы.")}</span></div>
+      <div className="partner-row-list">{offers.length === 0 ? <EmptyState text={uiText("Предложений пока нет. Создайте первое ниже.")} /> : offers.map((offer, index) => {
         const id = rowId(offer);
         const status = statusCopy(rowStatus(offer));
         const editable = status.tone === "draft" || status.tone === "rejected";
@@ -661,8 +666,8 @@ function OffersSection({ offers, form, setForm, editingOfferId, submitting, onSa
           <div><strong>{rowTitle(offer)}</strong><span>{xpPriceLabel(readValue(offer, ["price", "price_label"]))}</span></div>
           <div className="partner-row-actions">
             <span className={`partner-status ${status.tone}`}>{status.label}</span>
-            {id && editable && <button className="partner-icon-button" disabled={submitting} onClick={() => onEdit(offer)} type="button" title="Редактировать предложение"><Pencil size={16} /></button>}
-            {id && editable && <button className="partner-secondary-button" disabled={submitting} onClick={() => void onReview(id)} type="button"><Send size={15} />На модерацию</button>}
+            {id && editable && <button className="partner-icon-button" disabled={submitting} onClick={() => onEdit(offer)} type="button" title={uiText("Редактировать предложение")}><Pencil size={16} /></button>}
+            {id && editable && <button className="partner-secondary-button" disabled={submitting} onClick={() => void onReview(id)} type="button"><Send size={15} />{uiText("На модерацию")}</button>}
           </div>
         </article>;
       })}</div>
@@ -670,24 +675,24 @@ function OffersSection({ offers, form, setForm, editingOfferId, submitting, onSa
 
     <details className="partner-panel partner-offer-builder" open={editingOfferId ? true : undefined}>
       <summary>
-        <span><Plus size={17} />{editingOfferId ? "Редактировать предложение" : "Создать предложение"}</span>
-        <small>{editingOfferId ? "Сохраните изменения и повторно отправьте на проверку" : "Услуга, бонус или специальное условие для пользователей Orken"}</small>
+        <span><Plus size={17} />{editingOfferId ? uiText("Редактировать предложение") : uiText("Создать предложение")}</span>
+        <small>{editingOfferId ? uiText("Сохраните изменения и повторно отправьте на проверку") : uiText("Услуга, бонус или специальное условие для пользователей Orken")}</small>
       </summary>
       <div className="partner-offer-builder-body">
         <div className="partner-panel-head">
-          <div><h2>{editingOfferId ? "Редактирование предложения" : "Новое предложение"}</h2><p>Сначала оно сохранится как черновик. Вы сможете проверить данные перед отправкой на модерацию.</p></div>
-          {editingOfferId && <button className="partner-icon-button" onClick={onCancelEdit} type="button" title="Отменить редактирование"><X size={17} /></button>}
+          <div><h2>{editingOfferId ? uiText("Редактирование предложения") : uiText("Новое предложение")}</h2><p>{uiText("Сначала оно сохранится как черновик. Вы сможете проверить данные перед отправкой на модерацию.")}</p></div>
+          {editingOfferId && <button className="partner-icon-button" onClick={onCancelEdit} type="button" title={uiText("Отменить редактирование")}><X size={17} /></button>}
         </div>
         <form className="partner-offer-form" onSubmit={onSave}>
-          <label>Что вы предлагаете<input value={form.offer} onChange={(event) => setForm({ ...form, offer: event.target.value })} placeholder="Например: личная установочная сессия" required /></label>
-          <label>Категория<select value={form.kind} onChange={(event) => setForm({ ...form, kind: event.target.value as OfferKind })}><option value="qualified_lead">Заявка на консультацию</option><option value="paid_service">Платная услуга</option><option value="portfolio_credit">Бонус или сертификат</option><option value="reward_trial">Пробный доступ</option><option value="manual_deal">Другое предложение</option></select></label>
-          <label>Стоимость для пользователя, XP<input value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} type="number" min="1" step="1" placeholder="Например: 120" required /><small>Пользователь сможет активировать услугу, когда накопит эту сумму. XP спишутся после подтверждения.</small></label>
-          <label>Сколько раз доступно<input value={form.cap} onChange={(event) => setForm({ ...form, cap: event.target.value })} placeholder="Например: 25 в месяц" required /><small>Лимит помогает не получить больше заявок, чем вы сможете обработать.</small></label>
+          <label>{uiText("Что вы предлагаете")}<input value={form.offer} onChange={(event) => setForm({ ...form, offer: event.target.value })} placeholder={uiText("Например: личная установочная сессия")} required /></label>
+          <label>{uiText("Категория")}<select value={form.kind} onChange={(event) => setForm({ ...form, kind: event.target.value as OfferKind })}><option value="qualified_lead">{uiText("Заявка на консультацию")}</option><option value="paid_service">{uiText("Платная услуга")}</option><option value="portfolio_credit">{uiText("Бонус или сертификат")}</option><option value="reward_trial">{uiText("Пробный доступ")}</option><option value="manual_deal">{uiText("Другое предложение")}</option></select></label>
+          <label>{uiText("Стоимость для пользователя, XP")}<input value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} type="number" min="1" step="1" placeholder={uiText("Например: 120")} required /><small>{uiText("Пользователь сможет активировать услугу, когда накопит эту сумму. XP спишутся после подтверждения.")}</small></label>
+          <label>{uiText("Сколько раз доступно")}<input value={form.cap} onChange={(event) => setForm({ ...form, cap: event.target.value })} placeholder={uiText("Например: 25 в месяц")} required /><small>{uiText("Лимит помогает не получить больше заявок, чем вы сможете обработать.")}</small></label>
           <details className="partner-advanced-options">
-            <summary>Дополнительная настройка размещения</summary>
-            <label>Где показать предложение<select value={form.surface} onChange={(event) => setForm({ ...form, surface: event.target.value as OfferSurface })}><option value="rewards_tab">В разделе наград</option><option value="milestone_modal">После достижения</option><option value="home_module">На главном экране</option><option value="admin_recommendation">По рекомендации команды Orken</option></select></label>
+            <summary>{uiText("Дополнительная настройка размещения")}</summary>
+            <label>{uiText("Где показать предложение")}<select value={form.surface} onChange={(event) => setForm({ ...form, surface: event.target.value as OfferSurface })}><option value="rewards_tab">{uiText("В разделе наград")}</option><option value="milestone_modal">{uiText("После достижения")}</option><option value="home_module">{uiText("На главном экране")}</option><option value="admin_recommendation">{uiText("По рекомендации команды Orken")}</option></select></label>
           </details>
-          <button className="partner-primary-button" disabled={submitting} type="submit">{editingOfferId ? <Pencil size={17} /> : <Plus size={17} />}{editingOfferId ? "Сохранить изменения" : "Сохранить предложение"}</button>
+          <button className="partner-primary-button" disabled={submitting} type="submit">{editingOfferId ? <Pencil size={17} /> : <Plus size={17} />}{editingOfferId ? uiText("Сохранить изменения") : uiText("Сохранить предложение")}</button>
         </form>
       </div>
     </details>
@@ -695,6 +700,7 @@ function OffersSection({ offers, form, setForm, editingOfferId, submitting, onSa
 }
 
 function ActivitySection({ dashboard }: { dashboard: PartnerPortalDashboard | null }) {
+  useUiLocale();
   const registrationRows = dashboard?.registrations ?? dashboard?.leads ?? [];
   const paymentRows = dashboard?.payments ?? dashboard?.conversions ?? [];
   const clicks = readValue(dashboard?.metrics ?? {}, ["clicks", "linkClicks", "link_clicks"]);
@@ -702,13 +708,13 @@ function ActivitySection({ dashboard }: { dashboard: PartnerPortalDashboard | nu
   const payments = readValue(dashboard?.metrics ?? {}, ["paidConversions", "paid_conversions", "payments", "conversions"]) ?? paymentRows.length;
   return <div className="partner-section-stack">
     <section className="partner-panel">
-      <div className="partner-panel-head"><div><h2>Путь пользователя</h2><p>Здесь видно, сколько людей перешло по ссылке, зарегистрировалось и оплатило продукт Orken.</p></div></div>
-      <div className="partner-funnel" aria-label="Воронка партнёрской программы">
-        <span><small>1. Перешли по ссылке</small><strong>{textValue(clicks)}</strong></span>
+      <div className="partner-panel-head"><div><h2>{uiText("Путь пользователя")}</h2><p>{uiText("Здесь видно, сколько людей перешло по ссылке, зарегистрировалось и оплатило продукт Orken.")}</p></div></div>
+      <div className="partner-funnel" aria-label={uiText("Воронка партнёрской программы")}>
+        <span><small>{uiText("1. Перешли по ссылке")}</small><strong>{textValue(clicks)}</strong></span>
         <ArrowRight size={18} />
-        <span><small>2. Зарегистрировались</small><strong>{textValue(registrations)}</strong></span>
+        <span><small>{uiText("2. Зарегистрировались")}</small><strong>{textValue(registrations)}</strong></span>
         <ArrowRight size={18} />
-        <span><small>3. Оплатили</small><strong>{textValue(payments)}</strong></span>
+        <span><small>{uiText("3. Оплатили")}</small><strong>{textValue(payments)}</strong></span>
       </div>
     </section>
     <RegistrationsTable registrations={registrationRows} payments={paymentRows} />
@@ -717,24 +723,25 @@ function ActivitySection({ dashboard }: { dashboard: PartnerPortalDashboard | nu
 }
 
 function RegistrationsTable({ registrations, payments }: { registrations: DataRecord[]; payments: DataRecord[] }) {
+  useUiLocale();
   return <section className="partner-panel">
     <div className="partner-panel-head">
-      <div><h2>Регистрации</h2><p>Пользователи, которые зарегистрировались после перехода по вашим ссылкам.</p></div>
+      <div><h2>{uiText("Регистрации")}</h2><p>{uiText("Пользователи, которые зарегистрировались после перехода по вашим ссылкам.")}</p></div>
       <span className="partner-count-badge"><UserPlus size={14} />{registrations.length}</span>
     </div>
-    {registrations.length === 0 ? <EmptyState text="Регистраций по вашим ссылкам пока нет." /> : <div className="partner-data-table-wrap">
+    {registrations.length === 0 ? <EmptyState text={uiText("Регистраций по вашим ссылкам пока нет.")} /> : <div className="partner-data-table-wrap">
       <table className="partner-data-table">
-        <thead><tr><th>Пользователь</th><th>Дата регистрации</th><th>Источник</th><th>Оплата</th></tr></thead>
+        <thead><tr><th>{uiText("Пользователь")}</th><th>{uiText("Дата регистрации")}</th><th>{uiText("Источник")}</th><th>{uiText("Оплата")}</th></tr></thead>
         <tbody>{registrations.map((registration, index) => {
           const payment = findRegistrationPayment(registration, payments);
           const paymentStatus = payment ? paymentStatusCopy(rowStatus(payment)) : null;
           return <tr key={rowId(registration) ?? index}>
-            <td data-label="Пользователь"><strong>{customerLabel(registration)}</strong></td>
-            <td data-label="Дата регистрации">{registrationDate(registration)}</td>
-            <td data-label="Источник">{sourceLabel(registration)}</td>
-            <td data-label="Оплата">{paymentStatus
+            <td data-label={uiText("Пользователь")}><strong>{customerLabel(registration)}</strong></td>
+            <td data-label={uiText("Дата регистрации")}>{registrationDate(registration)}</td>
+            <td data-label={uiText("Источник")}>{sourceLabel(registration)}</td>
+            <td data-label={uiText("Оплата")}>{paymentStatus
               ? <span className={`partner-status ${paymentStatus.tone}`}>{paymentStatus.label}</span>
-              : <span className="partner-payment-unmatched">Не зафиксирована</span>}</td>
+              : <span className="partner-payment-unmatched">{uiText("Не зафиксирована")}</span>}</td>
           </tr>;
         })}</tbody>
       </table>
@@ -743,22 +750,23 @@ function RegistrationsTable({ registrations, payments }: { registrations: DataRe
 }
 
 function PaymentsTable({ payments }: { payments: DataRecord[] }) {
+  useUiLocale();
   return <section className="partner-panel">
     <div className="partner-panel-head">
-      <div><h2>Оплаты</h2><p>Оплаты привлечённых пользователей и начисленная по ним комиссия.</p></div>
+      <div><h2>{uiText("Оплаты")}</h2><p>{uiText("Оплаты привлечённых пользователей и начисленная по ним комиссия.")}</p></div>
       <span className="partner-count-badge"><CreditCard size={14} />{payments.length}</span>
     </div>
-    {payments.length === 0 ? <EmptyState text="Оплат привлечённых пользователей пока нет." /> : <div className="partner-data-table-wrap">
+    {payments.length === 0 ? <EmptyState text={uiText("Оплат привлечённых пользователей пока нет.")} /> : <div className="partner-data-table-wrap">
       <table className="partner-data-table">
-        <thead><tr><th>Пользователь</th><th>Дата оплаты</th><th>Сумма</th><th>Комиссия</th><th>Статус</th></tr></thead>
+        <thead><tr><th>{uiText("Пользователь")}</th><th>{uiText("Дата оплаты")}</th><th>{uiText("Сумма")}</th><th>{uiText("Комиссия")}</th><th>{uiText("Статус")}</th></tr></thead>
         <tbody>{payments.map((payment, index) => {
           const status = paymentStatusCopy(rowStatus(payment));
           return <tr key={rowId(payment) ?? index}>
-            <td data-label="Пользователь"><strong>{customerLabel(payment)}</strong></td>
-            <td data-label="Дата оплаты">{paymentDate(payment)}</td>
-            <td data-label="Сумма">{formatMoney(payment, "payment")}</td>
-            <td data-label="Комиссия">{formatMoney(payment, "commission")}</td>
-            <td data-label="Статус"><span className={`partner-status ${status.tone}`}>{status.label}</span></td>
+            <td data-label={uiText("Пользователь")}><strong>{customerLabel(payment)}</strong></td>
+            <td data-label={uiText("Дата оплаты")}>{paymentDate(payment)}</td>
+            <td data-label={uiText("Сумма")}>{formatMoney(payment, "payment")}</td>
+            <td data-label={uiText("Комиссия")}>{formatMoney(payment, "commission")}</td>
+            <td data-label={uiText("Статус")}><span className={`partner-status ${status.tone}`}>{status.label}</span></td>
           </tr>;
         })}</tbody>
       </table>
@@ -767,34 +775,38 @@ function PaymentsTable({ payments }: { payments: DataRecord[] }) {
 }
 
 function FinancesSection({ ledger, payouts, dashboard }: { ledger: DataRecord[]; payouts: DataRecord[]; dashboard: PartnerPortalDashboard | null }) {
+  useUiLocale();
   const metrics = dashboard?.metrics ?? {};
   return <div className="partner-section-stack">
-    <section className="partner-finance-summary" aria-label="Сводка по финансам">
-      <div><span>Всего начислено</span><strong>{textValue(readValue(metrics, ["earned", "accrued", "ledgerBalance", "ledger_balance"]))}</strong></div>
-      <div><span>Ожидает выплаты</span><strong>{textValue(readValue(metrics, ["pendingPayouts", "pending_payouts", "payoutsPending", "payouts_pending"]))}</strong></div>
-      <div><span>Выплачено</span><strong>{textValue(readValue(metrics, ["paidPayouts", "paid_payouts", "payoutsPaid", "payouts_paid"]))}</strong></div>
+    <section className="partner-finance-summary" aria-label={uiText("Сводка по финансам")}>
+      <div><span>{uiText("Всего начислено")}</span><strong>{textValue(readValue(metrics, ["earned", "accrued", "ledgerBalance", "ledger_balance"]))}</strong></div>
+      <div><span>{uiText("Ожидает выплаты")}</span><strong>{textValue(readValue(metrics, ["pendingPayouts", "pending_payouts", "payoutsPending", "payouts_pending"]))}</strong></div>
+      <div><span>{uiText("Выплачено")}</span><strong>{textValue(readValue(metrics, ["paidPayouts", "paid_payouts", "payoutsPaid", "payouts_paid"]))}</strong></div>
     </section>
-    <DataSection title="История начислений" subtitle="Комиссии по подтверждённым действиям пользователей Orken." rows={ledger} />
-    <DataSection title="История выплат" subtitle="Статусы выплат. Реквизиты безопасно хранятся в общей партнёрской системе." rows={payouts} />
+    <DataSection title={uiText("История начислений")} subtitle={uiText("Комиссии по подтверждённым действиям пользователей Orken.")} rows={ledger} />
+    <DataSection title={uiText("История выплат")} subtitle={uiText("Статусы выплат. Реквизиты безопасно хранятся в общей партнёрской системе.")} rows={payouts} />
   </div>;
 }
 
 function DataSection({ title, subtitle, rows }: { title: string; subtitle: string; rows: DataRecord[] }) {
-  return <section className="partner-panel"><div className="partner-panel-head"><div><h2>{title}</h2><p>{subtitle}</p></div></div><div className="partner-row-list">{rows.length === 0 ? <EmptyState text="Данных пока нет." /> : rows.map((row, index) => {
+  useUiLocale();
+  return <section className="partner-panel"><div className="partner-panel-head"><div><h2>{title}</h2><p>{subtitle}</p></div></div><div className="partner-row-list">{rows.length === 0 ? <EmptyState text={uiText("Данных пока нет.")} /> : rows.map((row, index) => {
     const amount = readValue(row, ["amount", "amountText", "amount_text", "amountCents", "amount_cents"]);
     const date = readValue(row, ["createdAt", "created_at", "date"]);
     const status = statusCopy(rowStatus(row));
     return <article className="partner-row" key={rowId(row) ?? index}>
-      <div><strong>{rowTitle(row)}</strong><span>{[amount, date].filter(Boolean).map(textValue).join(" · ") || "Подробности появятся после обработки"}</span></div>
+      <div><strong>{rowTitle(row)}</strong><span>{[amount, date].filter(Boolean).map(textValue).join(" · ") || uiText("Подробности появятся после обработки")}</span></div>
       <span className={`partner-status ${status.tone}`}>{status.label}</span>
     </article>;
   })}</div></section>;
 }
 
 function ProfileSection({ identity, expiresAt }: { identity: PartnerPortalIdentity | null; expiresAt?: string }) {
-  return <section className="partner-panel partner-profile-panel"><div className="partner-panel-head"><div><h2>Профиль</h2><p>Базовые данные из общей партнёрской системы студии.</p></div></div><dl><div><dt>Имя</dt><dd>{identity?.displayName ?? "—"}</dd></div><div><dt>Аккаунт</dt><dd>{identity?.accountName ?? "—"}</dd></div><div><dt>Email</dt><dd>{identity?.email ?? "—"}</dd></div><div><dt>Статус</dt><dd>{statusCopy(identity?.status ?? "").label}</dd></div><div><dt>Сессия действует до</dt><dd>{expiresAt ? new Date(expiresAt).toLocaleString("ru-RU") : "—"}</dd></div></dl></section>;
+  useUiLocale();
+  return <section className="partner-panel partner-profile-panel"><div className="partner-panel-head"><div><h2>{uiText("Профиль")}</h2><p>{uiText("Базовые данные из общей партнёрской системы студии.")}</p></div></div><dl><div><dt>{uiText("Имя")}</dt><dd>{identity?.displayName ?? "—"}</dd></div><div><dt>{uiText("Аккаунт")}</dt><dd>{identity?.accountName ?? "—"}</dd></div><div><dt>Email</dt><dd>{identity?.email ?? "—"}</dd></div><div><dt>{uiText("Статус")}</dt><dd>{statusCopy(identity?.status ?? "").label}</dd></div><div><dt>{uiText("Сессия действует до")}</dt><dd>{expiresAt ? new Date(expiresAt).toLocaleString(getFormatLocale()) : "—"}</dd></div></dl></section>;
 }
 
 function EmptyState({ text }: { text: string }) {
+  useUiLocale();
   return <div className="partner-empty"><ClipboardList size={19} /><span>{text}</span></div>;
 }

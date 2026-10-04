@@ -3,6 +3,7 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import { jwtVerify, SignJWT } from "jose";
 import { env } from "../env.js";
 import { prisma } from "./prisma.js";
+import { normalizeUiLocale } from "@levelup/contracts";
 
 export type SessionContext = {
   id: string;
@@ -65,11 +66,11 @@ async function verifyAdminSessionToken(token: string | undefined) {
 
 export function getRequestedLocale(request: FastifyRequest) {
   const locale = readRequestValue(request, "x-locale") ?? "ru";
-  return locale.slice(0, 12);
+  return normalizeUiLocale(locale);
 }
 
 export async function createGuestSession(request: FastifyRequest, localeOverride?: string): Promise<SessionContext> {
-  const locale = (localeOverride ?? getRequestedLocale(request)).slice(0, 12);
+  const locale = normalizeUiLocale(localeOverride ?? getRequestedLocale(request));
   const userAgentHeader = request.headers["user-agent"];
   const userAgent = Array.isArray(userAgentHeader) ? userAgentHeader[0] : userAgentHeader;
   const session = await prisma.session.create({
@@ -96,7 +97,7 @@ export async function getOptionalSession(request: FastifyRequest): Promise<Sessi
 
   if (!guestToken) return null;
 
-  return prisma.session.findFirst({
+  const session = await prisma.session.findFirst({
     where: {
       guestToken,
       expiresAt: { gt: new Date() },
@@ -109,6 +110,8 @@ export async function getOptionalSession(request: FastifyRequest): Promise<Sessi
       locale: true
     }
   });
+  if (!session) return null;
+  return { ...session, locale: normalizeUiLocale(readHeader(request, "x-locale"), normalizeUiLocale(session.locale)) };
 }
 
 export async function requireSession(request: FastifyRequest, reply: FastifyReply): Promise<SessionContext | null> {

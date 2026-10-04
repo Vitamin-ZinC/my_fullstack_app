@@ -23,6 +23,7 @@ import { normalizeFreeReportValue, normalizeFullReportValue } from "../services/
 import { publicReportFailureMessage, resolveAnalysisProgress } from "../services/analysisProgress.js";
 import { sendReportEmail } from "../services/email.js";
 import { buildFallbackFreeReport, buildFallbackReport } from "../services/report.js";
+import { normalizeUiLocale } from "@levelup/contracts";
 
 const ikigaiAnswersSchema = z.object({
   love: z.array(z.string()),
@@ -276,7 +277,7 @@ export async function analysisRoutes(app: FastifyInstance) {
     const analysis = access.analysis;
     if (analysis.payment?.status !== "SUCCEEDED") return reply.code(402).send({ error: "Payment required" });
     if (!analysis.reportFull) return reply.code(409).send({ error: "Full report is not available" });
-    const reportFull = normalizeFullReportValue(analysis.reportFull);
+    const reportFull = normalizeFullReportValue(analysis.reportFull, normalizeUiLocale(analysis.locale));
     await prisma.analyticsEvent.create({
       data: {
         name: "full_report_viewed",
@@ -467,12 +468,12 @@ export async function analysisRoutes(app: FastifyInstance) {
     const answers = ikigaiAnswersSchema.parse(analysis.ikigaiAnswers ?? {
       love: [], good_at: [], world_needs: [], paid_for: []
     });
-    const report = buildFallbackReport(answers);
+    const report = buildFallbackReport(answers, normalizeUiLocale(analysis.locale));
     await prisma.analysis.update({
       where: { id: params.id },
       data: {
         status: "DONE",
-        reportFree: buildFallbackFreeReport(report),
+        reportFree: buildFallbackFreeReport(report, normalizeUiLocale(analysis.locale)),
         reportFull: report,
         completedAt: new Date()
       }

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { BRAND_NAME } from "@/lib/messages";
 import { ReferralCapture } from "@/components/ReferralCapture";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 
 export const metadata: Metadata = {
   title: `Икигай — ${BRAND_NAME}`,
@@ -11,7 +12,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ru">
-      <body><ReferralCapture />{children}</body>
+      <body><LanguageSwitcher /><ReferralCapture />{children}</body>
     </html>
   );
 }

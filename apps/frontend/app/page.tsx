@@ -1,4 +1,6 @@
 "use client";
+import { uiText, getFormatLocale, useUiLocale } from "@/lib/locale";
+
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -26,14 +28,15 @@ import { api } from "@/lib/api";
 import { SUPPORT_EMAIL } from "@/lib/legal";
 import { useSiteText } from "@/lib/useSiteText";
 
-const cabinetLinks = [
-  { href: "/account", label: "Кабинет пользователя", Icon: UserCircle },
-  { href: "/habits", label: "Кабинет клиента", Icon: UserRound },
-  { href: "/coach", label: "Кабинет коуча", Icon: UsersRound },
-  { href: "/partners", label: "Кабинет партнёра", Icon: Handshake }
-] as const;
+function cabinetLinks() { return [
+  { href: "/account", label: uiText("Кабинет пользователя"), Icon: UserCircle },
+  { href: "/habits", label: uiText("Кабинет клиента"), Icon: UserRound },
+  { href: "/coach", label: uiText("Кабинет коуча"), Icon: UsersRound },
+  { href: "/partners", label: uiText("Кабинет партнёра"), Icon: Handshake }
+] as const; }
 
 export default function LandingPage() {
+  useUiLocale();
   const text = useSiteText();
   const landing = text.landing.v2;
   const [reportPriceLabel, setReportPriceLabel] = useState("$3");
@@ -107,8 +110,8 @@ export default function LandingPage() {
                 ))}
               </div>
             </div>
-            <div className="landing-v2-hero-art" aria-label="Визуализация анализа лица">
-              <img src="/assets/ai-face-hero.jpg" alt="Цифровая модель лица в неоновом интерфейсе ORKEN" />
+            <div className="landing-v2-hero-art" aria-label={uiText("Визуализация анализа лица")}>
+              <img src="/assets/ai-face-hero.jpg" alt={uiText("Цифровая модель лица в неоновом интерфейсе ORKEN")} />
               <span className="landing-v2-scan-line" aria-hidden="true" />
             </div>
           </div>
@@ -119,7 +122,7 @@ export default function LandingPage() {
             <div className="landing-v2-section-head">
               <p className="landing-v2-eyebrow"><Activity size={15} aria-hidden="true" /> {landing.productsTitle}</p>
               <h2>{landing.productsSubtitle}</h2>
-              <p>Начните с понимания текущего вектора или поддерживайте изменения ежедневно.</p>
+              <p>{uiText("Начните с понимания текущего вектора или поддерживайте изменения ежедневно.")}</p>
             </div>
             <div className="landing-v2-product-grid">
               <ProductCard
@@ -218,9 +221,9 @@ export default function LandingPage() {
               <img src="/assets/orken-penguin-transparent.png" alt="" />
               <span>ORKEN.LIFE</span>
             </Link>
-            <nav aria-label="Юридические документы и поддержка">
-              <Link href="/offer"><FileText size={15} aria-hidden="true" /> Публичная оферта</Link>
-              <Link href="/privacy"><ShieldCheck size={15} aria-hidden="true" /> Политика конфиденциальности</Link>
+            <nav aria-label={uiText("Юридические документы и поддержка")}>
+              <Link href="/offer"><FileText size={15} aria-hidden="true" /> {uiText(" Публичная оферта")}</Link>
+              <Link href="/privacy"><ShieldCheck size={15} aria-hidden="true" /> {uiText(" Политика конфиденциальности")}</Link>
               <a href={`mailto:${SUPPORT_EMAIL}`}><Mail size={15} aria-hidden="true" /> {SUPPORT_EMAIL}</a>
             </nav>
           </div>
@@ -231,6 +234,7 @@ export default function LandingPage() {
 }
 
 function LandingNav() {
+  useUiLocale();
   const { landing: landingText } = useSiteText();
   const landing = landingText.v2;
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -248,13 +252,13 @@ function LandingNav() {
     <header className="landing-v2-nav">
       <div className="landing-v2-container landing-v2-nav-inner">
         <Link className="landing-v2-brand" href="#about" onClick={closeMobile}>
-          <img src="/assets/orken-penguin-transparent.png" alt="Пингвин ORKEN" />
+          <img src="/assets/orken-penguin-transparent.png" alt={uiText("Пингвин ORKEN")} />
           <span>ORKEN.LIFE</span>
         </Link>
         <button
           className="landing-v2-menu-button"
           type="button"
-          aria-label={mobileOpen ? "Закрыть меню" : "Открыть меню"}
+          aria-label={mobileOpen ? uiText("Закрыть меню") : uiText("Открыть меню")}
           aria-expanded={mobileOpen}
           aria-controls="landing-navigation"
           onClick={() => setMobileOpen((value) => !value)}
@@ -262,22 +266,22 @@ function LandingNav() {
           {mobileOpen ? <X size={21} aria-hidden="true" /> : <Menu size={21} aria-hidden="true" />}
         </button>
         <div id="landing-navigation" className={`landing-v2-nav-panel${mobileOpen ? " is-open" : ""}`}>
-          <nav className="landing-v2-section-links" aria-label="Разделы сайта">
+          <nav className="landing-v2-section-links" aria-label={uiText("Разделы сайта")}>
             {sectionLinks.map(([href, label]) => <a href={href} key={href} onClick={closeMobile}>{label}</a>)}
           </nav>
           <div className="landing-v2-nav-actions">
             <details className="landing-v2-dropdown" name="landing-nav-menu">
               <summary><LifeBuoy size={16} aria-hidden="true" /> {landing.menu.feedback} <ChevronDown size={14} aria-hidden="true" /></summary>
               <div className="landing-v2-dropdown-menu" role="menu">
-                <Link href="/offer" role="menuitem" onClick={closeMobile}><FileText size={16} aria-hidden="true" /> Публичная оферта</Link>
-                <Link href="/privacy" role="menuitem" onClick={closeMobile}><ShieldCheck size={16} aria-hidden="true" /> Политика конфиденциальности</Link>
-                <a href={`mailto:${SUPPORT_EMAIL}`} role="menuitem" onClick={closeMobile}><Mail size={16} aria-hidden="true" /> Написать в поддержку</a>
+                <Link href="/offer" role="menuitem" onClick={closeMobile}><FileText size={16} aria-hidden="true" /> {uiText(" Публичная оферта")}</Link>
+                <Link href="/privacy" role="menuitem" onClick={closeMobile}><ShieldCheck size={16} aria-hidden="true" /> {uiText(" Политика конфиденциальности")}</Link>
+                <a href={`mailto:${SUPPORT_EMAIL}`} role="menuitem" onClick={closeMobile}><Mail size={16} aria-hidden="true" /> {uiText(" Написать в поддержку")}</a>
               </div>
             </details>
             <details className="landing-v2-dropdown" name="landing-nav-menu">
               <summary><UserCircle size={16} aria-hidden="true" /> {landing.menu.cabinet} <ChevronDown size={14} aria-hidden="true" /></summary>
               <div className="landing-v2-dropdown-menu" role="menu">
-                {cabinetLinks.map(({ href, label, Icon }) => (
+                {cabinetLinks().map(({ href, label, Icon }) => (
                   <Link href={href} role="menuitem" key={href} onClick={closeMobile}><Icon size={16} aria-hidden="true" /> {label}</Link>
                 ))}
               </div>
@@ -301,6 +305,7 @@ function ProductCard(props: {
   title: string;
   tone: "cyan" | "violet";
 }) {
+  useUiLocale();
   const { Icon, cta, ctaHref, description, id, items, price, priceNote, title, tone } = props;
 
   return (

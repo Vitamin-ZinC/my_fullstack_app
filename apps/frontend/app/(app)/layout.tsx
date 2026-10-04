@@ -1,8 +1,13 @@
+"use client";
+import { uiText, getFormatLocale, useUiLocale } from "@/lib/locale";
+
+
 import Link from "next/link";
-import { defaultSiteText } from "@/lib/messages";
+import { useSiteText } from "@/lib/useSiteText";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const text = defaultSiteText.ru;
+  useUiLocale();
+  const text = useSiteText();
 
   return (
     <>
@@ -20,7 +25,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </Link>
           <div className="nav-actions">
             <Link className="btn-back" href="/">{text.nav.backHome}</Link>
-            <Link className="btn-back" href="/account">Кабинет</Link>
+            <Link className="btn-back" href="/account">{uiText("Кабинет")}</Link>
           </div>
         </nav>
         <main className="screen app-screen">{children}</main>

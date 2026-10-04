@@ -1,4 +1,6 @@
 "use client";
+import { uiText, getFormatLocale, useUiLocale } from "@/lib/locale";
+
 
 import { ExternalLink, FileAudio, Mic, RotateCcw, Square } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -18,6 +20,7 @@ const MAX_RECORDING_SECONDS = 60;
 const TOPIC_ROTATION_SECONDS = 7;
 
 export default function VoicePage() {
+  useUiLocale();
   const text = useSiteText().flow.voice;
   const recorder = useRef<MediaRecorder | null>(null);
   const stream = useRef<MediaStream | null>(null);
@@ -442,7 +445,7 @@ function readAudioDuration(file: File) {
   return new Promise<number>((resolve, reject) => {
     const url = URL.createObjectURL(file);
     const audio = document.createElement("audio");
-    const timeout = window.setTimeout(() => finish(() => reject(new Error("Не удалось прочитать длительность аудио. Выберите другой файл."))), 10000);
+    const timeout = window.setTimeout(() => finish(() => reject(new Error(uiText("Не удалось прочитать длительность аудио. Выберите другой файл.")))), 10000);
 
     const finish = (callback: () => void) => {
       window.clearTimeout(timeout);
@@ -455,20 +458,20 @@ function readAudioDuration(file: File) {
     audio.preload = "metadata";
     audio.onloadedmetadata = () => {
       if (!Number.isFinite(audio.duration) || audio.duration <= 0) {
-        finish(() => reject(new Error("Не удалось прочитать длительность аудио. Выберите другой файл.")));
+        finish(() => reject(new Error(uiText("Не удалось прочитать длительность аудио. Выберите другой файл."))));
         return;
       }
       finish(() => resolve(Math.round(audio.duration)));
     };
-    audio.onerror = () => finish(() => reject(new Error("Формат аудио не поддерживается браузером. Выберите MP3, M4A, WAV, WEBM или OGG.")));
+    audio.onerror = () => finish(() => reject(new Error(uiText("Формат аудио не поддерживается браузером. Выберите MP3, M4A, WAV, WEBM или OGG."))));
     audio.src = url;
   });
 }
 
 function validateVoiceRecording(blob: Blob, duration: number) {
-  if (!blob || blob.size < 2500) return { ok: false, message: "Голос не распознан: запись слишком короткая или пустая. Запишите фразу голосом, а не тишину." };
-  if (duration < MIN_RECORDING_SECONDS) return { ok: false, message: "Для анализа нужно минимум 30 секунд речи. Расскажите о себе по подсказкам и повторите запись." };
-  if (duration > 300) return { ok: false, message: "Запись длиннее 5 минут. Выберите фрагмент длительностью 30–60 секунд." };
+  if (!blob || blob.size < 2500) return { ok: false, message: uiText("Голос не распознан: запись слишком короткая или пустая. Запишите фразу голосом, а не тишину.") };
+  if (duration < MIN_RECORDING_SECONDS) return { ok: false, message: uiText("Для анализа нужно минимум 30 секунд речи. Расскажите о себе по подсказкам и повторите запись.") };
+  if (duration > 300) return { ok: false, message: uiText("Запись длиннее 5 минут. Выберите фрагмент длительностью 30–60 секунд.") };
   return { ok: true, message: "" };
 }
 

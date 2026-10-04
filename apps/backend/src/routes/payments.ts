@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import Stripe from "stripe";
 import { env } from "../env.js";
-import { requireAnalysisAccess } from "../lib/auth.js";
+import { getRequestedLocale, requireAnalysisAccess } from "../lib/auth.js";
 import { prisma } from "../lib/prisma.js";
 import { calculatePromoDiscount, normalizePromoCode, validatePromoCode } from "../services/promoCodes.js";
 import { getReportPriceConfig } from "../services/pricing.js";
@@ -334,6 +334,7 @@ export async function paymentRoutes(app: FastifyInstance) {
     };
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
+      locale: getRequestedLocale(request),
       client_reference_id: analysis.id,
       success_url: `${env.APP_ORIGIN}/report/${analysis.id}/full?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${env.APP_ORIGIN}/pay/${analysis.id}`,

@@ -1,16 +1,21 @@
 "use client";
+import { uiText, getFormatLocale, useUiLocale } from "@/lib/locale";
+
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { formatLegalText, type LegalDocumentData } from "@/lib/legal";
+import { localizeStaticText } from "@levelup/contracts";
 
 type LegalValues = {
   reportPrice: string;
   habitPrice: string;
 };
 
-export function LegalDocument({ document }: { document: LegalDocumentData }) {
+export function LegalDocument({ document: originalDocument }: { document: LegalDocumentData }) {
+  const locale = useUiLocale();
+  const document = localizeStaticText(originalDocument, locale);
   const [values, setValues] = useState<LegalValues>({
     reportPrice: "$3",
     habitPrice: "$8"
@@ -45,9 +50,9 @@ export function LegalDocument({ document }: { document: LegalDocumentData }) {
           </div>
         </Link>
         <div className="legal-nav-links">
-          <Link href="/privacy">Политика</Link>
-          <Link href="/offer">Оферта</Link>
-          <Link className="btn-back" href="/">На главную</Link>
+          <Link href="/privacy">{uiText("Политика")}</Link>
+          <Link href="/offer">{uiText("Оферта")}</Link>
+          <Link className="btn-back" href="/">{uiText("На главную")}</Link>
         </div>
       </nav>
 

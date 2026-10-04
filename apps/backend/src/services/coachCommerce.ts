@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import Stripe from "stripe";
+import { translateSystemText, type UiLocale } from "@levelup/contracts";
 import { env } from "../env.js";
 import { prisma } from "../lib/prisma.js";
 import { getActiveCoachSubscription, listCoachPlans } from "./coachPlatform.js";
@@ -15,7 +16,7 @@ function stripeIdempotencyKey(scope: string, value: string) {
   return `${scope}:${createHash("sha256").update(value).digest("hex")}`;
 }
 
-export async function createCoachSubscriptionCheckout(input: { coachProfileId: string; planId: string; idempotencyKey: string }) {
+export async function createCoachSubscriptionCheckout(input: { coachProfileId: string; planId: string; idempotencyKey: string; locale?: UiLocale }) {
   const existing = await prisma.coachSubscription.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
   if (existing?.stripeCheckoutSessionId && coachStripe) {
     const checkout = await coachStripe.checkout.sessions.retrieve(existing.stripeCheckoutSessionId);
@@ -48,13 +49,14 @@ export async function createCoachSubscriptionCheckout(input: { coachProfileId: s
   }
   const checkout = await coachStripe.checkout.sessions.create({
     mode: "subscription",
+    locale: input.locale ?? "ru",
     line_items: [{
       quantity: 1,
       ...(plan.stripePriceId ? { price: plan.stripePriceId } : { price_data: {
         currency: plan.currency,
         unit_amount: plan.amount,
         recurring: { interval: "month" },
-        product_data: { name: `ORKEN для коучей: ${plan.name}` }
+        product_data: { name: input.locale === "en" ? `ORKEN for coaches: ${translateSystemText(plan.name, "en")}` : `ORKEN для коучей: ${plan.name}` }
       } })
     }],
     success_url: `${env.APP_ORIGIN}/coach?subscription=active&session_id={CHECKOUT_SESSION_ID}`,
@@ -69,7 +71,7 @@ export async function createCoachSubscriptionCheckout(input: { coachProfileId: s
   return { subscription: updated, url: checkout.url };
 }
 
-export async function createCoachSubscriptionPortal(input: { coachProfileId: string }) {
+export async function createCoachSubscriptionPortal(input: { coachProfileId: string; locale?: UiLocale }) {
   const subscription = await getActiveCoachSubscription(input.coachProfileId);
   if (!subscription) throw new Error("Активная подписка не найдена");
   if (!coachStripe) throw new Error("Stripe is not configured");
@@ -104,6 +106,7 @@ export async function createCoachSubscriptionPortal(input: { coachProfileId: str
   }
 
   const session = await coachStripe.billingPortal.sessions.create({
+    locale: input.locale ?? "ru",
     customer: subscription.stripeCustomerId,
     configuration: configuration.id,
     return_url: `${env.APP_ORIGIN}/coach?billing=returned`
@@ -221,7 +224,7 @@ async function ensureCoachPlanStripePrice(input: {
   return price.id;
 }
 
-export async function createCoachServiceCheckout(input: { offerId: string; userId: string; idempotencyKey: string }) {
+export async function createCoachServiceCheckout(input: { offerId: string; userId: string; idempotencyKey: string; locale?: UiLocale }) {
   const existing = await prisma.coachServiceOrder.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
   if (existing?.stripeCheckoutSessionId && coachStripe) {
     const checkout = await coachStripe.checkout.sessions.retrieve(existing.stripeCheckoutSessionId);
@@ -260,6 +263,7 @@ export async function createCoachServiceCheckout(input: { offerId: string; userI
   const recurring = offer.type === "ONGOING_SUPPORT" ? { interval: "month" as const } : undefined;
   const checkout = await coachStripe.checkout.sessions.create({
     mode: recurring ? "subscription" : "payment",
+    locale: input.locale ?? "ru",
     line_items: [{
       quantity: 1,
       price_data: {
@@ -496,7 +500,7 @@ export async function handleCoachRefund(input: { paymentIntentId?: string | null
   return true;
 }
 
-export async function createCoachSiteCheckout(input: { coachProfileId: string; planId: string; slug: string }) {
+export async function createCoachSiteCheckout(input: { coachProfileId: string; planId: string; slug: string; locale?: UiLocale }) {
   const plan = await prisma.coachSitePlan.findFirst({ where: { id: input.planId, active: true } });
   if (!plan) throw new Error("Тариф сайта не найден");
   const existing = await prisma.coachSite.findUnique({ where: { slug: input.slug } });
@@ -516,9 +520,10 @@ export async function createCoachSiteCheckout(input: { coachProfileId: string; p
   }
   const checkout = await coachStripe.checkout.sessions.create({
     mode: "subscription",
+    locale: input.locale ?? "ru",
     line_items: [
-      { quantity: 1, price_data: { currency: plan.currency, unit_amount: plan.setupAmount, product_data: { name: `${plan.name}: подключение` } } },
-      { quantity: 1, price_data: { currency: plan.currency, unit_amount: plan.monthlySupportAmount, recurring: { interval: "month" }, product_data: { name: `${plan.name}: поддержка` } } }
+      { quantity: 1, price_data: { currency: plan.currency, unit_amount: plan.setupAmount, product_data: { name: `${translateSystemText(plan.name, input.locale ?? "ru")}: ${input.locale === "en" ? "setup" : "подключение"}` } } },
+      { quantity: 1, price_data: { currency: plan.currency, unit_amount: plan.monthlySupportAmount, recurring: { interval: "month" }, product_data: { name: `${translateSystemText(plan.name, input.locale ?? "ru")}: ${input.locale === "en" ? "support" : "поддержка"}` } } }
     ],
     success_url: `${env.APP_ORIGIN}/coach?site=active&session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${env.APP_ORIGIN}/coach?site=cancelled`,

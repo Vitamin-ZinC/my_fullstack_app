@@ -1,4 +1,4 @@
-import type { IkigaiAnswers, ReportFree, ReportFull, ReportTier } from "@levelup/contracts";
+import { normalizeUiLocale, translateSystemText, type UiLocale, type IkigaiAnswers, type ReportFree, type ReportFull, type ReportTier } from "@levelup/contracts";
 import type { MediaAsset } from "@prisma/client";
 import type {
   ChatCompletion,
@@ -100,6 +100,13 @@ const diagnosticLabels = {
   recommendation: "Рекомендация:"
 } as const;
 
+const englishDiagnosticLabels = { result: "Your result:", meaning: "What it means:", recommendation: "Recommendation:" } as const;
+
+function reportLabels(locale: UiLocale) { return locale === "en" ? englishDiagnosticLabels : diagnosticLabels; }
+function reportCopy(source: string, locale: UiLocale, ...values: unknown[]) {
+  return translateSystemText(source, locale).replace(/\{v(\d+)\}/g, (placeholder, index: string) => Number(index) < values.length ? String(values[Number(index)]) : placeholder);
+}
+
 const diagnosticTextSchema = z.string().min(20).refine((value) => {
   const normalized = value.trim().toLowerCase();
   return ![
@@ -114,9 +121,7 @@ const diagnosticTextSchema = z.string().min(20).refine((value) => {
     "недоступно"
   ].includes(normalized);
 }, "diagnostic parameters must be explanatory text").refine((value) => (
-  value.includes(diagnosticLabels.result) &&
-  value.includes(diagnosticLabels.meaning) &&
-  value.includes(diagnosticLabels.recommendation)
+  [diagnosticLabels, englishDiagnosticLabels].some(labels => Object.values(labels).every(label => value.includes(label)))
 ), "diagnostic parameters must use the required result/meaning/recommendation format");
 
 const ikigaiZoneSchema = z.object({
@@ -254,23 +259,23 @@ function normalizePaidReportPromise(value: string) {
     .replace(/\b90\s*[-–—]?\s*days?\b/giu, "30-day");
 }
 
-function normalizePaidReportPreviewItem(value: string) {
+function normalizePaidReportPreviewItem(value: string, locale: UiLocale = "ru") {
   const normalized = normalizePaidReportPromise(value);
   if (/(?:топ|професси|рол|направлени)/iu.test(normalized)) {
-    return "ТОП-5 профессиональных направлений с процентами совпадения, сильными сторонами и рисками";
+    return reportCopy("ТОП-5 профессиональных направлений с процентами совпадения, сильными сторонами и рисками", locale);
   }
   if (/(?:маршрут|план).*(?:дн|недел)/iu.test(normalized)) {
-    return "Персональный 30-дневный маршрут: четыре недели действий, результатов и проверок";
+    return reportCopy("Персональный 30-дневный маршрут: четыре недели действий, результатов и проверок", locale);
   }
   return normalized;
 }
 
-export function normalizeFreeReportValue(value: unknown): ReportFree {
+export function normalizeFreeReportValue(value: unknown, locale: UiLocale = "ru"): ReportFree {
   const report = reportFreeSchema.parse(value);
   return {
     ...report,
     paid_report_teaser: normalizePaidReportPromise(report.paid_report_teaser),
-    paid_report_preview: report.paid_report_preview.map(normalizePaidReportPreviewItem)
+    paid_report_preview: report.paid_report_preview.map(item => normalizePaidReportPreviewItem(item, locale))
   };
 }
 
@@ -536,7 +541,7 @@ export async function generateOpenAiReport(context: ReportContext): Promise<Gene
         jsonSchema: reportFreeJsonSchema,
         useAsync: useCompatibleAsync,
         maxTokens: 3000,
-        parseReport: (content) => normalizeFreeReportValue(parseCompletionJson(content))
+        parseReport: (content) => normalizeFreeReportValue(parseCompletionJson(content), normalizeUiLocale(context.locale))
       })),
       runPart("Анализ лица и голоса готов...", "Voice and face analysis completed...", () => createReportCompletion({
         context,
@@ -555,7 +560,7 @@ export async function generateOpenAiReport(context: ReportContext): Promise<Gene
           const parsed = parseCompletionJson(content);
           return diagnosticsParseAttempt < 3
             ? reportDiagnosticsSchema.parse(parsed)
-            : normalizeDiagnosticsValue(parsed);
+            : normalizeDiagnosticsValue(parsed, normalizeUiLocale(context.locale));
         }
       })),
       runPart("Профессиональные направления готовы...", "Career directions completed...", () => createReportCompletion({
@@ -582,7 +587,7 @@ export async function generateOpenAiReport(context: ReportContext): Promise<Gene
   }
 
   const diagnostics = diagnosticsCompletion.report;
-  const directions = normalizeDirectionsValue(directionsCompletion.report, diagnostics);
+  const directions = normalizeDirectionsValue(directionsCompletion.report, diagnostics, normalizeUiLocale(context.locale));
   const initialRoles = uniqueTopRoles(directions.top_roles);
   const missingRoleCount = Math.max(0, 5 - initialRoles.length);
   let supplementedRoles: ReportFull["top_roles"] = [];
@@ -616,7 +621,7 @@ export async function generateOpenAiReport(context: ReportContext): Promise<Gene
           const parsed = parseCompletionJson(content);
           if (!isRecord(parsed)) throw new Error("Role supplement must be a JSON object");
           const roles = uniqueTopRoles(
-            normalizeTopRoleCandidates(parsed.top_roles, { ...parsed, summary: diagnostics.summary }, diagnostics.voice_analysis, diagnostics.face_analysis),
+            normalizeTopRoleCandidates(parsed.top_roles, { ...parsed, summary: diagnostics.summary }, diagnostics.voice_analysis, diagnostics.face_analysis, normalizeUiLocale(context.locale)),
             existingNames
           );
           return z.object({ top_roles: z.array(topRoleSchema).length(5) }).parse({ top_roles: roles });
@@ -632,7 +637,7 @@ export async function generateOpenAiReport(context: ReportContext): Promise<Gene
 
   const aiRoleCount = uniqueTopRoles([...initialRoles, ...supplementedRoles]).length;
   const fallbackRoleCount = Math.max(0, 5 - aiRoleCount);
-  const report = mergeFullReportParts(diagnostics, { ...directions, top_roles: initialRoles }, supplementedRoles);
+  const report = mergeFullReportParts(diagnostics, { ...directions, top_roles: initialRoles }, supplementedRoles, normalizeUiLocale(context.locale));
   const fullPromptVersion = Math.max(diagnosticsCompletion.promptVersion, directionsCompletion.promptVersion, supplementPromptVersion);
   const promptVersion = Math.max(freeCompletion.promptVersion, fullPromptVersion);
   reportProgress(context, 96, "Собираем итоговый отчёт...", "Assembling the final report...");
@@ -698,54 +703,54 @@ function diagnosticSourceValue(source: UnknownRecord, key: string) {
   return null;
 }
 
-function diagnosticFallback(kind: "voice" | "face", key: string) {
+function diagnosticFallback(kind: "voice" | "face", key: string, locale: UiLocale = "ru") {
   const parameter = key.replace(/([A-Z])/g, " $1").toLowerCase();
   if (kind === "voice") {
-    return `${diagnosticLabels.result} Параметр "${parameter}" оценивается осторожно: в записи достаточно данных для рабочей гипотезы, но не для жёсткого вывода. ${diagnosticLabels.meaning} Основной вывод строится на анкете и содержании речи, а голосовой сигнал используется только как дополнительный признак подачи. ${diagnosticLabels.recommendation} Проверьте это в коротком рабочем выступлении: запишите 60 секунд речи, отметьте темп, паузы и ясность главной мысли.`;
+    return reportCopy("{v0} Параметр \"{v1}\" оценивается осторожно: в записи достаточно данных для рабочей гипотезы, но не для жёсткого вывода. {v2} Основной вывод строится на анкете и содержании речи, а голосовой сигнал используется только как дополнительный признак подачи. {v3} Проверьте это в коротком рабочем выступлении: запишите 60 секунд речи, отметьте темп, паузы и ясность главной мысли.", locale, reportLabels(locale).result, parameter, reportLabels(locale).meaning, reportLabels(locale).recommendation);
   }
-  return `${diagnosticLabels.result} Параметр "${parameter}" оценивается как мягкий визуальный сигнал по загруженному изображению. ${diagnosticLabels.meaning} Это не вывод о личности или здоровье, а осторожная гипотеза о том, как может считываться подача в коммуникации. ${diagnosticLabels.recommendation} Проверьте эффект на практике: обновите фото/кадр, попросите нейтральную обратную связь и сравните, стало ли сообщение понятнее.`;
+  return reportCopy("{v0} Параметр \"{v1}\" оценивается как мягкий визуальный сигнал по загруженному изображению. {v2} Это не вывод о личности или здоровье, а осторожная гипотеза о том, как может считываться подача в коммуникации. {v3} Проверьте эффект на практике: обновите фото/кадр, попросите нейтральную обратную связь и сравните, стало ли сообщение понятнее.", locale, reportLabels(locale).result, parameter, reportLabels(locale).meaning, reportLabels(locale).recommendation);
 }
 
-function completeDiagnosticMap(source: unknown, keys: readonly string[], kind: "voice" | "face") {
+function completeDiagnosticMap(source: unknown, keys: readonly string[], kind: "voice" | "face", locale: UiLocale = "ru") {
   const record = isRecord(source) ? source : {};
   return Object.fromEntries(keys.map((key) => {
     const value = diagnosticSourceValue(record, key);
     if (value && diagnosticTextSchema.safeParse(value).success) return [key, value];
     if (value) {
-      return [key, `${diagnosticLabels.result} ${value}. ${diagnosticLabels.meaning} Этот вывод рассматривается как осторожная рабочая гипотеза, а не как диагноз или неизменная черта. ${diagnosticLabels.recommendation} Проверьте его на одном практическом действии и сравните с обратной связью.`];
+      return [key, reportCopy("{v0} {v1}. {v2} Этот вывод рассматривается как осторожная рабочая гипотеза, а не как диагноз или неизменная черта. {v3} Проверьте его на одном практическом действии и сравните с обратной связью.", locale, reportLabels(locale).result, value, reportLabels(locale).meaning, reportLabels(locale).recommendation)];
     }
-    return [key, diagnosticFallback(kind, key)];
+    return [key, diagnosticFallback(kind, key, locale)];
   }));
 }
 
-function completeIkigaiZones(source: unknown, summary: string) {
+function completeIkigaiZones(source: unknown, summary: string, locale: UiLocale = "ru") {
   const record = isRecord(source) ? source : {};
   return Object.fromEntries(ikigaiZoneKeys.map((key) => {
     const zone = isRecord(record[key]) ? record[key] as UnknownRecord : {};
     const title = stringValue(zone, "title") ?? {
-      passion: "То, что даёт энергию",
-      mission: "То, чем полезно делиться",
-      profession: "То, что можно упаковать в работу",
-      vocation: "То, где есть запрос",
-      ikigai: "Точка соединения"
+      passion: reportCopy("То, что даёт энергию", locale),
+      mission: reportCopy("То, чем полезно делиться", locale),
+      profession: reportCopy("То, что можно упаковать в работу", locale),
+      vocation: reportCopy("То, где есть запрос", locale),
+      ikigai: reportCopy("Точка соединения", locale)
     }[key];
     return [key, {
       title,
-      insight: safeLongText(zone.insight, `Эта зона опирается на общий вывод отчёта: ${summary}`),
-      recommendation: safeLongText(zone.recommendation, "Выберите один маленький эксперимент на ближайшие 24 часа и проверьте, даёт ли он больше энергии, ясности и пользы для других.")
+      insight: safeLongText(zone.insight, reportCopy("Эта зона опирается на общий вывод отчёта: {v0}", locale, summary)),
+      recommendation: safeLongText(zone.recommendation, reportCopy("Выберите один маленький эксперимент на ближайшие 24 часа и проверьте, даёт ли он больше энергии, ясности и пользы для других.", locale))
     }];
   }));
 }
 
-function normalizeTopRoleCandidates(source: unknown, candidate: UnknownRecord, voiceAnalysis: UnknownRecord, faceAnalysis: UnknownRecord) {
+function normalizeTopRoleCandidates(source: unknown, candidate: UnknownRecord, voiceAnalysis: UnknownRecord, faceAnalysis: UnknownRecord, locale: UiLocale = "ru") {
   return Array.isArray(source) ? source.filter(isRecord).slice(0, 5).map((role, index) => ({
-    name: stringValue(role, "name", "role") ?? `Профессиональная роль ${index + 1}`,
+    name: stringValue(role, "name", "role") ?? reportCopy("Профессиональная роль {v0}", locale, index + 1),
     match: numberValue(role, "match", Math.max(55, 82 - index * 5)),
-    why: safeLongText(role.why, safeLongText(candidate.summary, "Роль подходит как рабочая гипотеза по анкете и общему профилю пользователя.")),
-    voiceEvidence: safeLongText(stringValue(role, "voiceEvidence", "voice_evidence"), String(voiceAnalysis.communication ?? diagnosticFallback("voice", "communication"))),
-    faceEvidence: safeLongText(stringValue(role, "faceEvidence", "face_evidence"), String(faceAnalysis.communication ?? diagnosticFallback("face", "communication"))),
-    strengths: safeLongText(role.strengths, "Сильная сторона роли - соединять личный интерес, структуру действий и понятную пользу для других."),
-    risks: safeLongText(role.risks, "Риск роли - слишком долго оставаться в анализе и не проверять гипотезу через маленький рыночный или рабочий эксперимент.")
+    why: safeLongText(role.why, safeLongText(candidate.summary, reportCopy("Роль подходит как рабочая гипотеза по анкете и общему профилю пользователя.", locale))),
+    voiceEvidence: safeLongText(stringValue(role, "voiceEvidence", "voice_evidence"), String(voiceAnalysis.communication ?? diagnosticFallback("voice", "communication", locale))),
+    faceEvidence: safeLongText(stringValue(role, "faceEvidence", "face_evidence"), String(faceAnalysis.communication ?? diagnosticFallback("face", "communication", locale))),
+    strengths: safeLongText(role.strengths, reportCopy("Сильная сторона роли - соединять личный интерес, структуру действий и понятную пользу для других.", locale)),
+    risks: safeLongText(role.risks, reportCopy("Риск роли - слишком долго оставаться в анализе и не проверять гипотезу через маленький рыночный или рабочий эксперимент.", locale))
   })) : [];
 }
 
@@ -759,47 +764,47 @@ function uniqueTopRoles(roles: ReportFull["top_roles"], excludedNames: string[] 
   });
 }
 
-function completeTopRoles(source: unknown, candidate: UnknownRecord, voiceAnalysis: UnknownRecord, faceAnalysis: UnknownRecord) {
-  const roles = normalizeTopRoleCandidates(source, candidate, voiceAnalysis, faceAnalysis);
+function completeTopRoles(source: unknown, candidate: UnknownRecord, voiceAnalysis: UnknownRecord, faceAnalysis: UnknownRecord, locale: UiLocale = "ru") {
+  const roles = normalizeTopRoleCandidates(source, candidate, voiceAnalysis, faceAnalysis, locale);
 
   const fallbackNames = [
-    "Стратег развития",
-    "Методолог практики",
-    "Консультант по ясности",
-    "Навигатор изменений",
-    "Автор экспертного продукта"
+    reportCopy("Стратег развития", locale),
+    reportCopy("Методолог практики", locale),
+    reportCopy("Консультант по ясности", locale),
+    reportCopy("Навигатор изменений", locale),
+    reportCopy("Автор экспертного продукта", locale)
   ];
 
   while (roles.length < 5) {
     const index = roles.length;
     roles.push({
-      name: fallbackNames[index] ?? `Профессиональная роль ${index + 1}`,
+      name: fallbackNames[index] ?? reportCopy("Профессиональная роль {v0}", locale, index + 1),
       match: Math.max(55, 78 - index * 5),
-      why: safeLongText(candidate.summary, "Роль добавлена как осторожная рабочая гипотеза по анкете и общему профилю."),
-      voiceEvidence: String(voiceAnalysis.communication ?? diagnosticFallback("voice", "communication")),
-      faceEvidence: String(faceAnalysis.communication ?? diagnosticFallback("face", "communication")),
-      strengths: "Сильная сторона роли - переводить наблюдения в понятные действия и проверяемые решения.",
-      risks: "Риск роли - распыляться между вариантами, если не выбрать один короткий эксперимент."
+      why: safeLongText(candidate.summary, reportCopy("Роль добавлена как осторожная рабочая гипотеза по анкете и общему профилю.", locale)),
+      voiceEvidence: String(voiceAnalysis.communication ?? diagnosticFallback("voice", "communication", locale)),
+      faceEvidence: String(faceAnalysis.communication ?? diagnosticFallback("face", "communication", locale)),
+      strengths: reportCopy("Сильная сторона роли - переводить наблюдения в понятные действия и проверяемые решения.", locale),
+      risks: reportCopy("Риск роли - распыляться между вариантами, если не выбрать один короткий эксперимент.", locale)
     });
   }
 
   return roles;
 }
 
-function normalizeDiagnosticsValue(value: unknown): ReportDiagnostics {
+function normalizeDiagnosticsValue(value: unknown, locale: UiLocale = "ru"): ReportDiagnostics {
   if (!isRecord(value)) throw new Error("Diagnostic report segment must be a JSON object");
-  return reportDiagnosticsSchema.parse(completeFullReportCandidate(value));
+  return reportDiagnosticsSchema.parse(completeFullReportCandidate(value, locale));
 }
 
-function normalizeDirectionsValue(value: unknown, diagnostics: ReportDiagnostics): ReportDirections {
+function normalizeDirectionsValue(value: unknown, diagnostics: ReportDiagnostics, locale: UiLocale = "ru"): ReportDirections {
   if (!isRecord(value)) throw new Error("Career report segment must be a JSON object");
-  const completed = completeFullReportCandidate({ ...diagnostics, ...value });
+  const completed = completeFullReportCandidate({ ...diagnostics, ...value }, locale);
   if (!isRecord(completed)) throw new Error("Career report segment could not be normalized");
   const roles = uniqueTopRoles(normalizeTopRoleCandidates(
     value.top_roles,
     { ...value, summary: diagnostics.summary },
     diagnostics.voice_analysis,
-    diagnostics.face_analysis
+    diagnostics.face_analysis, locale
   ));
 
   return reportDirectionsSchema.parse({
@@ -813,23 +818,23 @@ function normalizeDirectionsValue(value: unknown, diagnostics: ReportDiagnostics
 export function mergeFullReportParts(
   diagnostics: ReportDiagnostics,
   directions: ReportDirections,
-  supplementedRoles: ReportFull["top_roles"] = []
+  supplementedRoles: ReportFull["top_roles"] = [], locale: UiLocale = "ru"
 ): ReportFull {
   return normalizeFullReportValue({
     ...diagnostics,
     ...directions,
     top_roles: uniqueTopRoles([...directions.top_roles, ...supplementedRoles])
-  });
+  }, locale);
 }
 
-export function completeFullReportCandidate(value: unknown) {
+export function completeFullReportCandidate(value: unknown, locale: UiLocale = "ru") {
   if (!isRecord(value)) return value;
-  const summary = safeLongText(value.summary, "Отчёт собран как осторожная рабочая гипотеза на основе анкеты, содержания речи и доступных сигналов подачи.");
-  const profession = safeLongText(value.profession, "Профессиональный навигатор", 2);
+  const summary = safeLongText(value.summary, reportCopy("Отчёт собран как осторожная рабочая гипотеза на основе анкеты, содержания речи и доступных сигналов подачи.", locale));
+  const profession = safeLongText(value.profession, reportCopy("Профессиональный навигатор", locale), 2);
   const voiceSource = value.voice_analysis ?? value.voiceAnalysis ?? value.voice;
   const faceSource = value.face_analysis ?? value.faceAnalysis ?? value.face;
-  const voiceAnalysis = completeDiagnosticMap(voiceSource, voiceAnalysisKeys, "voice");
-  const faceAnalysis = completeDiagnosticMap(faceSource, faceAnalysisKeys, "face");
+  const voiceAnalysis = completeDiagnosticMap(voiceSource, voiceAnalysisKeys, "voice", locale);
+  const faceAnalysis = completeDiagnosticMap(faceSource, faceAnalysisKeys, "face", locale);
 
   return {
     ...value,
@@ -843,15 +848,15 @@ export function completeFullReportCandidate(value: unknown) {
     },
     voice_analysis: voiceAnalysis,
     face_analysis: faceAnalysis,
-    top_roles: completeTopRoles(value.top_roles, value, voiceAnalysis, faceAnalysis),
-    ikigai_zones: completeIkigaiZones(value.ikigai_zones, summary),
-    career_action: safeLongText(value.career_action, "Неделя 1. Цель: выбрать одну профессиональную гипотезу из отчёта. Действия: описать ожидаемый результат, провести две короткие беседы с людьми из этой сферы и определить критерий успеха. Результат недели: карточка гипотезы с тремя фактами за и против. Проверка: две беседы проведены и один критерий записан. Неделя 2. Цель: проверить роль на практике. Действия: выполнить небольшой рабочий кейс, ограничить его срок тремя днями и показать результат одному потенциальному пользователю или коллеге. Результат недели: готовый мини-проект. Проверка: получена хотя бы одна конкретная реакция. Неделя 3. Цель: улучшить формат по обратной связи. Действия: собрать ещё три комментария, выделить повторяющийся запрос и внести одно заметное изменение. Результат недели: вторая версия мини-проекта. Проверка: зафиксированы три комментария и одно изменение. Неделя 4. Цель: принять решение о следующем шаге. Действия: сравнить энергию, интерес и рыночный отклик, выбрать продолжение или новую гипотезу и поставить задачу на следующие 30 дней. Результат недели: короткое решение с аргументами. Проверка: выбран один следующий шаг, срок и измеримый результат."),
-    final_insight: safeLongText(value.final_insight, "Комплексный AI-анализ показывает рабочую гипотезу о направлении развития: сильнее всего сейчас стоит проверять связку личного интереса, ясной коммуникации и маленьких практических экспериментов. Используйте вывод как карту для следующих действий, а не как окончательный ярлык.")
+    top_roles: completeTopRoles(value.top_roles, value, voiceAnalysis, faceAnalysis, locale),
+    ikigai_zones: completeIkigaiZones(value.ikigai_zones, summary, locale),
+    career_action: safeLongText(value.career_action, reportCopy("Неделя 1. Цель: выбрать одну профессиональную гипотезу из отчёта. Действия: описать ожидаемый результат, провести две короткие беседы с людьми из этой сферы и определить критерий успеха. Результат недели: карточка гипотезы с тремя фактами за и против. Проверка: две беседы проведены и один критерий записан. Неделя 2. Цель: проверить роль на практике. Действия: выполнить небольшой рабочий кейс, ограничить его срок тремя днями и показать результат одному потенциальному пользователю или коллеге. Результат недели: готовый мини-проект. Проверка: получена хотя бы одна конкретная реакция. Неделя 3. Цель: улучшить формат по обратной связи. Действия: собрать ещё три комментария, выделить повторяющийся запрос и внести одно заметное изменение. Результат недели: вторая версия мини-проекта. Проверка: зафиксированы три комментария и одно изменение. Неделя 4. Цель: принять решение о следующем шаге. Действия: сравнить энергию, интерес и рыночный отклик, выбрать продолжение или новую гипотезу и поставить задачу на следующие 30 дней. Результат недели: короткое решение с аргументами. Проверка: выбран один следующий шаг, срок и измеримый результат.", locale)),
+    final_insight: safeLongText(value.final_insight, reportCopy("Комплексный AI-анализ показывает рабочую гипотезу о направлении развития: сильнее всего сейчас стоит проверять связку личного интереса, ясной коммуникации и маленьких практических экспериментов. Используйте вывод как карту для следующих действий, а не как окончательный ярлык.", locale))
   };
 }
 
-export function normalizeFullReportValue(value: unknown): ReportFull {
-  const report = reportFullSchema.parse(completeFullReportCandidate(value));
+export function normalizeFullReportValue(value: unknown, locale: UiLocale = "ru"): ReportFull {
+  const report = reportFullSchema.parse(completeFullReportCandidate(value, locale));
   const seenRoleNames = new Set<string>();
   const sortedRoles = [...report.top_roles]
     .sort((left, right) => right.match - left.match)
@@ -863,11 +868,11 @@ export function normalizeFullReportValue(value: unknown): ReportFull {
     })
     .slice(0, 5);
   const fallbackNames = [
-    "Стратег развития",
-    "Методолог практики",
-    "Консультант по ясности",
-    "Навигатор изменений",
-    "Автор экспертного продукта"
+    reportCopy("Стратег развития", locale),
+    reportCopy("Методолог практики", locale),
+    reportCopy("Консультант по ясности", locale),
+    reportCopy("Навигатор изменений", locale),
+    reportCopy("Автор экспертного продукта", locale)
   ];
   const sourceRole = sortedRoles[0] ?? {
     name: report.profession,
@@ -876,20 +881,20 @@ export function normalizeFullReportValue(value: unknown): ReportFull {
     voiceEvidence: report.voice_analysis.communication,
     faceEvidence: report.face_analysis.communication,
     strengths: report.summary,
-    risks: "Главный риск — слишком долго оставаться в анализе вместо проверки роли на практике."
+    risks: reportCopy("Главный риск — слишком долго оставаться в анализе вместо проверки роли на практике.", locale)
   };
 
   while (sortedRoles.length < 5) {
     const index = sortedRoles.length;
     const fallbackName = fallbackNames.find((name) => !seenRoleNames.has(name.toLocaleLowerCase()))
-      ?? `${sourceRole.name}: прикладной формат ${index + 1}`;
+      ?? reportCopy("{v0}: прикладной формат {v1}", locale, sourceRole.name, index + 1);
     seenRoleNames.add(fallbackName.toLocaleLowerCase());
     sortedRoles.push({
       name: fallbackName,
       match: Math.max(55, Math.min(95, sourceRole.match - (index + 1) * 4)),
-      why: `Дополнительное направление из общего профиля: ${report.summary}`,
-      voiceEvidence: `Голосовой сигнал и содержание речи поддерживают это направление как рабочую гипотезу: ${sourceRole.voiceEvidence}`,
-      faceEvidence: `Визуальный сигнал используется только как слабое подтверждение презентационного стиля: ${sourceRole.faceEvidence}`,
+      why: reportCopy("Дополнительное направление из общего профиля: {v0}", locale, report.summary),
+      voiceEvidence: reportCopy("Голосовой сигнал и содержание речи поддерживают это направление как рабочую гипотезу: {v0}", locale, sourceRole.voiceEvidence),
+      faceEvidence: reportCopy("Визуальный сигнал используется только как слабое подтверждение презентационного стиля: {v0}", locale, sourceRole.faceEvidence),
       strengths: sourceRole.strengths,
       risks: sourceRole.risks
     });

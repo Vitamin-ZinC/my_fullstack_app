@@ -142,6 +142,9 @@
 .photoUpload { display: flex; gap: 16px; align-items: center; }
 .photoUpload > img, .photoUpload > svg { width: 92px; height: 92px; object-fit: cover; border-radius: 8px; background: #0d2132; color: #1dd6ec; }
 .photoUpload label { position: relative; overflow: hidden; }
+.photoUpload label.button { color: #001117; }
+.form label:has(> input[type="checkbox"]) { display: flex; align-items: center; gap: 8px; }
+.form label > input[type="checkbox"] { width: auto; margin: 0; flex: 0 0 auto; }
 .photoUpload input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 .siteHead { display: flex; justify-content: space-between; gap: 16px; }
 .siteHead p { display: flex; gap: 10px; align-items: center; }

@@ -1,4 +1,6 @@
 "use client";
+import { uiText, getFormatLocale, useUiLocale } from "@/lib/locale";
+
 
 import { useState, type PointerEvent } from "react";
 import { useSiteText } from "@/lib/useSiteText";
@@ -19,13 +21,13 @@ type IkigaiPremiumMapProps = {
   zoneOverrides?: Partial<Record<ZoneId, IkigaiMapZone>>;
 };
 
-const zoneSubtitles: Record<ZoneId, string> = {
-  passion: "Что нравится",
-  mission: "Что нужно рынку",
-  profession: "Что получается",
-  vocation: "Что монетизируется",
-  ikigai: "центр реализации"
-};
+function zoneSubtitles(): Record<ZoneId, string> { return {
+  passion: uiText("Что нравится"),
+  mission: uiText("Что нужно рынку"),
+  profession: uiText("Что получается"),
+  vocation: uiText("Что монетизируется"),
+  ikigai: uiText("центр реализации")
+}; }
 
 export function IkigaiPremiumMap({
   allActive = false,
@@ -34,6 +36,7 @@ export function IkigaiPremiumMap({
   showPanel = true,
   zoneOverrides
 }: IkigaiPremiumMapProps) {
+  useUiLocale();
   const text = useSiteText().ikigaiMap;
   const [active, setActive] = useState<ZoneId>("ikigai");
   const activeId = freeMode ? "profession" : active;
@@ -94,7 +97,7 @@ export function IkigaiPremiumMap({
               <circle cx={sector.cx} cy={sector.cy} r={sector.r} fill={sector.fill} stroke={sector.stroke} strokeWidth="2.2" filter="url(#softGlass)" />
               <circle className="sector-hit" cx={sector.cx} cy={sector.cy} r={sector.r + 22} />
               <text x={sector.cx} y={sector.cy - 8} textAnchor="middle">{text.labels[sector.id]}</text>
-              <text className="sector-sub" x={sector.cx} y={sector.cy + 12} textAnchor="middle">{zoneSubtitles[sector.id]}</text>
+              <text className="sector-sub" x={sector.cx} y={sector.cy + 12} textAnchor="middle">{zoneSubtitles()[sector.id]}</text>
             </g>
           ))}
           <g
@@ -104,12 +107,12 @@ export function IkigaiPremiumMap({
             <ellipse cx="200" cy="220" rx="58" ry="48" fill="url(#gradCenter)" stroke="#FFC64A" strokeWidth="2.4" filter="url(#softGlass)" />
             <ellipse className="sector-hit" cx="200" cy="220" rx="76" ry="66" />
             <text x="200" y="216" textAnchor="middle">{text.labels.ikigai}</text>
-            <text className="sector-sub" x="200" y="236" textAnchor="middle">{zoneSubtitles.ikigai}</text>
+            <text className="sector-sub" x="200" y="236" textAnchor="middle">{zoneSubtitles().ikigai}</text>
           </g>
         </g>
       </svg>
       {!locked && (
-        <div className="ikigai-click-layer" aria-label="Выбор зоны Икигай">
+        <div className="ikigai-click-layer" aria-label={uiText("Выбор зоны Икигай")}>
           {(["passion", "mission", "profession", "vocation", "ikigai"] as const).map((zone) => (
             <button
               aria-label={text.labels[zone]}
@@ -127,7 +130,7 @@ export function IkigaiPremiumMap({
         <div className="ikigai-analysis-panel" data-testid="ikigai-zone-panel">
           <h3>{activeZone.title}</h3>
           <p>{activeZone.insight}</p>
-          <p><strong>Рекомендация:</strong> {activeZone.recommendation}</p>
+          <p><strong>{uiText("Рекомендация:")}</strong> {activeZone.recommendation}</p>
         </div>
       )}
     </div>

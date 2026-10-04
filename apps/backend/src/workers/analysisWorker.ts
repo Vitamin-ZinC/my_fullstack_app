@@ -4,6 +4,7 @@ import { emitProgress } from "../lib/progress.js";
 import { prisma } from "../lib/prisma.js";
 import { env } from "../env.js";
 import { buildFallbackFreeReport, buildFallbackReport } from "../services/report.js";
+import { normalizeUiLocale } from "@levelup/contracts";
 import { generateOpenAiReport, normalizeFullReportValue } from "../services/aiReport.js";
 import { sendDueTelegramReminders } from "../services/telegramBot.js";
 import { processTelegramCommunityUpdate, sendDueTelegramCommunityPosts, type TelegramCommunityUpdate } from "../services/telegramCommunityBot.js";
@@ -20,8 +21,8 @@ export const worker = new Worker("analysis", async (job) => {
   });
   const answers = analysis.ikigaiAnswers as any;
   const allowFallbackReport = env.NODE_ENV !== "production" || env.DEV_TOOLS_ENABLED || env.AI_REPORT_FALLBACK_ENABLED;
-  let report = allowFallbackReport ? buildFallbackReport(answers) : null;
-  let reportFree = report ? buildFallbackFreeReport(report) : null;
+  let report = allowFallbackReport ? buildFallbackReport(answers, normalizeUiLocale(analysis.locale)) : null;
+  let reportFree = report ? buildFallbackFreeReport(report, normalizeUiLocale(analysis.locale)) : null;
   let reportModel = allowFallbackReport ? "fallback" : "";
   let reportPromptVersion = analysis.reportVersion;
   let freePromptVersion = analysis.reportVersion;
@@ -98,7 +99,7 @@ export const worker = new Worker("analysis", async (job) => {
   if (!report || !reportFree) {
     throw new Error("AI report generation did not produce a report");
   }
-  report = normalizeFullReportValue(report);
+  report = normalizeFullReportValue(report, normalizeUiLocale(analysis.locale));
 
   await prisma.analysis.update({
     where: { id: analysisId },

@@ -695,6 +695,7 @@ export type CoachProfileSummary = {
   featured: boolean;
   calendlyConnected?: boolean;
   publicSince?: string | null;
+  moderationNote?: string | null;
 };
 
 export type CoachServiceOfferSummary = {
@@ -963,7 +964,7 @@ export type AdminCoachPlatformSnapshot = {
     currency: string;
     createdAt: string;
   }>;
-  offers: CoachServiceOfferSummary[];
+  offers: Array<CoachServiceOfferSummary & { coachName?: string }>;
   rewardsPendingReview: CoachRewardSummary[];
   cancellationPolicy: { hoursBeforeStart: number; refundPercent: number };
   publicContent: CoachPublicContent;

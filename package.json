@@ -17,7 +17,7 @@
     "security:audit": "npm audit --audit-level=low",
     "test:image-runtime": "node scripts/test-image-runtime.mjs",
     "test:localization": "node scripts/test-localization.mjs",
-    "test:e2e": "playwright test \"tests/frontend-flow.spec.js\" \"tests/localization.spec.js\" --workers=1",
+    "test:e2e": "playwright test \"tests/frontend-flow.spec.js\" \"tests/localization.spec.js\" \"tests/coach-admin.spec.js\" --workers=1",
     "smoke:prod": "node scripts/smoke-prod.mjs",
     "telegram:community:configure": "node scripts/configure-telegram-community-webhook.mjs",
     "prisma:generate": "npm --workspace apps/backend run prisma:generate",

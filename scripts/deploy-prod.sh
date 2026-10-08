@@ -118,6 +118,11 @@ log "Checking API security regressions in the production runtime"
 docker compose --env-file .env -f "$COMPOSE_FILE" -p "$PROJECT_NAME" run --rm --no-deps -T \
   backend npm --workspace apps/backend exec -- tsx --test src/lib/httpSecurity.test.ts < /dev/null
 
+log "Running backend tests in the production runtime"
+docker compose --env-file .env -f "$COMPOSE_FILE" -p "$PROJECT_NAME" run --rm --no-deps -T \
+  -e DATABASE_URL=postgresql://test:test@127.0.0.1:1/orken_tests \
+  backend npm --workspace apps/backend run test < /dev/null
+
 if [[ "$RUN_MIGRATIONS" == "true" ]]; then
   log "Running Prisma migrations"
   docker compose --env-file .env -f "$COMPOSE_FILE" -p "$PROJECT_NAME" run --rm --no-deps -T \

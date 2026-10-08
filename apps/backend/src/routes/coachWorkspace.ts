@@ -49,6 +49,7 @@ import {
 } from "../services/partnerPortal.js";
 import { getOpenAiClient, hasOpenAiClient } from "../services/openaiClient.js";
 import { availableCoachSlots, hasValidCoachRevenueSplit, shouldMigrateCoachSubscriptions } from "../services/coachRules.js";
+import { coachOfferModerationSchema, coachProfileModerationSchema } from "../services/coachModeration.js";
 import { createPartnerCorePortalReferralLink, getPartnerCorePortalDashboard, normalizeReferralCode, recordCoachCommerceConversion } from "../services/partnerCore.js";
 import {
   activeGoogleAccessToken,
@@ -190,7 +191,8 @@ export async function coachWorkspaceRoutes(app: FastifyInstance) {
         ...body,
         specializations: body.specializations,
         languages: body.languages,
-        status: "PENDING_REVIEW"
+        status: "PENDING_REVIEW",
+        moderationNote: null
       },
       include: { calendlyConnection: true }
     });
@@ -210,7 +212,7 @@ export async function coachWorkspaceRoutes(app: FastifyInstance) {
     const avatarUrl = `${env.PUBLIC_API_URL}/api/habits/avatar/${encodeURIComponent(key)}`;
     const profile = await prisma.coachProfile.update({
       where: { id: context.profile.id },
-      data: { avatarUrl, status: "PENDING_REVIEW" },
+      data: { avatarUrl, status: "PENDING_REVIEW", moderationNote: null },
       include: { calendlyConnection: true }
     });
     return { avatarUrl, profile: serializeCoachProfile(profile, true) };
@@ -309,7 +311,7 @@ export async function coachWorkspaceRoutes(app: FastifyInstance) {
     const context = await requireCoach(request, reply);
     if (!context) return;
     const offers = await prisma.coachServiceOffer.findMany({ where: { coachProfileId: context.profile.id }, orderBy: { createdAt: "desc" } });
-    return { offers: offers.map(serializeCoachOffer) };
+    return { offers: offers.map(offer => serializeCoachOffer(offer, true)) };
   });
 
   app.post("/api/coach/services", async (request, reply) => {
@@ -319,7 +321,7 @@ export async function coachWorkspaceRoutes(app: FastifyInstance) {
     const offer = body.id
       ? await prisma.coachServiceOffer.update({ where: { id: body.id, coachProfileId: context.profile.id }, data: { ...body, id: undefined, status: "DRAFT", moderationNote: null } })
       : await prisma.coachServiceOffer.create({ data: { coachProfileId: context.profile.id, ...body } });
-    return { offer: serializeCoachOffer(offer) };
+    return { offer: serializeCoachOffer(offer, true) };
   });
 
   app.post("/api/coach/services/:id/submit-review", async (request, reply) => {
@@ -328,7 +330,7 @@ export async function coachWorkspaceRoutes(app: FastifyInstance) {
     const { id } = idSchema.parse(request.params);
     const offer = await prisma.coachServiceOffer.findFirst({ where: { id, coachProfileId: context.profile.id } });
     if (!offer) return reply.code(404).send({ error: "Услуга не найдена" });
-    if (offer.paymentModel === "CLIENT_PAID" && !hasValidCoachRevenueSplit(offer.coachShareBps, offer.platformShareBps)) return reply.code(409).send({ error: "Администратор должен настроить распределение оплаты" });
+    if (!["DRAFT", "REJECTED"].includes(offer.status)) return reply.code(409).send({ error: "Услуга уже отправлена на модерацию или опубликована" });
     if (offer.type === "CONSULTATION") {
       const [schedule, profile] = await Promise.all([
         ensureCoachScheduleSettings(context.profile.id),
@@ -338,8 +340,8 @@ export async function coachWorkspaceRoutes(app: FastifyInstance) {
       if (schedule.provider === "GOOGLE" && profile.googleCalendarConnection?.status !== "ACTIVE") return reply.code(409).send({ error: "Google Calendar не подключён" });
       if (schedule.provider === "CALENDLY" && (profile.calendlyConnection?.status !== "ACTIVE" || !offer.calendlyEventTypeUri || !offer.calendlySchedulingUrl)) return reply.code(409).send({ error: "Выберите тип встречи Calendly" });
     }
-    const updated = await prisma.coachServiceOffer.update({ where: { id }, data: { status: "PENDING_REVIEW" } });
-    return { offer: serializeCoachOffer(updated) };
+    const updated = await prisma.coachServiceOffer.update({ where: { id }, data: { status: "PENDING_REVIEW", moderationNote: null } });
+    return { offer: serializeCoachOffer(updated, true) };
   });
 
   app.post("/api/coach/subscription/checkout/:id", async (request, reply) => {
@@ -912,22 +914,22 @@ function registerPublicCoachRoutes(app: FastifyInstance) {
     const filtered = profiles.filter((profile) => (!query.specialization || (profile.specializations as any[] | null)?.includes(query.specialization)) && (!query.language || (profile.languages as any[] | null)?.includes(query.language)));
     const allSpecializations = [...new Set(profiles.flatMap((profile) => Array.isArray(profile.specializations) ? profile.specializations as string[] : []))].sort();
     const allLanguages = [...new Set(profiles.flatMap((profile) => Array.isArray(profile.languages) ? profile.languages as string[] : []))].sort();
-    return { coaches: filtered.map((profile) => ({ ...serializeCoachProfile(profile), services: profile.serviceOffers.map(serializeCoachOffer), siteUrl: profile.sites[0] ? `https://${profile.sites[0].customDomain || `${profile.sites[0].slug}.${env.COACH_SITE_BASE_DOMAIN}`}` : null })), filters: { cities: [...new Set(profiles.map((profile) => profile.city).filter((city): city is string => Boolean(city)))].sort(), specializations: allSpecializations, languages: allLanguages } };
+    return { coaches: filtered.map((profile) => ({ ...serializeCoachProfile(profile), services: profile.serviceOffers.map(offer => serializeCoachOffer(offer)), siteUrl: profile.sites[0] ? `https://${profile.sites[0].customDomain || `${profile.sites[0].slug}.${env.COACH_SITE_BASE_DOMAIN}`}` : null })), filters: { cities: [...new Set(profiles.map((profile) => profile.city).filter((city): city is string => Boolean(city)))].sort(), specializations: allSpecializations, languages: allLanguages } };
   });
 
   app.get("/api/coaches/:slug", async (request, reply) => {
     const { slug } = z.object({ slug: z.string().min(1).max(100) }).parse(request.params);
     const profile = await prisma.coachProfile.findFirst({ where: { slug, status: "APPROVED" }, include: { calendlyConnection: true, serviceOffers: { where: { status: "APPROVED", paymentModel: "CLIENT_PAID" }, orderBy: { amount: "asc" } }, rewards: { where: { status: "APPROVED" } }, sites: { where: { status: { in: ["ACTIVE", "GRACE"] } }, include: { plan: true }, take: 1 } } });
     if (!profile) return reply.code(404).send({ error: "Коуч не найден" });
-    return { coach: { ...serializeCoachProfile(profile), services: profile.serviceOffers.map(serializeCoachOffer), rewards: profile.rewards.map(serializeReward), site: profile.sites[0] ? serializeSite(profile.sites[0]) : null, siteUrl: profile.sites[0] ? `https://${profile.sites[0].customDomain || `${profile.sites[0].slug}.${env.COACH_SITE_BASE_DOMAIN}`}` : null, telegramBotUsername: env.TELEGRAM_BOT_USERNAME?.replace(/^@+/, "") ?? null }, servicesCommerceEnabled: await coachFeatureEnabled("coach_services_commerce") };
+    return { coach: { ...serializeCoachProfile(profile), services: profile.serviceOffers.map(offer => serializeCoachOffer(offer)), rewards: profile.rewards.map(serializeReward), site: profile.sites[0] ? serializeSite(profile.sites[0]) : null, siteUrl: profile.sites[0] ? `https://${profile.sites[0].customDomain || `${profile.sites[0].slug}.${env.COACH_SITE_BASE_DOMAIN}`}` : null, telegramBotUsername: env.TELEGRAM_BOT_USERNAME?.replace(/^@+/, "") ?? null }, servicesCommerceEnabled: await coachFeatureEnabled("coach_services_commerce") };
   });
 
   app.get("/api/coach-sites/by-host", async (request, reply) => {
     const host = z.object({ host: z.string().trim().min(3).max(255) }).parse(request.query ?? {}).host.toLowerCase().split(":")[0];
     const slug = host.endsWith(`.${env.COACH_SITE_BASE_DOMAIN}`) ? host.slice(0, -(`.${env.COACH_SITE_BASE_DOMAIN}`.length)) : null;
-    const site = await prisma.coachSite.findFirst({ where: { status: { in: ["ACTIVE", "GRACE"] }, OR: [{ customDomain: host, customDomainStatus: "VERIFIED" }, ...(slug ? [{ slug }] : [])] }, include: { plan: true, coachProfile: { include: { serviceOffers: { where: { status: "APPROVED", paymentModel: "CLIENT_PAID" } } } } } });
+    const site = await prisma.coachSite.findFirst({ where: { status: { in: ["ACTIVE", "GRACE"] }, coachProfile: { status: "APPROVED" }, OR: [{ customDomain: host, customDomainStatus: "VERIFIED" }, ...(slug ? [{ slug }] : [])] }, include: { plan: true, coachProfile: { include: { serviceOffers: { where: { status: "APPROVED", paymentModel: "CLIENT_PAID" } } } } } });
     if (!site) return reply.code(404).send({ error: "Сайт коуча не найден" });
-    return { site: serializeSite(site), coach: { ...serializeCoachProfile(site.coachProfile), services: site.coachProfile.serviceOffers.map(serializeCoachOffer) }, content: site.content ?? {}, theme: site.theme ?? {}, botUsername: env.TELEGRAM_BOT_USERNAME?.replace(/^@+/, "") ?? null };
+    return { site: serializeSite(site), coach: { ...serializeCoachProfile(site.coachProfile), services: site.coachProfile.serviceOffers.map(offer => serializeCoachOffer(offer)) }, content: site.content ?? {}, theme: site.theme ?? {}, botUsername: env.TELEGRAM_BOT_USERNAME?.replace(/^@+/, "") ?? null };
   });
 
   app.post("/api/coach-sites/chat", { config: { rateLimit: { max: 20, timeWindow: "10 minutes" } } }, async (request, reply) => {
@@ -935,7 +937,7 @@ function registerPublicCoachRoutes(app: FastifyInstance) {
     const body = z.object({ host: z.string().trim().min(3).max(255), message: z.string().trim().min(1).max(1500) }).parse(request.body ?? {});
     const host = body.host.toLowerCase().split(":")[0];
     const slug = host.endsWith(`.${env.COACH_SITE_BASE_DOMAIN}`) ? host.slice(0, -(`.${env.COACH_SITE_BASE_DOMAIN}`.length)) : null;
-    const site = await prisma.coachSite.findFirst({ where: { status: { in: ["ACTIVE", "GRACE"] }, plan: { code: "premium" }, OR: [{ customDomain: host, customDomainStatus: "VERIFIED" }, ...(slug ? [{ slug }] : [])] }, include: { coachProfile: { include: { serviceOffers: { where: { status: "APPROVED" } } } }, plan: true } });
+    const site = await prisma.coachSite.findFirst({ where: { status: { in: ["ACTIVE", "GRACE"] }, coachProfile: { status: "APPROVED" }, plan: { code: "premium" }, OR: [{ customDomain: host, customDomainStatus: "VERIFIED" }, ...(slug ? [{ slug }] : [])] }, include: { coachProfile: { include: { serviceOffers: { where: { status: "APPROVED" } } } }, plan: true } });
     if (!site) return reply.code(404).send({ error: "AI-чат недоступен" });
     const services = site.coachProfile.serviceOffers.map((offer) => ({ title: offer.title, type: offer.type, description: offer.description, price: `${offer.amount} ${offer.currency} cents` }));
     if (!hasOpenAiClient()) return { reply: locale === "en" ? `I can tell you about ${site.coachProfile.displayName} and help you choose a service. Available now: ${services.map(item => item.title).join(", ") || "please check the profile"}.` : `Я могу рассказать о работе ${site.coachProfile.displayName} и помочь выбрать формат. Сейчас доступны: ${services.map((item) => item.title).join(", ") || "форматы уточняются"}.` };
@@ -963,19 +965,23 @@ function registerAdminCoachRoutes(app: FastifyInstance) {
       prisma.coachSitePlan.findMany({ orderBy: { sortOrder: "asc" } }),
       prisma.coachSubscription.findMany({ orderBy: { createdAt: "desc" }, take: 200, include: { coachProfile: { select: { displayName: true } }, plan: { select: { name: true } } } }),
       prisma.coachServiceOrder.findMany({ orderBy: { createdAt: "desc" }, take: 200, include: { user: { select: { email: true, name: true } }, offer: { include: { coachProfile: { select: { displayName: true } } } } } }),
-      prisma.coachServiceOffer.findMany({ where: { status: { in: ["DRAFT", "PENDING_REVIEW", "APPROVED"] } }, orderBy: { createdAt: "desc" }, include: { coachProfile: { select: { displayName: true } } } }),
+      prisma.coachServiceOffer.findMany({ orderBy: { createdAt: "desc" }, include: { coachProfile: { select: { displayName: true } } } }),
       prisma.coachReward.findMany({ where: { status: "PENDING_REVIEW" }, orderBy: { createdAt: "asc" } }),
       prisma.appSetting.findMany({ where: { key: { in: ["coach_consultation_cancel_hours", "coach_consultation_refund_percent"] } } }),
       prisma.appSetting.findUnique({ where: { key: coachPublicContentKey("ru") } })
     ]);
     const settings = new Map(cancellationSettings.map((item) => [item.key, item.value]));
-    return { profiles: profiles.map((profile) => serializeCoachProfile(profile, true)), plans, sitePlans: sitePlans.map((plan) => ({ id: plan.id, code: plan.code, name: plan.name, setupAmount: plan.setupAmount, monthlySupportAmount: plan.monthlySupportAmount, currency: plan.currency, active: plan.active })), subscriptions: subscriptions.map((item) => ({ id: item.id, coach: item.coachProfile.displayName, plan: item.plan.name, status: item.status, amount: item.amount, currency: item.currency, clientLimit: item.clientLimit, currentPeriodEnd: item.currentPeriodEnd?.toISOString() ?? null })), orders: orders.map((item) => ({ id: item.id, coach: item.offer.coachProfile.displayName, client: item.user.name || item.user.email, service: item.offer.title, status: item.status, amount: item.amount, currency: item.currency, createdAt: item.createdAt.toISOString() })), offers: offers.map((item) => ({ ...serializeCoachOffer(item), coachName: item.coachProfile.displayName })), rewardsPendingReview: rewards.map(serializeReward), cancellationPolicy: { hoursBeforeStart: numericJson(settings.get("coach_consultation_cancel_hours"), 24), refundPercent: numericJson(settings.get("coach_consultation_refund_percent"), 100) }, publicContent: readCoachPublicContent(publicContentSetting?.value) };
+    return { profiles: profiles.map((profile) => serializeCoachProfile(profile, true)), plans, sitePlans: sitePlans.map((plan) => ({ id: plan.id, code: plan.code, name: plan.name, setupAmount: plan.setupAmount, monthlySupportAmount: plan.monthlySupportAmount, currency: plan.currency, active: plan.active })), subscriptions: subscriptions.map((item) => ({ id: item.id, coach: item.coachProfile.displayName, plan: item.plan.name, status: item.status, amount: item.amount, currency: item.currency, clientLimit: item.clientLimit, currentPeriodEnd: item.currentPeriodEnd?.toISOString() ?? null })), orders: orders.map((item) => ({ id: item.id, coach: item.offer.coachProfile.displayName, client: item.user.name || item.user.email, service: item.offer.title, status: item.status, amount: item.amount, currency: item.currency, createdAt: item.createdAt.toISOString() })), offers: offers.map((item) => ({ ...serializeCoachOffer(item, true), coachName: item.coachProfile.displayName })), rewardsPendingReview: rewards.map(serializeReward), cancellationPolicy: { hoursBeforeStart: numericJson(settings.get("coach_consultation_cancel_hours"), 24), refundPercent: numericJson(settings.get("coach_consultation_refund_percent"), 100) }, publicContent: readCoachPublicContent(publicContentSetting?.value) };
   });
 
   app.patch("/api/admin/coaches/:id/status", async (request, reply) => {
     if (!(await requireAdmin(request, reply))) return;
     const { id } = idSchema.parse(request.params);
-    const body = z.object({ status: z.enum(["DRAFT", "PENDING_REVIEW", "APPROVED", "REJECTED", "SUSPENDED"]), moderationNote: z.string().trim().max(1000).optional().nullable(), featured: z.boolean().optional() }).parse(request.body ?? {});
+    const parsed = coachProfileModerationSchema.safeParse(request.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.issues[0]?.message || "Неверное решение модерации" });
+    const body = parsed.data;
+    const current = await prisma.coachProfile.findUnique({ where: { id }, select: { id: true } });
+    if (!current) return reply.code(404).send({ error: "Профиль не найден" });
     const profile = await prisma.coachProfile.update({ where: { id }, data: { ...body, publicSince: body.status === "APPROVED" ? new Date() : undefined, acceptingOrders: body.status === "APPROVED" ? undefined : false }, include: { calendlyConnection: true } });
     await writeAdminAudit("coach.profile.status", "CoachProfile", id, body);
     return { profile: serializeCoachProfile(profile, true) };
@@ -1052,7 +1058,9 @@ function registerAdminCoachRoutes(app: FastifyInstance) {
   app.patch("/api/admin/coaches/offers/:id/status", async (request, reply) => {
     if (!(await requireAdmin(request, reply))) return;
     const { id } = idSchema.parse(request.params);
-    const body = z.object({ status: z.enum(["DRAFT", "PENDING_REVIEW", "APPROVED", "REJECTED", "PAUSED"]), coachShareBps: z.coerce.number().int().min(0).max(10_000).optional(), platformShareBps: z.coerce.number().int().min(0).max(10_000).optional(), moderationNote: z.string().trim().max(1000).optional().nullable() }).parse(request.body ?? {});
+    const parsed = coachOfferModerationSchema.safeParse(request.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: parsed.error.issues[0]?.message || "Неверное решение модерации" });
+    const body = parsed.data;
     const current = await prisma.coachServiceOffer.findUnique({ where: { id } });
     if (!current) return reply.code(404).send({ error: "Услуга не найдена" });
     const coachShare = body.coachShareBps ?? current.coachShareBps;
@@ -1060,7 +1068,7 @@ function registerAdminCoachRoutes(app: FastifyInstance) {
     if (body.status === "APPROVED" && current.paymentModel === "CLIENT_PAID" && !hasValidCoachRevenueSplit(coachShare, platformShare)) return reply.code(409).send({ error: "Доли коуча и платформы должны составлять 100%" });
     const offer = await prisma.coachServiceOffer.update({ where: { id }, data: { ...body, publishedAt: body.status === "APPROVED" ? new Date() : undefined } });
     await writeAdminAudit("coach.offer.status", "CoachServiceOffer", id, body);
-    return { offer: serializeCoachOffer(offer) };
+    return { offer: serializeCoachOffer(offer, true) };
   });
 
   app.patch("/api/admin/coaches/rewards/:id/status", async (request, reply) => {
@@ -1198,7 +1206,7 @@ async function workspaceSnapshot(coachProfileId: string) {
     plans,
     subscription: subscription && planSummary ? { id: subscription.id, plan: planSummary, status: subscription.status, clientLimit: subscription.clientLimit, coachPaidClients, clientPaidClients, availableSlots: availableCoachSlots(subscription.clientLimit, coachPaidClients), currentPeriodEnd: subscription.currentPeriodEnd?.toISOString() ?? null, graceEndsAt: subscription.graceEndsAt?.toISOString() ?? null, cancelAtPeriodEnd: subscription.cancelAtPeriodEnd } : null,
     clients,
-    serviceOffers: offers.map(serializeCoachOffer),
+    serviceOffers: offers.map(offer => serializeCoachOffer(offer, true)),
     counts: { coachPaidClients, clientPaidClients, attention: clients.filter((client) => client.attentionReason).length, openAssignments },
     integrations: { calendly: { connected: profile.calendlyConnection?.status === "ACTIVE", status: profile.calendlyConnection?.status ?? "DISCONNECTED" }, telegramBotUsername: env.TELEGRAM_BOT_USERNAME ?? null },
     scheduling: serializeCoachSchedule(schedule, { google: profile.googleCalendarConnection, calendly: profile.calendlyConnection }),

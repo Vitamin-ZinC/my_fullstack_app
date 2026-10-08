@@ -17,7 +17,7 @@ scan(path.join(root, "apps/frontend/components"));
 sources.push(path.join(root, "apps/frontend/lib/messages.ts"), path.join(root, "apps/frontend/lib/legal.ts"));
 sources.push(path.join(root, "apps/backend/src/services/habitCatalog.ts"));
 sources.push(path.join(root, "apps/backend/src/services/aiReport.ts"));
-for (const file of ["routes/habits.ts", "routes/coachWorkspace.ts", "routes/coaches.ts", "routes/demo.ts", "routes/me.ts", "services/coachPartnership.ts", "services/coachCommerce.ts", "services/coachRules.ts", "services/coachPlatform.ts", "services/pricing.ts", "services/report.ts"]) {
+for (const file of ["routes/habits.ts", "routes/coachWorkspace.ts", "routes/coaches.ts", "routes/demo.ts", "routes/me.ts", "services/coachPartnership.ts", "services/coachCommerce.ts", "services/coachRules.ts", "services/coachPlatform.ts", "services/coachModeration.ts", "services/pricing.ts", "services/report.ts"]) {
   sources.push(path.join(root, "apps/backend/src", file));
 }
 const catalog = new Map();

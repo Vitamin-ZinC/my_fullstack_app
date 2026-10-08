@@ -41,7 +41,7 @@ export async function ensureCoachProfile(identity: PartnerPortalIdentity) {
 export function serializeCoachProfile(profile: any, exposeCoreId = false) {
   return {
     id: profile.id,
-    ...(exposeCoreId ? { partnerCorePartnerId: profile.partnerCorePartnerId } : {}),
+    ...(exposeCoreId ? { partnerCorePartnerId: profile.partnerCorePartnerId, moderationNote: profile.moderationNote ?? null } : {}),
     slug: profile.slug,
     displayName: profile.displayName,
     headline: profile.headline ?? null,
@@ -107,7 +107,7 @@ export async function listCoachPlans(coachProfileId?: string) {
   });
 }
 
-export function serializeCoachOffer(offer: any) {
+export function serializeCoachOffer(offer: any, privateDetails = false) {
   return {
     id: offer.id,
     coachProfileId: offer.coachProfileId,
@@ -117,12 +117,14 @@ export function serializeCoachOffer(offer: any) {
     description: offer.description,
     amount: offer.amount,
     currency: offer.currency,
-    coachShareBps: offer.coachShareBps ?? null,
-    platformShareBps: offer.platformShareBps ?? null,
+    ...(privateDetails === true ? {
+      coachShareBps: offer.coachShareBps ?? null,
+      platformShareBps: offer.platformShareBps ?? null,
+      moderationNote: offer.moderationNote ?? null
+    } : {}),
     calendlyEventTypeUri: offer.calendlyEventTypeUri ?? null,
     calendlySchedulingUrl: offer.calendlySchedulingUrl ?? null,
-    status: offer.status,
-    moderationNote: offer.moderationNote ?? null
+    status: offer.status
   };
 }
 

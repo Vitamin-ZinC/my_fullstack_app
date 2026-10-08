@@ -2,7 +2,18 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 process.env.DATABASE_URL ??= "postgresql://test:test@localhost:5432/orken_test";
-const { calculateHabitCorrelations, serializeCoachClient } = await import("./coachPlatform.js");
+const { calculateHabitCorrelations, serializeCoachClient, serializeCoachProfile, serializeCoachOffer } = await import("./coachPlatform.js");
+
+test("moderation details are available to owners and admins, never public consumers", () => {
+  const profile = { id: "coach", partnerCorePartnerId: "core-partner", moderationNote: "Correct biography", status: "DRAFT" };
+  assert.equal("moderationNote" in serializeCoachProfile(profile), false);
+  assert.equal("partnerCorePartnerId" in serializeCoachProfile(profile), false);
+  assert.equal(serializeCoachProfile(profile, true).moderationNote, "Correct biography");
+  const offer = { id: "offer", moderationNote: "Clarify service", coachShareBps: 7000, platformShareBps: 3000 };
+  for (const field of ["moderationNote", "coachShareBps", "platformShareBps"]) assert.equal(field in serializeCoachOffer(offer), false);
+  assert.equal(serializeCoachOffer(offer, true).moderationNote, "Clarify service");
+  assert.equal(serializeCoachOffer(offer, true).coachShareBps, 7000);
+});
 
 function metric(day: number, clarity: number) {
   return { date: new Date(Date.UTC(2026, 6, day)), energy: 6, clarity, stability: 6 };

@@ -116,6 +116,43 @@ test("coach workspace translates all tabs while preserving coach profile data", 
   }
 });
 
+test("coach sees private moderation feedback, edits an existing service and submits corrected copy", async ({ page }) => {
+  await english(page);
+  const data = structuredClone(workspace);
+  data.profile.status = "DRAFT";
+  data.profile.moderationNote = "Добавьте образование и методику";
+  data.serviceOffers = [{ id: "own-offer", coachProfileId: "coach", type: "ONGOING_SUPPORT", paymentModel: "CLIENT_PAID", title: "Моя услуга", description: "Исходное описание услуги", amount: 12000, currency: "usd", status: "DRAFT", moderationNote: "Уточните состав услуги", coachShareBps: null, platformShareBps: null }];
+  let edited;
+  let submitted;
+  await page.route(`${apiBase}/api/coach/workspace`, route => json(route, data));
+  await page.route(`${apiBase}/api/coach/services`, async route => {
+    if (route.request().method() === "OPTIONS") return json(route, {});
+    edited = route.request().postDataJSON();
+    Object.assign(data.serviceOffers[0], edited, { moderationNote: null, status: "DRAFT" });
+    await json(route, { offer: data.serviceOffers[0] });
+  });
+  await page.route(`${apiBase}/api/coach/services/own-offer/submit-review`, async route => {
+    if (route.request().method() === "OPTIONS") return json(route, {});
+    submitted = true;
+    data.serviceOffers[0].status = "PENDING_REVIEW";
+    await json(route, { offer: data.serviceOffers[0] });
+  });
+  await page.goto(`${appBase}/coach`);
+  await expect(page.getByText("Добавьте образование и методику", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Services", exact: true }).first().click();
+  await expect(page.getByText("Уточните состав услуги", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Edit service" })).toBeVisible();
+  await page.getByLabel("What the client gets", { exact: true }).fill("Clear corrected service description");
+  await page.getByRole("button", { name: "Save draft", exact: true }).click();
+  await expect.poll(() => edited?.id).toBe("own-offer");
+  expect(edited.description).toBe("Clear corrected service description");
+  expect(edited.coachShareBps).toBeUndefined();
+  await expect(page.getByText("Уточните состав услуги", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Submit for moderation", exact: true }).click();
+  await expect.poll(() => submitted).toBe(true);
+});
+
 test("client feedback and progress translate without changing private messages", async ({ page }, info) => {
   await english(page);
   await page.route(`${apiBase}/api/habits/coaching`, route => json(route, {

@@ -151,6 +151,18 @@ The main `/for-coaches` positioning fields are stored in `AppSetting.coach_publi
 
 ## Production Checklist
 
+### Coach Moderation
+
+- In `/admin/coaches`, use **Profiles** or **Services**, filter by status/name, then **Review**. The private dialog displays the full biography, avatar/cover, specializations, languages, owner, service description, price and payment model without publishing the record.
+- **Approve** publishes eligibility; paid services require an explicitly configured 10,000-basis-point revenue split. Included services do not require a split. A service of an unapproved coach stays out of the public catalog.
+- **Request changes** uses the existing `DRAFT` status with `moderationNote`; **Reject** uses `REJECTED`; suspension uses `SUSPENDED` for profiles and `PAUSED` for services. All three negative decisions require a non-empty comment, up to 1,000 characters, on both the UI and backend. Decisions are recorded in `AdminAuditLog`.
+- The coach sees profile feedback in `/coach` and service feedback in **Services**. They can edit the service, save the draft and resubmit. Submitting a paid service does not require a split; approving/selling it still does. Profile saves/uploading a new avatar queue another review. Saving/resubmitting clears the previous comment; approval clears it as well. Audit entries preserve the earlier decision.
+- The admin snapshot includes rejected/paused services so they remain reviewable. Preview uses the existing admin-only snapshot; there is no public preview bypass or new API route.
+- Public coach responses omit moderation comments and revenue splits. Unapproved profiles cannot be accessed through the catalog, profile URL, coach-site host lookup or public coach-site chat. Owners/admins receive private details through their existing authenticated endpoints.
+- No new tables, migrations or Partner Core account data are introduced. Before deployment, run backend tests, type checks, localization checks, production build and the coach moderation browser tests. Smoke an admin review, coach correction/resubmission and unauthenticated public access after release.
+
+### Infrastructure
+
 1. Apply `20260812190000_coach_platform`, `20260813090000_split_coach_commerce_flags`, and `20260813153000_coach_scheduling` with `prisma migrate deploy`, then run `prisma generate`.
 2. Keep ORKEN scheduling as the only provider in the current coach UI. Configure backend-only Google and/or Calendly OAuth credentials only before explicitly restoring those providers, plus a high-entropy integration token encryption secret.
 3. Configure a published 100% coach-payout program in Partner Core and set `COACH_PAYOUT_PARTNER_CORE_PROGRAM_ID`.

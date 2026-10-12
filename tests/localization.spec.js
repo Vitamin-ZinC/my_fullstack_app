@@ -99,6 +99,77 @@ test("language switch preserves coach registration inputs, identity and request 
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
 });
 
+for (const locale of ["ru", "en"]) {
+  test(`${locale} coach registration explains short practice names and opens the workspace with an empty optional name`, async ({ page }, info) => {
+    await english(page);
+    await page.addInitScript(value => localStorage.setItem("levelup_locale", value), locale);
+    await page.setViewportSize({ width: 360, height: 900 });
+    let registered = false;
+    const submissions = [];
+    await page.route(`${apiBase}/api/coach/workspace`, route => json(route, registered ? { ...workspace, profile: { ...coach, displayName: "QA Coach" } } : { error: "Partner login required" }, registered ? 200 : 401));
+    await page.route(`${apiBase}/api/partners/portal/register`, async route => {
+      if (route.request().method() === "OPTIONS") return json(route, {});
+      submissions.push(route.request().postDataJSON());
+      registered = true;
+      await json(route, { partner: { partnerCorePartnerId: "qa-partner", displayName: "QA Coach", status: "PENDING_REVIEW" }, expiresAt: "2099-01-01T00:00:00Z" });
+    });
+    await page.goto(`${appBase}/coach?lang=${locale}`);
+    await page.getByRole("button", { name: locale === "ru" ? "Зарегистрироваться" : "Register", exact: true }).click();
+    await page.getByLabel(locale === "ru" ? "Имя и фамилия" : "First and last name").fill(" QA Coach ");
+    await page.getByLabel("Email", { exact: true }).fill("qa@example.invalid");
+    for (const input of await page.locator('input[type="password"]').all()) await input.fill("synthetic-test-password");
+    await page.locator('input[type="checkbox"]').check();
+    const practice = page.getByLabel(locale === "ru" ? /Название практики/ : /Practice name/);
+    await expect(practice).toHaveAttribute("minlength", "2");
+    await expect(practice).toHaveAttribute("maxlength", "180");
+    const submit = page.locator("form").getByRole("button").last();
+    for (const value of ["A", " A "]) {
+      await practice.fill(value);
+      await submit.click();
+      await expect(page.getByRole("alert").filter({ hasText: locale === "ru" ? /Название практики должно содержать/ : /Practice name must contain/ })).toBeVisible();
+      expect(submissions).toHaveLength(0);
+    }
+    await fits(page);
+    await page.screenshot({ path: info.outputPath(`registration-validation-${locale}-360.png`), fullPage: true });
+    await practice.fill("");
+    await submit.click();
+    await expect.poll(() => submissions.length).toBe(1);
+    expect(submissions[0].accountName).toBe("QA Coach");
+    expect(submissions[0].displayName).toBe("QA Coach");
+    expect(submissions[0].accountType).toBe("individual");
+    await expect(page.getByRole("heading", { name: locale === "ru" ? "Быстрые действия" : "Quick actions" })).toBeVisible();
+    await page.reload();
+    await expect(page.getByRole("heading", { name: locale === "ru" ? "Быстрые действия" : "Quick actions" })).toBeVisible();
+  });
+
+  test(`${locale} partner registration blocks trimmed short names and sends valid account names`, async ({ page }) => {
+    await english(page);
+    await page.addInitScript(value => localStorage.setItem("levelup_locale", value), locale);
+    await page.route(`${apiBase}/api/partners/portal/me`, route => json(route, { error: "Partner login required" }, 401));
+    const submissions = [];
+    await page.route(`${apiBase}/api/partners/portal/register`, async route => {
+      if (route.request().method() === "OPTIONS") return json(route, {});
+      submissions.push(route.request().postDataJSON());
+      await json(route, { error: "Registration could not be completed" }, 400);
+    });
+    await page.goto(`${appBase}/partners?lang=${locale}`);
+    await page.getByRole("button", { name: locale === "ru" ? "Стать партнёром" : "Become a partner", exact: true }).click();
+    await page.getByLabel(locale === "ru" ? "Ваше имя" : "Your name").fill(" QA Partner ");
+    await page.getByLabel("Email", { exact: true }).fill("qa@example.invalid");
+    await page.locator('input[type="password"]').fill("synthetic-test-password");
+    const name = page.getByLabel(locale === "ru" ? "Название аккаунта" : "Account name");
+    await name.fill(" A ");
+    await page.locator("form").getByRole("button").last().click();
+    await expect(page.getByRole("alert").filter({ hasText: locale === "ru" ? /Название практики или аккаунта/ : /Practice or account name/ })).toBeVisible();
+    expect(submissions).toHaveLength(0);
+    await name.fill(" QA ");
+    await page.locator("form").getByRole("button").last().click();
+    await expect.poll(() => submissions.length).toBe(1);
+    expect(submissions[0].accountName).toBe("QA");
+    expect(submissions[0].displayName).toBe("QA Partner");
+  });
+}
+
 test("coach workspace translates all tabs while preserving coach profile data", async ({ page }, info) => {
   await english(page);
   await page.route(`${apiBase}/api/coach/workspace`, route => json(route, workspace));

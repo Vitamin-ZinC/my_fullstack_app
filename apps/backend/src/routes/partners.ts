@@ -108,6 +108,13 @@ const partnerPortalRegisterSchema = z.object({
   idempotencyKey: z.string().trim().min(12).max(220)
 });
 
+const partnerRegistrationValidationMessages: Record<string, string> = {
+  email: "Введите корректный email (не более 320 символов).",
+  password: "Пароль должен содержать от 12 до 256 символов.",
+  displayName: "Имя должно содержать от 2 до 160 символов.",
+  accountName: "Название практики или аккаунта должно содержать от 2 до 180 символов."
+};
+
 const partnerPortalLoginSchema = z.object({
   email: z.string().trim().email().max(320),
   password: z.string().min(1).max(256)
@@ -149,7 +156,17 @@ const partnerPortalReviewSchema = z.object({
 export async function partnerRoutes(app: FastifyInstance) {
   app.post("/api/partners/portal/register", async (request, reply) => {
     if (!isPartnerCoreConfigured()) return reply.code(503).send({ error: "Partner portal is temporarily unavailable" });
-    const body = partnerPortalRegisterSchema.parse(request.body ?? {});
+    const parsed = partnerPortalRegisterSchema.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      const field = parsed.error.issues[0]?.path[0];
+      return reply.code(400).send({
+        code: "PARTNER_REGISTRATION_INVALID",
+        error: typeof field === "string" && partnerRegistrationValidationMessages[field]
+          ? partnerRegistrationValidationMessages[field]
+          : "Проверьте данные регистрации и повторите попытку."
+      });
+    }
+    const body = parsed.data;
     try {
       const coreSession = await registerPartnerCorePortal({
         ...body,
@@ -173,7 +190,9 @@ export async function partnerRoutes(app: FastifyInstance) {
 
   app.post("/api/partners/portal/login", async (request, reply) => {
     if (!isPartnerCoreConfigured()) return reply.code(503).send({ error: "Partner portal is temporarily unavailable" });
-    const body = partnerPortalLoginSchema.parse(request.body ?? {});
+    const parsed = partnerPortalLoginSchema.safeParse(request.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: "Введите корректный email и пароль." });
+    const body = parsed.data;
     try {
       const coreSession = await loginPartnerCorePortal({ ...body, clientRef: partnerPortalClientRef(request) });
       const portalSession = await createPartnerPortalSession(coreSession, { email: body.email });

@@ -337,12 +337,23 @@ export default function PartnersPage() {
 
   async function submitAuth(event: React.FormEvent) {
     event.preventDefault();
+    if (submitting) return;
+    if (authMode === "register") {
+      if (authForm.displayName.trim().length < 2 || authForm.displayName.trim().length > 160) {
+        setError(uiText("Имя должно содержать от 2 до 160 символов."));
+        return;
+      }
+      if (authForm.accountName.trim().length < 2 || authForm.accountName.trim().length > 180) {
+        setError(uiText("Название практики или аккаунта должно содержать от 2 до 180 символов."));
+        return;
+      }
+    }
     setSubmitting(true);
     setError("");
     try {
       const response = authMode === "register"
-        ? await partnerPortalApi.register({ ...authForm, idempotencyKey: registerKey })
-        : await partnerPortalApi.login({ email: authForm.email, password: authForm.password });
+        ? await partnerPortalApi.register({ ...authForm, email: authForm.email.trim(), displayName: authForm.displayName.trim(), accountName: authForm.accountName.trim(), idempotencyKey: registerKey })
+        : await partnerPortalApi.login({ email: authForm.email.trim(), password: authForm.password });
       setPortalSession(response);
       setRegisterKey(makeIdempotencyKey());
       await loadPortal();
@@ -490,12 +501,12 @@ export default function PartnersPage() {
           </div>
           <form className="partner-auth-form" onSubmit={submitAuth}>
             {authMode === "register" && <>
-              <label>{uiText("Ваше имя")}<input value={authForm.displayName} onChange={(event) => setAuthForm({ ...authForm, displayName: event.target.value })} required autoComplete="name" /></label>
-              <label>{uiText("Название аккаунта")}<input value={authForm.accountName} onChange={(event) => setAuthForm({ ...authForm, accountName: event.target.value })} required autoComplete="organization" /></label>
+              <label>{uiText("Ваше имя")}<input value={authForm.displayName} onChange={(event) => setAuthForm({ ...authForm, displayName: event.target.value })} minLength={2} maxLength={160} onInvalid={() => setError(uiText("Имя должно содержать от 2 до 160 символов."))} required autoComplete="name" /></label>
+              <label>{uiText("Название аккаунта")}<input value={authForm.accountName} onChange={(event) => setAuthForm({ ...authForm, accountName: event.target.value })} minLength={2} maxLength={180} onInvalid={() => setError(uiText("Название практики или аккаунта должно содержать от 2 до 180 символов."))} required autoComplete="organization" /></label>
               <label>{uiText("Тип аккаунта")}<select value={authForm.accountType} onChange={(event) => setAuthForm({ ...authForm, accountType: event.target.value as "organization" | "individual" })}><option value="organization">{uiText("Компания")}</option><option value="individual">{uiText("Частный партнёр")}</option></select></label>
             </>}
-            <label>Email<input value={authForm.email} onChange={(event) => setAuthForm({ ...authForm, email: event.target.value })} type="email" required autoComplete="email" /></label>
-            <label>{uiText("Пароль")}<input value={authForm.password} onChange={(event) => setAuthForm({ ...authForm, password: event.target.value })} type="password" required minLength={authMode === "register" ? 12 : undefined} autoComplete={authMode === "register" ? "new-password" : "current-password"} /></label>
+            <label>Email<input value={authForm.email} onChange={(event) => setAuthForm({ ...authForm, email: event.target.value })} type="email" maxLength={320} required autoComplete="email" /></label>
+            <label>{uiText("Пароль")}<input value={authForm.password} onChange={(event) => setAuthForm({ ...authForm, password: event.target.value })} type="password" maxLength={256} required minLength={authMode === "register" ? 12 : undefined} autoComplete={authMode === "register" ? "new-password" : "current-password"} /></label>
             {error && <p className="partner-form-error" role="alert">{error}</p>}
             <button className="partner-primary-button" disabled={submitting} type="submit"><LogIn size={17} />{submitting ? uiText("Проверяем...") : authMode === "register" ? uiText("Создать кабинет") : uiText("Войти в кабинет")}</button>
           </form>

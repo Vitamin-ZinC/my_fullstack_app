@@ -57,9 +57,52 @@ function CoachLogin({onDone}:{onDone:()=>void}){
   const[email,setEmail]=useState("");const[password,setPassword]=useState("");const[passwordRepeat,setPasswordRepeat]=useState("");
   const[name,setName]=useState("");const[practice,setPractice]=useState("");const[accepted,setAccepted]=useState(false);
   const[error,setError]=useState("");const[busy,setBusy]=useState(false);const[recoveryOpen,setRecoveryOpen]=useState(false);
-  async function submit(e:React.FormEvent){e.preventDefault();if(mode==="register"&&password!==passwordRepeat){setError(uiText("Пароли не совпадают"));return}setBusy(true);setError("");try{if(mode==="register"){await partnerPortalApi.register({email,password,displayName:name.trim(),accountName:practice.trim()||name.trim(),accountType:"individual",idempotencyKey:makeKey()})}else{await partnerPortalApi.login({email,password})}onDone()}catch(reason){setError(reason instanceof Error?reason.message:uiText("Не удалось продолжить"))}finally{setBusy(false)}}
+  async function submit(e:React.FormEvent){
+    e.preventDefault();
+    if(busy)return;
+    if(mode==="register"){
+      if(name.trim().length<2||name.trim().length>160){setError(uiText("Имя должно содержать от 2 до 160 символов."));return}
+      if(practice.trim()&&(practice.trim().length<2||practice.trim().length>180)){setError(uiText("Название практики должно содержать от 2 до 180 символов или оставьте поле пустым."));return}
+      if(password!==passwordRepeat){setError(uiText("Пароли не совпадают"));return}
+    }
+    setBusy(true);setError("");
+    try{
+      if(mode==="register"){
+        await partnerPortalApi.register({email:email.trim(),password,displayName:name.trim(),accountName:practice.trim()||name.trim(),accountType:"individual",idempotencyKey:makeKey()})
+      }else{await partnerPortalApi.login({email:email.trim(),password})}
+      onDone()
+    }catch(reason){setError(reason instanceof Error?reason.message:uiText("Не удалось продолжить"))}finally{setBusy(false)}
+  }
   const recoveryHref=`mailto:orken.eco@gmail.com?subject=${encodeURIComponent(uiText("Восстановление доступа к кабинету коуча ORKEN"))}&body=${encodeURIComponent(uiText("Email аккаунта: {v0}\n\nПрошу восстановить доступ к кабинету коуча.", { v0: email.trim()||uiText("укажите email") }))}`;
-  return <main className={styles.page}><section className={styles.auth} aria-labelledby="coach-auth-title"><Link className={styles.brand} href="/">ORKEN.LIFE</Link><span className={styles.badge}>{uiText("Кабинет коуча")}</span><h1 id="coach-auth-title">{mode==="login"?uiText("Вход для коуча"):uiText("Создайте кабинет коуча")}</h1><p>{mode==="login"?uiText("Войдите, чтобы управлять клиентами, расписанием и пакетом мест."):uiText("Одна регистрация открывает кабинет коуча и партнёрскую программу ORKEN.")}</p><div className={styles.authTabs} role="tablist" aria-label={uiText("Вход или регистрация")}><button type="button" className={mode==="login"?styles.authTabActive:""} onClick={()=>{setMode("login");setRecoveryOpen(false);setError("")}}>{uiText("Войти")}</button><button type="button" className={mode==="register"?styles.authTabActive:""} onClick={()=>{setMode("register");setRecoveryOpen(false);setError("")}}>{uiText("Зарегистрироваться")}</button></div><form onSubmit={submit}>{mode==="register"&&<><label>{uiText("Имя и фамилия")}<input value={name} onChange={e=>setName(e.target.value)} autoComplete="name" minLength={2} required/></label><label>{uiText("Название практики ")}<span className={styles.optional}>{uiText("необязательно")}</span><input value={practice} onChange={e=>setPractice(e.target.value)} autoComplete="organization" placeholder={uiText("Например, Анна Орлова")}/></label></>}<label>Email<input type="email" value={email} onChange={e=>setEmail(e.target.value)} autoComplete="email" required/></label><label>{uiText("Пароль")}<input type="password" value={password} onChange={e=>setPassword(e.target.value)} minLength={mode==="register"?12:undefined} autoComplete={mode==="register"?"new-password":"current-password"} required/>{mode==="register"&&<span className={styles.fieldHelp}>{uiText("Не менее 12 символов")}</span>}</label>{mode==="login"&&<button className={styles.textButton} type="button" aria-expanded={recoveryOpen} onClick={()=>setRecoveryOpen(value=>!value)}><KeyRound size={15}/> {uiText(" Забыли пароль?")}</button>}{mode==="login"&&recoveryOpen&&<div className={styles.recoveryPanel}><div><h2>{uiText("Восстановление доступа")}</h2><p>{uiText("Пароль хранится в Partner Core. Отправьте запрос в поддержку с email аккаунта. Старый пароль указывать не нужно.")}</p></div><a className={`${styles.button} ${styles.secondary}`} href={recoveryHref}><Mail size={16}/> {uiText(" Написать в поддержку")}</a></div>}{mode==="register"&&<><label>{uiText("Повторите пароль")}<input type="password" value={passwordRepeat} onChange={e=>setPasswordRepeat(e.target.value)} minLength={12} autoComplete="new-password" required/></label><label className={styles.consent}><input type="checkbox" checked={accepted} onChange={e=>setAccepted(e.target.checked)} required/><span>{uiText("Принимаю ")}<Link href="/offer">{uiText("Оферту")}</Link> {uiText(" и ")}<Link href="/privacy">{uiText("Политику конфиденциальности")}</Link></span></label></>}{error&&<p className={styles.error} role="alert">{error}</p>}<button className={styles.button} disabled={busy||(mode==="register"&&!accepted)}>{mode==="register"?<UserPlus size={17}/>:<LogIn size={17}/>} {busy?uiText("Проверяем..."):mode==="register"?uiText("Создать кабинет"):uiText("Войти")}</button></form><p className={styles.authFoot}>{uiText("Учётная запись хранится в Partner Core. ORKEN не хранит пароль коуча.")}</p></section></main>
+  return <main className={styles.page}><section className={styles.auth} aria-labelledby="coach-auth-title">
+    <Link className={styles.brand} href="/">ORKEN.LIFE</Link><span className={styles.badge}>{uiText("Кабинет коуча")}</span>
+    <h1 id="coach-auth-title">{mode==="login"?uiText("Вход для коуча"):uiText("Создайте кабинет коуча")}</h1>
+    <p>{mode==="login"?uiText("Войдите, чтобы управлять клиентами, расписанием и пакетом мест."):uiText("Одна регистрация открывает кабинет коуча и партнёрскую программу ORKEN.")}</p>
+    <div className={styles.authTabs} role="tablist" aria-label={uiText("Вход или регистрация")}>
+      <button type="button" className={mode==="login"?styles.authTabActive:""} onClick={()=>{setMode("login");setRecoveryOpen(false);setError("")}}>{uiText("Войти")}</button>
+      <button type="button" className={mode==="register"?styles.authTabActive:""} onClick={()=>{setMode("register");setRecoveryOpen(false);setError("")}}>{uiText("Зарегистрироваться")}</button>
+    </div>
+    <form onSubmit={submit}>
+      {mode==="register"&&<>
+        <label>{uiText("Имя и фамилия")}<input value={name} onChange={e=>{setName(e.target.value);setError("")}} autoComplete="name" minLength={2} maxLength={160} onInvalid={()=>setError(uiText("Имя должно содержать от 2 до 160 символов."))} required/></label>
+        <label>{uiText("Название практики ")}<span className={styles.optional}>{uiText("необязательно")}</span>
+          <input value={practice} onChange={e=>{setPractice(e.target.value);setError("")}} autoComplete="organization" minLength={2} maxLength={180} aria-describedby="coach-practice-help" onInvalid={()=>setError(uiText("Название практики должно содержать от 2 до 180 символов или оставьте поле пустым."))} placeholder={uiText("Например, Анна Орлова")}/>
+          <span id="coach-practice-help" className={styles.fieldHelp}>{uiText("Если заполняете: от 2 до 180 символов")}</span>
+        </label>
+      </>}
+      <label>Email<input type="email" value={email} onChange={e=>setEmail(e.target.value)} autoComplete="email" maxLength={320} required/></label>
+      <label>{uiText("Пароль")}<input type="password" value={password} onChange={e=>setPassword(e.target.value)} minLength={mode==="register"?12:undefined} maxLength={256} autoComplete={mode==="register"?"new-password":"current-password"} required/>{mode==="register"&&<span className={styles.fieldHelp}>{uiText("Не менее 12 символов")}</span>}</label>
+      {mode==="login"&&<button className={styles.textButton} type="button" aria-expanded={recoveryOpen} onClick={()=>setRecoveryOpen(value=>!value)}><KeyRound size={15}/> {uiText(" Забыли пароль?")}</button>}
+      {mode==="login"&&recoveryOpen&&<div className={styles.recoveryPanel}><div><h2>{uiText("Восстановление доступа")}</h2><p>{uiText("Пароль хранится в Partner Core. Отправьте запрос в поддержку с email аккаунта. Старый пароль указывать не нужно.")}</p></div><a className={`${styles.button} ${styles.secondary}`} href={recoveryHref}><Mail size={16}/> {uiText(" Написать в поддержку")}</a></div>}
+      {mode==="register"&&<>
+        <label>{uiText("Повторите пароль")}<input type="password" value={passwordRepeat} onChange={e=>setPasswordRepeat(e.target.value)} minLength={12} maxLength={256} autoComplete="new-password" required/></label>
+        <label className={styles.consent}><input type="checkbox" checked={accepted} onChange={e=>setAccepted(e.target.checked)} required/><span>{uiText("Принимаю ")}<Link href="/offer">{uiText("Оферту")}</Link> {uiText(" и ")}<Link href="/privacy">{uiText("Политику конфиденциальности")}</Link></span></label>
+      </>}
+      {error&&<p className={styles.error} role="alert">{error}</p>}
+      <button className={styles.button} disabled={busy||(mode==="register"&&!accepted)}>{mode==="register"?<UserPlus size={17}/>:<LogIn size={17}/>} {busy?uiText("Проверяем..."):mode==="register"?uiText("Создать кабинет"):uiText("Войти")}</button>
+    </form>
+    <p className={styles.authFoot}>{uiText("Учётная запись хранится в Partner Core. ORKEN не хранит пароль коуча.")}</p>
+  </section></main>
 }
 
 function CoachOnboarding({workspace,openTab}:{workspace:CoachWorkspaceResponse;openTab:(tab:Tab)=>void}){

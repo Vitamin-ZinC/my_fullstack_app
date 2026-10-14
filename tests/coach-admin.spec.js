@@ -34,6 +34,40 @@ const snapshot = {
   cancellationPolicy: { hoursBeforeStart: 24, refundPercent: 100 }, publicContent
 };
 
+test("public coach profiles show included services and photos without offering a zero-price checkout", async ({ page }, info) => {
+  const coach = { ...snapshot.profiles[0], status: "APPROVED", acceptingOrders: false,
+    avatarUrl: `${appBase}/coach-avatar-fixture.svg`,
+    services: [
+      { ...snapshot.offers[0], id: "included", status: "APPROVED", paymentModel: "INCLUDED", title: "Поддержка в программе", amount: 0 },
+      { ...snapshot.offers[0], id: "paid", status: "APPROVED", paymentModel: "CLIENT_PAID", title: "Личное ведение" }
+    ], bio: "Работаем над целями и отслеживаем прогресс между встречами." };
+  const requests = [];
+  await page.addInitScript(() => localStorage.setItem("levelup_locale", "ru"));
+  await page.route(`${appBase}/coach-avatar-fixture.svg`, route => route.fulfill({ contentType: "image/svg+xml", body: '<svg xmlns="http://www.w3.org/2000/svg" width="300" height="400"><rect width="300" height="400" fill="#127780"/></svg>' }));
+  await page.route(`${apiBase}/api/coaches**`, route => {
+    requests.push(route.request().url());
+    return fulfillJson(route, new URL(route.request().url()).pathname === "/api/coaches" ? { coaches: [coach], filters: { cities: [coach.city], specializations: coach.specializations } } : { coach, servicesCommerceEnabled: true });
+  });
+  await page.route(`${apiBase}/api/content/*`, route => fulfillJson(route, { value: null }));
+  await page.goto(`${appBase}/coaches`);
+  await expect(page.getByRole("heading", { name: coach.displayName })).toBeVisible();
+  expect(requests.some(url => url.includes("accepting=true"))).toBe(false);
+  await expect(page.getByText("от", { exact: false }).filter({ hasText: /120/ }).first()).toBeVisible();
+  await page.getByRole("link", { name: "Посмотреть профиль" }).click();
+  const included = page.locator("article").filter({ has: page.getByRole("heading", { name: "Поддержка в программе" }) });
+  await expect(included.getByText("Включено в программу коуча", { exact: true })).toBeVisible();
+  await expect(included.locator("button")).toHaveCount(0);
+  const paid = page.locator("article").filter({ has: page.getByRole("heading", { name: "Личное ведение" }) });
+  await expect(paid.getByRole("button", { name: "Запись временно закрыта" })).toBeDisabled();
+  for (const width of [360, 768, 1024, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(page.getByRole("img", { name: coach.displayName })).toBeVisible();
+    expect(await page.getByRole("img", { name: coach.displayName }).evaluate(img => img.complete && img.naturalWidth > 0)).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: info.outputPath(`public-coach-services-${width}.png`), fullPage: true });
+  }
+});
+
 test("coach administration is split into usable sections and saves public content", async ({ page }) => {
   let savedContent = null;
   await moderationFixture(page, structuredClone(snapshot));

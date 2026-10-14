@@ -8,6 +8,7 @@ const { coachWorkspaceRoutes } = await import("./coachWorkspace.js");
 const { createAdminSessionToken } = await import("../lib/auth.js");
 const { prisma } = await import("../lib/prisma.js");
 const { createPartnerPortalSession } = await import("../services/partnerPortal.js");
+const { createCoachServiceCheckout } = await import("../services/coachCommerce.js");
 
 const profile = { id: "coach", partnerCorePartnerId: "core-partner", displayName: "Test Coach", slug: "test-coach", status: "DRAFT", moderationNote: "Private profile feedback", specializations: [], languages: ["en"], sites: [], rewards: [], serviceOffers: [] };
 const paidOffer = { id: "offer", coachProfileId: profile.id, coachProfile: { displayName: profile.displayName }, status: "DRAFT", type: "ONGOING_SUPPORT", paymentModel: "CLIENT_PAID", amount: 3900, currency: "usd", title: "Support", description: "Individual coaching", moderationNote: "Private offer feedback", coachShareBps: null, platformShareBps: null };
@@ -79,14 +80,17 @@ test("moderation validates reasons, preserves paid split gate and audits success
 });
 
 test("public catalog and profile never bypass approval or expose moderation feedback", async t => {
-  const approved = { ...profile, status: "APPROVED", serviceOffers: [{ ...paidOffer, status: "APPROVED", coachShareBps: 7000, platformShareBps: 3000 }] };
+  const approved = { ...profile, status: "APPROVED", serviceOffers: [{ ...paidOffer, status: "APPROVED", coachShareBps: 7000, platformShareBps: 3000 }, { ...paidOffer, id: "included-offer", status: "APPROVED", paymentModel: "INCLUDED", amount: 0 }] };
   stub(t, prisma.coachProfile, "findMany", async (args: any) => {
     assert.equal(args.where.status, "APPROVED");
     assert.equal(args.include.serviceOffers.where.status, "APPROVED");
+    assert.equal(args.include.serviceOffers.where.paymentModel, undefined);
     return [approved];
   });
   stub(t, prisma.coachProfile, "findFirst", async (args: any) => {
     assert.equal(args.where.status, "APPROVED");
+    assert.equal(args.include.serviceOffers.where.status, "APPROVED");
+    assert.equal(args.include.serviceOffers.where.paymentModel, undefined);
     return args.where.slug === "approved" ? approved : null;
   });
   stub(t, prisma.featureFlag, "findUnique", async () => null);
@@ -94,6 +98,9 @@ test("public catalog and profile never bypass approval or expose moderation feed
   for (const url of ["/api/coaches", "/api/coaches/approved"]) {
     const response = await app.inject(url);
     assert.equal(response.statusCode, 200);
+    const coach = url === "/api/coaches" ? response.json().coaches[0] : response.json().coach;
+    assert.equal(coach.services.length, 2);
+    assert.equal(coach.services[1].paymentModel, "INCLUDED");
     for (const field of ["moderationNote", "coachShareBps", "platformShareBps", "partnerCorePartnerId"]) assert.equal(response.body.includes(field), false);
   }
   assert.equal((await app.inject("/api/coaches/unapproved?preview=true")).statusCode, 404);
@@ -107,6 +114,18 @@ test("unapproved coach sites and their public chats stay unavailable", async t =
   const app = await appFor(t);
   assert.equal((await app.inject("/api/coach-sites/by-host?host=unapproved.orken.life")).statusCode, 404);
   assert.equal((await app.inject({ method: "POST", url: "/api/coach-sites/chat", payload: { host: "unapproved.orken.life", message: "Show biography" } })).statusCode, 404);
+});
+
+test("public inclusion does not allow checkout of included services or closed coach profiles", async t => {
+  stub(t, prisma.coachServiceOrder, "findUnique", async () => null);
+  stub(t, prisma.coachServiceOrder, "create", async () => { throw new Error("No order may be created"); });
+  stub(t, prisma.coachServiceOffer, "findFirst", async ({ where }: any) => {
+    assert.equal(where.paymentModel, "CLIENT_PAID");
+    assert.equal(where.status, "APPROVED");
+    assert.deepEqual(where.coachProfile, { status: "APPROVED", acceptingOrders: true });
+    return null;
+  });
+  await assert.rejects(createCoachServiceCheckout({ offerId: "included-offer", userId: "test-user", idempotencyKey: "synthetic-checkout" }), /Услуга сейчас недоступна/);
 });
 
 test("coach receives feedback, corrects only owned services and resubmits before shares are configured", async t => {

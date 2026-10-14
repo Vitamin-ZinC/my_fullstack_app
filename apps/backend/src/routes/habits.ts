@@ -12,7 +12,7 @@ import { askHabitNavigator } from "../services/habitNavigator.js";
 import { getOpenAiClient, hasOpenAiClient } from "../services/openaiClient.js";
 import { getHabitSubscriptionConfig } from "../services/pricing.js";
 import { createDailyHabitRewardIfNeeded } from "../services/habitRewards.js";
-import { advanceCompletedHabitWeeks, capHabitWeekCheckins, HABIT_WEEK_TARGET_CHECKINS } from "../services/habitWeekProgress.js";
+import { advanceCompletedHabitWeeks, capHabitWeekCheckins, HABIT_WEEK_TARGET_CHECKINS, withHabitWeekLock } from "../services/habitWeekProgress.js";
 import { createImageUploadKey, readMediaAssetBuffer, writeUploadBuffer } from "../services/media.js";
 import { validatePhotoBuffer } from "../services/imageValidation.js";
 import { applyPendingReferralBonus } from "../services/partnerCore.js";
@@ -623,14 +623,23 @@ export async function habitsRoutes(app: FastifyInstance) {
 
   app.get("/api/habits/avatar/:key", async (request, reply) => {
     const params = z.object({ key: z.string().min(1).max(120) }).parse(request.params);
-    if (params.key.includes("/") || params.key.includes("..") || !/^avatar-[a-f0-9-]+\.(jpg|png|webp)$/i.test(params.key)) {
+    const coachKey = /^coach-([a-z0-9]{20,40})-[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\.(jpg|png|webp)$/i.exec(params.key);
+    if (!/^avatar-[a-f0-9-]+\.(jpg|png|webp)$/i.test(params.key) && !coachKey) {
       return reply.code(400).send({ error: "Invalid avatar key" });
+    }
+    // Only the explicit profile-avatar reference may use the coach namespace.
+    if (coachKey) {
+      const profile = await prisma.coachProfile.findUnique({ where: { id: coachKey[1] }, select: { avatarUrl: true } });
+      let referenced = false;
+      try { referenced = new URL(profile?.avatarUrl ?? "").pathname === `/api/habits/avatar/${params.key}`; } catch { /* Missing or invalid avatar reference. */ }
+      if (!referenced) return reply.code(404).send({ error: "Avatar not found" });
     }
     const body = await readMediaAssetBuffer(params.key);
     if (!body) return reply.code(404).send({ error: "Avatar not found" });
     const contentType = params.key.endsWith(".png") ? "image/png" : params.key.endsWith(".webp") ? "image/webp" : "image/jpeg";
     return reply
       .header("Cache-Control", "public, max-age=86400")
+      .header("X-Content-Type-Options", "nosniff")
       .type(contentType)
       .send(body);
   });
@@ -866,8 +875,12 @@ export async function habitsRoutes(app: FastifyInstance) {
     const weekReward = getWeekReward(activeEnrollment.checkinsDone, isComplete);
     const weekSummaryData = await buildWeekSummaryDataForProgram(activeEnrollment, completionMode, weekReward, isComplete, request.log, session.locale);
 
-    await prisma.$transaction([
-      prisma.habitWeekSummary.upsert({
+    const advanced = await withHabitWeekLock(body.programId, async (tx) => {
+      const fresh = await tx.habitProgram.findUnique({ where: { id: body.programId }, select: { currentCycle: true, currentWeek: true, status: true } });
+      if (!fresh || fresh.status !== "ACTIVE" || fresh.currentCycle !== snapshot.stats.currentCycle || fresh.currentWeek !== snapshot.stats.currentWeek) return false;
+      const now = new Date();
+      const existingSummary = await tx.habitWeekSummary.findUnique({ where: { programId_enrollmentId: { programId: body.programId, enrollmentId: activeEnrollment.id } }, select: { completionMode: true } });
+      await tx.habitWeekSummary.upsert({
         where: { programId_enrollmentId: { programId: body.programId, enrollmentId: activeEnrollment.id } },
         update: weekSummaryData,
         create: {
@@ -875,34 +888,36 @@ export async function habitsRoutes(app: FastifyInstance) {
           enrollmentId: activeEnrollment.id,
           ...weekSummaryData
         }
-      }),
-      prisma.habitEnrollment.update({
+      });
+      await tx.habitEnrollment.update({
         where: { id: activeEnrollment.id },
-        data: { status: "COMPLETED", completedAt: new Date() }
-      }),
-      prisma.habitProgram.update({
+        data: { status: "COMPLETED", completedAt: now }
+      });
+      await tx.habitProgram.update({
         where: { id: body.programId },
         data: {
           currentCycle: nextCycle,
           currentWeek: nextWeek,
           status: isComplete ? "COMPLETED" : "ACTIVE"
         }
-      }),
-      ...(isComplete ? [] : [
-        prisma.habitEnrollment.updateMany({
+      });
+      if (!isComplete) {
+        await tx.habitEnrollment.updateMany({
           where: { programId: body.programId, sortOrder: nextSortOrder },
-          data: { status: "ACTIVE", startedAt: new Date() }
-        })
-      ]),
-      prisma.habitRewardEvent.create({
+          data: { status: "ACTIVE", startedAt: now }
+        });
+      }
+      if (!existingSummary || existingSummary.completionMode === "FROZEN") await tx.habitRewardEvent.create({
         data: {
           programId: body.programId,
           type: isComplete ? "program_completed" : weekReward.type,
           label: isComplete ? `Годовая программа завершена · ${weekReward.label}` : weekReward.label,
           xp: weekReward.xp
         }
-      })
-    ]);
+      });
+      return true;
+    });
+    if (!advanced) return buildProgramResponse(await loadProgram(body.programId));
 
     await prisma.analyticsEvent.create({
       data: {
@@ -937,8 +952,11 @@ export async function habitsRoutes(app: FastifyInstance) {
     if (!activeEnrollment) return reply.code(404).send({ error: "Active habit not found" });
     const weekSummaryData = await buildWeekSummaryDataForProgram(activeEnrollment, "FROZEN", getFrozenWeekReward(), false, request.log, session.locale);
 
-    await prisma.$transaction([
-      prisma.habitWeekSummary.upsert({
+    const frozen = await withHabitWeekLock(body.programId, async (tx) => {
+      const fresh = await tx.habitProgram.findUnique({ where: { id: body.programId }, select: { weeklyFreezes: true, currentCycle: true, currentWeek: true, status: true } });
+      if (!fresh || fresh.status !== "ACTIVE" || fresh.currentCycle !== snapshot.stats.currentCycle || fresh.currentWeek !== snapshot.stats.currentWeek) return "stale";
+      if (fresh.weeklyFreezes <= 0) return "unavailable";
+      await tx.habitWeekSummary.upsert({
         where: { programId_enrollmentId: { programId: body.programId, enrollmentId: activeEnrollment.id } },
         update: weekSummaryData,
         create: {
@@ -946,20 +964,24 @@ export async function habitsRoutes(app: FastifyInstance) {
           enrollmentId: activeEnrollment.id,
           ...weekSummaryData
         }
-      }),
-      prisma.habitProgram.update({
+      });
+      await tx.habitEnrollment.update({ where: { id: activeEnrollment.id }, data: { startedAt: new Date() } });
+      await tx.habitProgram.update({
         where: { id: body.programId },
         data: { weeklyFreezes: { decrement: 1 } }
-      }),
-      prisma.habitRewardEvent.create({
+      });
+      await tx.habitRewardEvent.create({
         data: {
           programId: body.programId,
           type: "weekly_freeze_used",
           label: "Неделя поставлена на паузу без XP",
           xp: 0
         }
-      })
-    ]);
+      });
+      return "frozen";
+    });
+    if (frozen === "unavailable") return reply.code(409).send({ error: "No freezes left" });
+    if (frozen === "stale") return buildProgramResponse(await loadProgram(body.programId));
 
     await prisma.analyticsEvent.create({
       data: {
@@ -1185,6 +1207,7 @@ async function ensureProgramRuntimeArtifacts(programId: string) {
   if (missingDayIndexes.length === 0) return program;
 
   await prisma.habitDailyTask.createMany({
+    skipDuplicates: true,
     data: missingDayIndexes.map((dayIndex) => ({
       programId,
       enrollmentId: activeEnrollment.id,

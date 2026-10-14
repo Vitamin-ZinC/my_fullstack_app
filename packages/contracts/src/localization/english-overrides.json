@@ -67,5 +67,9 @@
   "Profession / Профессия": "Profession",
   "🔍 Твоя конфигурация ИКИГАЙ": "🔍 Your Ikigai configuration",
   "Сон как фундамент": "Sleep as a foundation",
-  "Что сделать: {v0} Время: {v1} мин. Если совсем нет сил: {v2} за 30 секунд.": "What to do: {v0} Time: {v1} min. If you have no energy: {v2} for 30 seconds."
+  "Что сделать: {v0} Время: {v1} мин. Если совсем нет сил: {v2} за 30 секунд.": "What to do: {v0} Time: {v1} min. If you have no energy: {v2} for 30 seconds.",
+  "Включено в программу коуча": "Included in the coach's program",
+  "Услуги могут входить в программу коуча или оплачиваться отдельно через ORKEN.": "Services may be included in the coach's program or purchased separately through ORKEN.",
+  "Доступно подключённым клиентам в рамках программы. Условия участия уточните у коуча.": "Available to connected clients as part of the program. Ask the coach about participation.",
+  "Прошло семь дней. Отмечено {v0}/{v1} дней — {v2}. Следующая привычка уже открыта.": "Seven days have passed. You checked in on {v0}/{v1} days: {v2}. Your next habit is now available."
 }

@@ -909,7 +909,7 @@ function registerPublicCoachRoutes(app: FastifyInstance) {
     const profiles = await prisma.coachProfile.findMany({
       where: { status: "APPROVED", ...(query.city ? { city: query.city } : {}), ...(query.accepting === undefined ? {} : { acceptingOrders: query.accepting }) },
       orderBy: [{ featured: "desc" }, { publicSince: "desc" }],
-      include: { calendlyConnection: true, serviceOffers: { where: { status: "APPROVED", paymentModel: "CLIENT_PAID" }, orderBy: { amount: "asc" } }, sites: { where: { status: { in: ["ACTIVE", "GRACE"] } }, include: { plan: true }, take: 1 } }
+      include: { calendlyConnection: true, serviceOffers: { where: { status: "APPROVED" }, orderBy: { amount: "asc" } }, sites: { where: { status: { in: ["ACTIVE", "GRACE"] } }, include: { plan: true }, take: 1 } }
     });
     const filtered = profiles.filter((profile) => (!query.specialization || (profile.specializations as any[] | null)?.includes(query.specialization)) && (!query.language || (profile.languages as any[] | null)?.includes(query.language)));
     const allSpecializations = [...new Set(profiles.flatMap((profile) => Array.isArray(profile.specializations) ? profile.specializations as string[] : []))].sort();
@@ -919,7 +919,7 @@ function registerPublicCoachRoutes(app: FastifyInstance) {
 
   app.get("/api/coaches/:slug", async (request, reply) => {
     const { slug } = z.object({ slug: z.string().min(1).max(100) }).parse(request.params);
-    const profile = await prisma.coachProfile.findFirst({ where: { slug, status: "APPROVED" }, include: { calendlyConnection: true, serviceOffers: { where: { status: "APPROVED", paymentModel: "CLIENT_PAID" }, orderBy: { amount: "asc" } }, rewards: { where: { status: "APPROVED" } }, sites: { where: { status: { in: ["ACTIVE", "GRACE"] } }, include: { plan: true }, take: 1 } } });
+    const profile = await prisma.coachProfile.findFirst({ where: { slug, status: "APPROVED" }, include: { calendlyConnection: true, serviceOffers: { where: { status: "APPROVED" }, orderBy: { amount: "asc" } }, rewards: { where: { status: "APPROVED" } }, sites: { where: { status: { in: ["ACTIVE", "GRACE"] } }, include: { plan: true }, take: 1 } } });
     if (!profile) return reply.code(404).send({ error: "Коуч не найден" });
     return { coach: { ...serializeCoachProfile(profile), services: profile.serviceOffers.map(offer => serializeCoachOffer(offer)), rewards: profile.rewards.map(serializeReward), site: profile.sites[0] ? serializeSite(profile.sites[0]) : null, siteUrl: profile.sites[0] ? `https://${profile.sites[0].customDomain || `${profile.sites[0].slug}.${env.COACH_SITE_BASE_DOMAIN}`}` : null, telegramBotUsername: env.TELEGRAM_BOT_USERNAME?.replace(/^@+/, "") ?? null }, servicesCommerceEnabled: await coachFeatureEnabled("coach_services_commerce") };
   });
@@ -927,7 +927,7 @@ function registerPublicCoachRoutes(app: FastifyInstance) {
   app.get("/api/coach-sites/by-host", async (request, reply) => {
     const host = z.object({ host: z.string().trim().min(3).max(255) }).parse(request.query ?? {}).host.toLowerCase().split(":")[0];
     const slug = host.endsWith(`.${env.COACH_SITE_BASE_DOMAIN}`) ? host.slice(0, -(`.${env.COACH_SITE_BASE_DOMAIN}`.length)) : null;
-    const site = await prisma.coachSite.findFirst({ where: { status: { in: ["ACTIVE", "GRACE"] }, coachProfile: { status: "APPROVED" }, OR: [{ customDomain: host, customDomainStatus: "VERIFIED" }, ...(slug ? [{ slug }] : [])] }, include: { plan: true, coachProfile: { include: { serviceOffers: { where: { status: "APPROVED", paymentModel: "CLIENT_PAID" } } } } } });
+    const site = await prisma.coachSite.findFirst({ where: { status: { in: ["ACTIVE", "GRACE"] }, coachProfile: { status: "APPROVED" }, OR: [{ customDomain: host, customDomainStatus: "VERIFIED" }, ...(slug ? [{ slug }] : [])] }, include: { plan: true, coachProfile: { include: { serviceOffers: { where: { status: "APPROVED" } } } } } });
     if (!site) return reply.code(404).send({ error: "Сайт коуча не найден" });
     return { site: serializeSite(site), coach: { ...serializeCoachProfile(site.coachProfile), services: site.coachProfile.serviceOffers.map(offer => serializeCoachOffer(offer)) }, content: site.content ?? {}, theme: site.theme ?? {}, botUsername: env.TELEGRAM_BOT_USERNAME?.replace(/^@+/, "") ?? null };
   });

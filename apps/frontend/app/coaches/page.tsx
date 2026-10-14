@@ -19,7 +19,7 @@ export default function CoachesPage() {
   const [specialization, setSpecialization] = useState("");
 
   useEffect(() => {
-    coachCatalogApi.list({ accepting: true }).then(setData).catch((reason) => setError(reason instanceof Error ? reason.message : uiText("Не удалось загрузить каталог"))).finally(() => setLoading(false));
+    coachCatalogApi.list({}).then(setData).catch((reason) => setError(reason instanceof Error ? reason.message : uiText("Не удалось загрузить каталог"))).finally(() => setLoading(false));
   }, []);
 
   const coaches = useMemo(() => (data?.coaches ?? []).filter((coach) => {
@@ -54,7 +54,8 @@ export default function CoachesPage() {
               <div className={styles.cardTitle}><div><h2>{coach.displayName}</h2><p>{coach.headline || uiText("Коуч ORKEN.LIFE")}</p></div>{coach.featured && <span><Check size={14} /> {uiText(" Рекомендуем")}</span>}</div>
               <div className={styles.meta}>{coach.city && <span><MapPin size={15} />{coach.city}</span>}<span><BriefcaseBusiness size={15} />{coach.services.length} {serviceWord(coach.services.length)}</span></div>
               <div className={styles.tags}>{coach.specializations.slice(0, 4).map((item) => <span key={item}>{item}</span>)}</div>
-              {coach.services[0] && <p className={styles.price}>{uiText("от ")}{money(coach.services[0].amount, coach.services[0].currency)}</p>}
+              {coach.services.length > 0 && <p className={styles.price}>{servicePrice(coach.services)}</p>}
+              {!coach.acceptingOrders && <p>{uiText("Запись временно закрыта")}</p>}
               <Link className={styles.primary} href={`/coaches/${encodeURIComponent(coach.slug)}`}>{uiText("Посмотреть профиль ")}<ArrowRight size={18} /></Link>
             </div>
           </article>
@@ -67,6 +68,11 @@ export default function CoachesPage() {
 
 function money(amount: number, currency: string) {
   return new Intl.NumberFormat(getFormatLocale(), { style: "currency", currency: currency.toUpperCase(), maximumFractionDigits: 0 }).format(amount / 100);
+}
+
+function servicePrice(services: CoachCatalogResponse["coaches"][number]["services"]) {
+  const paid = services.filter((service) => service.paymentModel === "CLIENT_PAID").sort((a, b) => a.amount - b.amount)[0];
+  return paid ? `${uiText("от ")}${money(paid.amount, paid.currency)}` : uiText("Включено в программу коуча");
 }
 
 function serviceWord(count: number) {

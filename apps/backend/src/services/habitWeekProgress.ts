@@ -1,3 +1,4 @@
+import type { Prisma, PrismaClient } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import { HABIT_PROGRAM_TOTAL_WEEKS, HABIT_WEEKS_PER_CYCLE } from "./habitCatalog.js";
 
@@ -13,6 +14,7 @@ type AdvanceContext = {
   sessionId?: string | null;
   userId?: string | null;
   log?: LogLike;
+  now?: Date;
 };
 
 export function capHabitWeekCheckins(value: unknown) {
@@ -21,9 +23,28 @@ export function capHabitWeekCheckins(value: unknown) {
   return Math.max(0, Math.min(HABIT_WEEK_TARGET_CHECKINS, Math.floor(count)));
 }
 
-export function shouldAutoAdvanceHabitWeek(checkinsDone: unknown) {
-  const count = Number(checkinsDone);
-  return Number.isFinite(count) && count >= HABIT_WEEK_TARGET_CHECKINS;
+export function shouldAutoAdvanceHabitWeek(startedAt: Date, now = new Date(), timezone = "Europe/Moscow") {
+  if (!Number.isFinite(startedAt.getTime()) || !Number.isFinite(now.getTime()) || now < startedAt) return false;
+  return calendarDay(now, timezone) - calendarDay(startedAt, timezone) >= HABIT_WEEK_TARGET_CHECKINS;
+}
+
+function calendarDay(date: Date, timezone: string): number {
+  let formatter: Intl.DateTimeFormat;
+  try {
+    formatter = new Intl.DateTimeFormat("en-US", { timeZone: timezone, year: "numeric", month: "numeric", day: "numeric" });
+  } catch {
+    formatter = new Intl.DateTimeFormat("en-US", { timeZone: "Europe/Moscow", year: "numeric", month: "numeric", day: "numeric" });
+  }
+  const parts = formatter.formatToParts(date);
+  const part = (type: string) => Number(parts.find((item) => item.type === type)?.value);
+  return Date.UTC(part("year"), part("month") - 1, part("day")) / 86_400_000;
+}
+
+export function withHabitWeekLock<T>(programId: string, run: (tx: Prisma.TransactionClient) => Promise<T>, db: Pick<PrismaClient, "$transaction"> = prisma) {
+  return db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtextextended(${`habit-week:${programId}`}, 0))`;
+    return run(tx);
+  }, { maxWait: 10_000, timeout: 15_000 });
 }
 
 export function getHabitCurrentSortOrder(input: {
@@ -48,11 +69,12 @@ export function getNextHabitPosition(currentSortOrder: number, totalWeeks: numbe
   };
 }
 
-export async function advanceCompletedHabitWeeks(programId: string, context: AdvanceContext = {}) {
-  let advanced = 0;
-  for (let guard = 0; guard < HABIT_PROGRAM_TOTAL_WEEKS; guard += 1) {
-    const program = await loadProgressProgram(programId);
-    if (!program || program.status !== "ACTIVE") break;
+export async function advanceCompletedHabitWeeks(programId: string, context: AdvanceContext = {}, db: Pick<PrismaClient, "$transaction" | "analyticsEvent"> = prisma) {
+  const now = context.now ?? new Date();
+  // One elapsed week opens one fresh seven-day period, even after a long absence.
+  const event = await withHabitWeekLock(programId, async (tx) => {
+    const program = await loadProgressProgram(tx, programId);
+    if (!program || program.status !== "ACTIVE") return null;
 
     const currentSortOrder = getHabitCurrentSortOrder({
       currentCycle: program.currentCycle,
@@ -63,23 +85,32 @@ export async function advanceCompletedHabitWeeks(programId: string, context: Adv
       ?? program.enrollments.find((enrollment) => enrollment.status === "ACTIVE")
       ?? program.enrollments[0]
       ?? null;
-    if (!activeEnrollment) break;
+    if (!activeEnrollment || activeEnrollment.status === "COMPLETED") return null;
+    if (!shouldAutoAdvanceHabitWeek(activeEnrollment.startedAt, now, program.notificationPreference?.timezone)) return null;
 
     const rawCheckinsDone = activeEnrollment.checkins.filter((checkin) => checkin.completed).length;
-    if (!shouldAutoAdvanceHabitWeek(rawCheckinsDone)) break;
-
-    await closeHabitWeek(program, activeEnrollment, rawCheckinsDone, context);
-    advanced += 1;
+    return closeHabitWeek(tx, program, activeEnrollment, rawCheckinsDone, now);
+  }, db);
+  if (event) {
+    await db.analyticsEvent.create({
+      data: {
+        name: event.isComplete ? "habit_program_auto_completed" : "habit_week_auto_advanced",
+        locale: context.locale ?? "ru",
+        sessionId: context.sessionId ?? event.sessionId,
+        userId: context.userId ?? event.userId,
+        properties: { ...event.properties, source: context.source ?? "auto" }
+      }
+    }).catch((error) => context.log?.warn?.({ error: error instanceof Error ? error.message.slice(0, 240) : "Analytics failed", programId }, "Habit auto-advance analytics failed"));
   }
-
-  return { advanced };
+  return { advanced: event ? 1 : 0 };
 }
 
 async function closeHabitWeek(
+  tx: Prisma.TransactionClient,
   program: Awaited<ReturnType<typeof loadProgressProgram>>,
   activeEnrollment: NonNullable<Awaited<ReturnType<typeof loadProgressProgram>>>["enrollments"][number],
   rawCheckinsDone: number,
-  context: AdvanceContext
+  now: Date
 ) {
   if (!program) return;
   const currentSortOrder = getHabitCurrentSortOrder({
@@ -89,16 +120,15 @@ async function closeHabitWeek(
   });
   const position = getNextHabitPosition(currentSortOrder, Math.max(program.enrollments.length, HABIT_PROGRAM_TOTAL_WEEKS));
   const checkinsDone = capHabitWeekCheckins(rawCheckinsDone);
-  const weekReward = weekRewardFor(checkinsDone, position.isComplete);
-  const now = new Date();
-  const existingSummary = await prisma.habitWeekSummary.findUnique({
+  if (!position.isComplete && !program.enrollments.some((item) => item.sortOrder === position.nextSortOrder)) return null;
+  const weekReward = weekRewardFor(checkinsDone);
+  const existingSummary = await tx.habitWeekSummary.findUnique({
     where: { programId_enrollmentId: { programId: program.id, enrollmentId: activeEnrollment.id } },
-    select: { id: true }
+    select: { id: true, completionMode: true }
   });
 
   const summaryData = buildAutoWeekSummaryData(activeEnrollment, checkinsDone, weekReward, position.isComplete);
-  const transaction = [
-    prisma.habitWeekSummary.upsert({
+  await tx.habitWeekSummary.upsert({
       where: { programId_enrollmentId: { programId: program.id, enrollmentId: activeEnrollment.id } },
       update: summaryData,
       create: {
@@ -106,60 +136,46 @@ async function closeHabitWeek(
         enrollmentId: activeEnrollment.id,
         ...summaryData
       }
-    }),
-    prisma.habitEnrollment.update({
+    });
+  await tx.habitEnrollment.update({
       where: { id: activeEnrollment.id },
       data: { status: "COMPLETED", completedAt: now }
-    }),
-    prisma.habitProgram.update({
+    });
+  await tx.habitProgram.update({
       where: { id: program.id },
       data: {
         currentCycle: position.nextCycle,
         currentWeek: position.nextWeek,
         status: position.isComplete ? "COMPLETED" : "ACTIVE"
       }
-    }),
-    ...(position.isComplete ? [] : [
-      prisma.habitEnrollment.updateMany({
+    });
+  if (!position.isComplete) {
+    await tx.habitEnrollment.updateMany({
         where: { programId: program.id, sortOrder: position.nextSortOrder },
         data: { status: "ACTIVE", startedAt: now }
-      })
-    ]),
-    ...(existingSummary ? [] : [
-      prisma.habitRewardEvent.create({
+      });
+  }
+  if (!existingSummary || existingSummary.completionMode === "FROZEN") {
+    await tx.habitRewardEvent.create({
         data: {
           programId: program.id,
           type: position.isComplete ? "program_completed" : weekReward.type,
           label: position.isComplete ? `Годовая программа завершена · ${weekReward.label}` : weekReward.label,
           xp: weekReward.xp
         }
-      })
-    ])
-  ];
-
-  await prisma.$transaction(transaction);
-  await prisma.analyticsEvent.create({
-    data: {
-      name: position.isComplete ? "habit_program_auto_completed" : "habit_week_auto_advanced",
-      locale: context.locale ?? "ru",
-      sessionId: context.sessionId ?? program.sessionId,
-      userId: context.userId ?? program.userId,
-      properties: {
+      });
+  }
+  return {
+    isComplete: position.isComplete, sessionId: program.sessionId, userId: program.userId,
+    properties: {
         programId: program.id,
         enrollmentId: activeEnrollment.id,
         currentSortOrder,
         nextSortOrder: position.nextSortOrder,
         checkinsDone,
-        rawCheckinsDone,
-        source: context.source ?? "auto"
+        rawCheckinsDone
       }
-    }
-  }).catch((error) => {
-    context.log?.warn?.({
-      error: error instanceof Error ? error.message.slice(0, 240) : String(error).slice(0, 240),
-      programId: program.id
-    }, "Habit auto-advance analytics failed");
-  });
+  };
 }
 
 function buildAutoWeekSummaryData(
@@ -177,19 +193,19 @@ function buildAutoWeekSummaryData(
     cycle: Math.ceil(enrollment.sortOrder / HABIT_WEEKS_PER_CYCLE),
     week: enrollment.week,
     checkinsDone,
-    completionMode: "FULL",
+    completionMode: checkinsDone >= HABIT_WEEK_TARGET_CHECKINS ? "FULL" : "SOFT",
     summary: `Неделя закрыта автоматически: "${enrollment.title}". Фокус недели: ${enrollment.focus}. Зафиксировано ${checkinsDone}/${HABIT_WEEK_TARGET_CHECKINS} отметок, прогресс недели ${reward.percent}%.`,
     pingviFeedback: isProgramComplete
       ? "Маршрут завершён. Важно не начинать новый рывок сразу, а посмотреть, какие привычки реально стали частью твоего ритма."
-      : `Неделя закрыта на 100% — ${reward.label}. Следующая привычка уже открыта, можно двигаться дальше без ручного переключения.`,
+      : `Прошло семь дней. Отмечено ${checkinsDone}/${HABIT_WEEK_TARGET_CHECKINS} дней — ${reward.label}. Следующая привычка уже открыта.`,
     rewardLabel: isProgramComplete ? `Маршрут завершён · ${reward.label}` : reward.label,
     xpAwarded: reward.xp
   };
 }
 
-function weekRewardFor(checkinsDone: number, isProgramComplete = false) {
+function weekRewardFor(checkinsDone: number) {
   const percent = Math.min(100, Math.max(0, Math.round((checkinsDone / HABIT_WEEK_TARGET_CHECKINS) * 100)));
-  if (isProgramComplete || percent >= 100) {
+  if (percent >= 100) {
     return {
       type: "week_gold_chest",
       label: "Золотой сундук — идеальная неделя",
@@ -213,10 +229,11 @@ function weekRewardFor(checkinsDone: number, isProgramComplete = false) {
   };
 }
 
-function loadProgressProgram(programId: string) {
-  return prisma.habitProgram.findUnique({
+function loadProgressProgram(tx: Prisma.TransactionClient, programId: string) {
+  return tx.habitProgram.findUnique({
     where: { id: programId },
     include: {
+      notificationPreference: { select: { timezone: true } },
       enrollments: {
         orderBy: { sortOrder: "asc" },
         include: {

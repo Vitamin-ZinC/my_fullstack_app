@@ -4,6 +4,7 @@ import test from "node:test";
 import { PrismaClient, type Prisma } from "@prisma/client";
 import { ensureHabitProgram } from "./habitProgramIdentity.js";
 import { recoverHabitPrograms } from "./habitProgramRecovery.js";
+import { advanceCompletedHabitWeeks } from "./habitWeekProgress.js";
 
 const url = process.env.HABIT_PROGRAM_TEST_DATABASE_URL;
 
@@ -26,6 +27,37 @@ async function fixtures(tx: Prisma.TransactionClient) {
   const enrollment = { habitDefinitionId: definition.id, title: "Test habit", focus: "Test", essence: "Test", practice: "Test", why: "Test", sortOrder: 1 };
   return { owner: { id: session.id, userId: null }, enrollment };
 }
+
+test("PostgreSQL: calendar expiry retains history and awards a partial-week bonus once", { skip: !url }, async () => {
+  await withRollback(async tx => {
+    const { owner, enrollment } = await fixtures(tx);
+    const program = await tx.habitProgram.create({ data: {
+      sessionId: owner.id, title: "Rollback calendar test", source: "manual-start", subscriptionStatus: "ACTIVE",
+      enrollments: { create: Array.from({ length: 48 }, (_, index) => ({ ...enrollment, sortOrder: index + 1, week: (index % 12) + 1, startedAt: new Date("2026-07-01") })) },
+      rewards: { create: [{ type: "test", label: "Retained XP", xp: 540 }] },
+      insights: { create: [{ text: "Retained insight" }] }, notificationPreference: { create: { timezone: "Europe/Moscow" } }
+    }, include: { enrollments: { orderBy: { sortOrder: "asc" } } } });
+    for (let day = 1; day <= 5; day++) await tx.habitCheckin.create({ data: { programId: program.id, enrollmentId: program.enrollments[0].id, date: new Date(`2026-07-0${day}`), completed: true, note: "Retained note" } });
+    const db = { $transaction: (run: (tx: Prisma.TransactionClient) => unknown) => run(tx), analyticsEvent: tx.analyticsEvent } as unknown as Pick<PrismaClient, "$transaction" | "analyticsEvent">;
+    const now = new Date("2026-10-08T09:00:00Z");
+    assert.equal((await advanceCompletedHabitWeeks(program.id, { now, source: "postgres-test" }, db)).advanced, 1);
+    assert.equal((await advanceCompletedHabitWeeks(program.id, { now, source: "telegram" }, db)).advanced, 0);
+    const persisted = await tx.habitProgram.findUniqueOrThrow({ where: { id: program.id }, include: { enrollments: { orderBy: { sortOrder: "asc" } }, checkins: true, insights: true, rewards: true, weekSummaries: true } });
+    assert.equal(persisted.currentWeek, 2);
+    assert.equal(persisted.subscriptionStatus, "ACTIVE");
+    assert.equal(persisted.enrollments[0].status, "COMPLETED");
+    assert.equal(persisted.enrollments.filter(item => item.status === "COMPLETED").length, 1);
+    assert.equal(persisted.enrollments[1].startedAt.getTime(), now.getTime());
+    assert.equal(persisted.checkins.length, 5);
+    assert.equal(persisted.checkins.every(item => item.note === "Retained note"), true);
+    assert.equal(persisted.insights[0].text, "Retained insight");
+    assert.equal(persisted.rewards.reduce((sum, item) => sum + item.xp, 0), 560);
+    assert.equal(persisted.weekSummaries.length, 1);
+    assert.equal(persisted.weekSummaries[0].completionMode, "SOFT");
+    assert.equal(persisted.weekSummaries[0].checkinsDone, 5);
+    assert.equal(await tx.analyticsEvent.count({ where: { sessionId: owner.id, name: "habit_week_auto_advanced" } }), 1);
+  });
+});
 
 test("PostgreSQL: repeated diagnosis preserves persisted progress and report history", { skip: !url }, async () => {
   await withRollback(async (tx) => {

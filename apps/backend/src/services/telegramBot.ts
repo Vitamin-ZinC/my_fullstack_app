@@ -254,14 +254,14 @@ async function processTelegramMessage(message: TelegramMessage) {
 async function showCoachInTelegram(chatId: string, slug: string) {
   const coach = await prisma.coachProfile.findFirst({
     where: { slug, status: "APPROVED" },
-    include: { serviceOffers: { where: { status: "APPROVED", paymentModel: "CLIENT_PAID" }, orderBy: { amount: "asc" }, take: 8 } }
+    include: { serviceOffers: { where: { status: "APPROVED" }, orderBy: { amount: "asc" }, take: 8 } }
   });
   if (!coach) {
     await sendTelegramMessage(chatId, "Профиль коуча не найден или ещё проходит модерацию.");
     return { ok: true };
   }
   const profileUrl = `${env.APP_ORIGIN.replace(/\/$/, "")}/coaches/${encodeURIComponent(coach.slug)}`;
-  const services = coach.serviceOffers.map((offer) => `${offer.type === "CONSULTATION" ? "Консультация" : "Ведение"}: ${offer.title} — ${formatTelegramMoney(offer.amount, offer.currency)}`);
+  const services = coach.serviceOffers.map((offer) => `${offer.type === "CONSULTATION" ? "Консультация" : "Ведение"}: ${offer.title} — ${offer.paymentModel === "INCLUDED" ? "включено в программу коуча" : formatTelegramMoney(offer.amount, offer.currency)}`);
   await sendTelegramMessage(chatId, [
     coach.displayName,
     coach.headline || "Персональное сопровождение в ORKEN.LIFE",
@@ -355,7 +355,7 @@ async function disableTelegram(accountId: string) {
   }
 }
 
-async function findProgramForAccount(account: { userId?: string | null; sessionId?: string | null }) {
+async function findProgramForAccount(account: { userId?: string | null; sessionId?: string | null }, now = new Date()) {
   const ownership = [
     ...(account.userId ? [{ userId: account.userId }] : []),
     ...(account.sessionId ? [{ sessionId: account.sessionId }] : [])
@@ -381,6 +381,7 @@ async function findProgramForAccount(account: { userId?: string | null; sessionI
   if (!program) return null;
   const result = await advanceCompletedHabitWeeks(program.id, {
     source: "telegram",
+    now,
     locale: "ru",
     userId: account.userId,
     sessionId: account.sessionId
@@ -631,9 +632,11 @@ export async function sendDueTelegramReminders(now = new Date()) {
     });
     if (!account) continue;
 
-    const enrollment = activeEnrollment(preference.program);
+    const program = await findProgramForAccount(account, now);
+    if (!program || program.id !== preference.program.id) continue;
+    const enrollment = activeEnrollment(program);
     const task = nextTask(enrollment);
-    const metric = preference.program.dailyMetrics[0];
+    const metric = program.dailyMetrics[0];
     const settings = await getTelegramPolicySettings();
     const text = renderTelegramTemplate(settings.reminderTemplate, {
       habitTitle: enrollment ? `• ${enrollment.title}` : "Открой кабинет и выбери мягкий шаг.",

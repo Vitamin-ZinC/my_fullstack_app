@@ -622,7 +622,7 @@ export type PartnerPortalLedgerResponse = Record<string, unknown>;
 export type PartnerPortalPayoutsResponse = Record<string, unknown>;
 
 export type CoachProfileStatus = "DRAFT" | "PENDING_REVIEW" | "APPROVED" | "REJECTED" | "SUSPENDED";
-export type CoachClientFunding = "COACH_PAID" | "CLIENT_PAID";
+export type CoachClientFunding = "COACH_PAID" | "CLIENT_PAID" | "SELF_FUNDED";
 export type CoachRelationshipStatus = "PENDING" | "ACTIVE" | "PAUSED" | "ENDED";
 export type CoachServiceType = "ONGOING_SUPPORT" | "CONSULTATION";
 export type CoachServicePaymentModel = "INCLUDED" | "CLIENT_PAID";
@@ -810,6 +810,7 @@ export type CoachSubscriptionSummary = {
 };
 
 export type CoachWorkspaceResponse = {
+  connectionRequests?: CoachConnectionRequestSummary[];
   profile: CoachProfileSummary;
   plans: CoachPlanSummary[];
   subscription?: CoachSubscriptionSummary | null;
@@ -911,6 +912,7 @@ export type HabitProgressResponse = {
 };
 
 export type HabitCoachingHubResponse = {
+  connectionRequests?: CoachConnectionRequestSummary[];
   relationships: Array<{
     coach: CoachProfileSummary;
     relationshipId: string;
@@ -938,6 +940,20 @@ export type HabitCoachingHubResponse = {
     scheduledFor?: string | null;
     appointment?: CoachAppointmentSummary | null;
   }>;
+};
+
+export type CoachConnectionRequestSummary = {
+  id: string;
+  coachProfileId: string;
+  coachName: string;
+  coachSlug: string;
+  status: "PENDING" | "ACCEPTED" | "DECLINED" | "CANCELLED";
+  message: string | null;
+  decisionNote: string | null;
+  relationshipId: string | null;
+  createdAt: string;
+  decidedAt: string | null;
+  client?: { name: string | null; email: string };
 };
 
 export type AdminCoachPlatformSnapshot = {
@@ -1495,3 +1511,20 @@ export type TelegramCommunityChatUpdate = Partial<Pick<AdminTelegramCommunityCha
   | "quietHoursEnd"
 >>;
 export { translateSystemText, translateGeneratedSystemText, localizeStaticText, normalizeUiLocale, type UiLocale } from "#localization";
+
+export function safeAccountReturnPath(value: string | null | undefined): string {
+  if (!value || value.length > 600 || /[\\\r\n]/.test(value)) return "/account";
+  try {
+    const url = new URL(value, "https://orken.life");
+    if (!value.startsWith("/") || value.startsWith("//") || url.origin !== "https://orken.life") return "/account";
+    if (url.pathname === "/habits/coaching") {
+      const query = new URLSearchParams();
+      const coach = url.searchParams.get("coach");
+      if (coach && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(coach) && coach.length <= 80) query.set("coach", coach);
+      const invite = url.searchParams.get("coach_invite");
+      if (invite && /^[a-zA-Z0-9_-]{20,512}$/.test(invite)) query.set("coach_invite", invite);
+      return `/habits/coaching${query.size ? `?${query}` : ""}`;
+    }
+    return url.pathname === "/habits" ? "/habits" : "/account";
+  } catch { return "/account"; }
+}

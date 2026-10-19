@@ -4,7 +4,7 @@ import { uiText, getFormatLocale, useUiLocale } from "@/lib/locale";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, BriefcaseBusiness, Check, MapPin, Search, SlidersHorizontal, UserRound, Users } from "lucide-react";
+import { ArrowRight, BriefcaseBusiness, Check, MapPin, Search, SlidersHorizontal, UserPlus, UserRound, Users } from "lucide-react";
 import type { CoachCatalogResponse } from "@levelup/contracts";
 import { coachCatalogApi } from "@/lib/api";
 import styles from "./catalog.module.css";
@@ -57,6 +57,7 @@ export default function CoachesPage() {
               {coach.services.length > 0 && <p className={styles.price}>{servicePrice(coach.services)}</p>}
               {!coach.acceptingOrders && <p>{uiText("Запись временно закрыта")}</p>}
               <Link className={styles.primary} href={`/coaches/${encodeURIComponent(coach.slug)}`}>{uiText("Посмотреть профиль ")}<ArrowRight size={18} /></Link>
+              {coach.acceptingOrders && <Link className={styles.connect} href={`/habits/coaching?coach=${encodeURIComponent(coach.slug)}`}><UserPlus size={18}/>{uiText("Подключиться")}</Link>}
             </div>
           </article>
         ))}

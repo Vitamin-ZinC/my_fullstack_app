@@ -33,6 +33,7 @@ model User {
   partnerOfferRedemptions PartnerOfferRedemption[]
   walletTransactions InternalWalletTransaction[]
   coachRelationships CoachClientRelationship[]
+  coachConnectionRequests CoachConnectionRequest[]
   coachServiceOrders CoachServiceOrder[]
   coachMessages CoachMessage[] @relation("CoachMessageUser")
   coachAssignments CoachAssignment[] @relation("CoachAssignmentUser")
@@ -275,6 +276,7 @@ model CoachProfile {
   subscriptions        CoachSubscription[]
   invites              CoachClientInvite[]
   clients              CoachClientRelationship[]
+  connectionRequests   CoachConnectionRequest[]
   serviceOffers        CoachServiceOffer[]
   messages             CoachMessage[]
   assignments          CoachAssignment[]
@@ -408,10 +410,31 @@ model CoachClientRelationship {
   assignments       CoachAssignment[]
   habitAssignments  CoachHabitAssignment[]
   rewardRedemptions CoachRewardRedemption[]
+  connectionRequest CoachConnectionRequest?
 
   @@index([coachProfileId, status, funding])
   @@index([userId, status])
   @@index([habitProgramId])
+}
+
+model CoachConnectionRequest {
+  id                String                       @id @default(cuid())
+  coachProfileId    String
+  coachProfile      CoachProfile                 @relation(fields: [coachProfileId], references: [id], onDelete: Cascade)
+  userId            String
+  user              User                         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status            CoachConnectionRequestStatus @default(PENDING)
+  message           String?
+  decisionNote      String?
+  relationshipId    String?                      @unique
+  relationship      CoachClientRelationship?     @relation(fields: [relationshipId], references: [id], onDelete: SetNull)
+  decidedAt         DateTime?
+  createdAt         DateTime                     @default(now())
+  updatedAt         DateTime                     @updatedAt
+
+  @@unique([coachProfileId, userId])
+  @@index([coachProfileId, status, createdAt])
+  @@index([userId, status])
 }
 
 model CoachServiceOffer {
@@ -1615,6 +1638,14 @@ enum CoachSubscriptionStatus {
 enum CoachClientFunding {
   COACH_PAID
   CLIENT_PAID
+  SELF_FUNDED
+}
+
+enum CoachConnectionRequestStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  CANCELLED
 }
 
 enum CoachRelationshipStatus {

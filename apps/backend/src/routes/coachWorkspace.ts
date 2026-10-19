@@ -50,6 +50,7 @@ import {
 import { getOpenAiClient, hasOpenAiClient } from "../services/openaiClient.js";
 import { availableCoachSlots, hasValidCoachRevenueSplit, shouldMigrateCoachSubscriptions } from "../services/coachRules.js";
 import { coachOfferModerationSchema, coachProfileModerationSchema } from "../services/coachModeration.js";
+import { CoachConnectionError, cancelCoachConnectionRequest, decideCoachConnectionRequest, listClientConnectionRequests, listCoachConnectionRequests, lockCoachClients, requestCoachConnection, serializeCoachConnectionRequest } from "../services/coachConnections.js";
 import { createPartnerCorePortalReferralLink, getPartnerCorePortalDashboard, normalizeReferralCode, recordCoachCommerceConversion } from "../services/partnerCore.js";
 import {
   activeGoogleAccessToken,
@@ -151,6 +152,37 @@ const coachPublicContentSchema = z.object({
 const coachPublicContentKey = (locale: UiLocale) => `coach_public_content_${locale}`;
 
 export async function coachWorkspaceRoutes(app: FastifyInstance) {
+  app.post("/api/coaches/:id/connection-requests", { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } }, async (request, reply) => {
+    const session = await requireUserSession(request, reply);
+    if (!session?.userId) return;
+    const { id } = idSchema.parse(request.params);
+    const body = z.object({ message: z.string().trim().max(1000).optional() }).strict().safeParse(request.body ?? {});
+    if (!body.success) return reply.code(400).send({ error: "Некорректная заявка" });
+    try {
+      const result = await requestCoachConnection(session.userId, id, body.data.message || null);
+      return { request: serializeCoachConnectionRequest(result) };
+    } catch (error) { if (error instanceof CoachConnectionError) return reply.code(error.statusCode).send({ error: error.message, code: error.code }); throw error; }
+  });
+
+  app.post("/api/habits/coaching/connection-requests/:id/cancel", async (request, reply) => {
+    const session = await requireUserSession(request, reply);
+    if (!session?.userId) return;
+    const { id } = idSchema.parse(request.params);
+    try { return { request: serializeCoachConnectionRequest(await cancelCoachConnectionRequest(session.userId, id)) }; }
+    catch (error) { if (error instanceof CoachConnectionError) return reply.code(error.statusCode).send({ error: error.message, code: error.code }); throw error; }
+  });
+
+  app.post("/api/coach/connection-requests/:id/decision", async (request, reply) => {
+    const context = await requireCoachWrite(request, reply);
+    if (!context) return;
+    const { id } = idSchema.parse(request.params);
+    const body = z.object({ decision: z.enum(["accept", "decline"]), funding: z.enum(["COACH_PAID", "SELF_FUNDED"]).default("SELF_FUNDED"), note: z.string().trim().max(1000).optional() })
+      .strict().refine(value => value.decision !== "decline" || Boolean(value.note), "Укажите причину отказа").safeParse(request.body ?? {});
+    if (!body.success) return reply.code(400).send({ error: body.error.issues[0]?.message || "Некорректное решение" });
+    try { return { request: serializeCoachConnectionRequest(await decideCoachConnectionRequest(context.profile.id, id, body.data), true) }; }
+    catch (error) { if (error instanceof CoachConnectionError) return reply.code(error.statusCode).send({ error: error.message, code: error.code }); throw error; }
+  });
+
   app.get("/api/coach/workspace", async (request, reply) => {
     if (!(await requireCoachFeature(reply, "coach_workspace", true))) return;
     const context = await requireCoach(request, reply);
@@ -225,8 +257,8 @@ export async function coachWorkspaceRoutes(app: FastifyInstance) {
     const relationship = await loadCoachClient(context.profile.id, relationshipId);
     if (!relationship) return reply.code(404).send({ error: "Клиент не найден" });
     const client = serializeCoachClient(relationship);
-    const metricsAllowed = client.metricsConsent;
-    const journalAllowed = client.journalConsent;
+    const metricsAllowed = client.status === "ACTIVE" && client.metricsConsent;
+    const journalAllowed = client.status === "ACTIVE" && client.journalConsent;
     return {
       client,
       metrics: metricsAllowed ? metricPoints(relationship.habitProgram?.dailyMetrics ?? []) : [],
@@ -689,7 +721,7 @@ function registerClientCoachingRoutes(app: FastifyInstance) {
   app.get("/api/habits/coaching", async (request, reply) => {
     const session = await requireUserSession(request, reply);
     if (!session?.userId) return;
-    const [relationships, orders] = await Promise.all([
+    const [relationships, orders, connectionRequests] = await Promise.all([
       prisma.coachClientRelationship.findMany({
         where: { userId: session.userId, status: { in: ["PENDING", "ACTIVE", "PAUSED"] } },
         orderBy: { createdAt: "desc" },
@@ -700,9 +732,11 @@ function registerClientCoachingRoutes(app: FastifyInstance) {
         orderBy: { createdAt: "desc" },
         include: { appointment: true, offer: { include: { coachProfile: { select: { id: true, displayName: true } } } } },
         take: 50
-      })
+      }),
+      listClientConnectionRequests(session.userId)
     ]);
     return {
+      connectionRequests: connectionRequests.map(row => serializeCoachConnectionRequest(row)),
       relationships: relationships.map((relationship) => ({ coach: serializeCoachProfile(relationship.coachProfile), relationshipId: relationship.id, status: relationship.status, funding: relationship.funding, metricsConsent: Boolean(relationship.metricsConsentAt), journalConsent: Boolean(relationship.journalConsentAt), accessEndsAt: relationship.accessEndsAt?.toISOString() ?? null, messages: relationship.messages.map(serializeCoachMessage), assignments: relationship.assignments.map(serializeCoachAssignment), habitAssignments: relationship.habitAssignments.map(serializeCoachHabitAssignment), rewards: relationship.coachProfile.rewards.map(serializeReward) })),
       orders: orders.map((order) => ({ id: order.id, coachProfileId: order.offer.coachProfile.id, coachName: order.offer.coachProfile.displayName, serviceTitle: order.offer.title, type: order.offer.type, status: order.status, amount: order.amount, currency: order.currency, bookingDeadline: order.bookingDeadline?.toISOString() ?? null, bookedAt: order.bookedAt?.toISOString() ?? null, scheduledFor: order.scheduledFor?.toISOString() ?? null, appointment: order.appointment ? serializeCoachAppointment(order.appointment) : null }))
     };
@@ -716,6 +750,7 @@ function registerClientCoachingRoutes(app: FastifyInstance) {
     if (!invite) return reply.code(404).send({ error: "Приглашение не найдено или устарело" });
     try {
       const relationship = await prisma.$transaction(async (tx) => {
+        await lockCoachClients(tx, invite.coachProfileId);
         const duplicate = await tx.coachClientRelationship.findFirst({ where: { coachProfileId: invite.coachProfileId, userId: session.userId!, status: { in: ["PENDING", "ACTIVE"] } } });
         if (duplicate) {
           await tx.coachClientInvite.update({ where: { id: invite.id }, data: { acceptedAt: new Date(), relationshipId: duplicate.id } });
@@ -737,7 +772,7 @@ function registerClientCoachingRoutes(app: FastifyInstance) {
           if (!subscription?.clientLimit || used >= subscription.clientLimit) throw new Error("COACH_SLOT_UNAVAILABLE");
         }
         const program = await tx.habitProgram.findFirst({ where: { userId: session.userId!, status: "ACTIVE" }, orderBy: { createdAt: "desc" } });
-        const created = await tx.coachClientRelationship.create({ data: { coachProfileId: invite.coachProfileId, userId: session.userId!, habitProgramId: program?.id, funding: invite.funding, status: "ACTIVE", metricsConsentAt: new Date(), journalConsentAt: body.journalConsent ? new Date() : null, startedAt: new Date() } });
+        const created = await tx.coachClientRelationship.create({ data: { coachProfileId: invite.coachProfileId, userId: session.userId!, habitProgramId: program?.id, funding: invite.funding === "CLIENT_PAID" ? "SELF_FUNDED" : invite.funding, status: "ACTIVE", metricsConsentAt: new Date(), journalConsentAt: body.journalConsent ? new Date() : null, startedAt: new Date() } });
         await tx.coachClientInvite.update({ where: { id: invite.id }, data: { acceptedAt: new Date(), relationshipId: created.id } });
         return created;
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
@@ -757,6 +792,8 @@ function registerClientCoachingRoutes(app: FastifyInstance) {
     const relationship = await prisma.coachClientRelationship.findFirst({ where: { id: relationshipId, userId: session.userId } });
     if (!relationship) return reply.code(404).send({ error: "Связь с коучем не найдена" });
     const activated = body.metricsConsent && relationship.status === "PENDING";
+    const program = (body.metricsConsent || body.journalConsent) ? await prisma.habitProgram.findFirst({ where: { userId: session.userId, status: "ACTIVE" }, orderBy: { createdAt: "desc" }, select: { id: true } }) : null;
+    if ((body.metricsConsent || body.journalConsent) && !program) return reply.code(409).send({ error: "Сначала настройте Навигатор привычек" });
     const updated = await prisma.coachClientRelationship.update({
       where: { id: relationship.id },
       data: {
@@ -764,7 +801,8 @@ function registerClientCoachingRoutes(app: FastifyInstance) {
         startedAt: activated ? relationship.startedAt ?? new Date() : relationship.startedAt,
         metricsConsentAt: body.metricsConsent ? relationship.metricsConsentAt ?? new Date() : null,
         journalConsentAt: body.journalConsent ? relationship.journalConsentAt ?? new Date() : null,
-        consentRevokedAt: !body.metricsConsent && !body.journalConsent ? new Date() : null
+        consentRevokedAt: !body.metricsConsent && !body.journalConsent ? new Date() : null,
+        ...(program ? { habitProgramId: program.id } : {})
       }
     });
     return { relationshipId: updated.id, status: updated.status, metricsConsent: Boolean(updated.metricsConsentAt), journalConsent: Boolean(updated.journalConsentAt) };
@@ -908,7 +946,7 @@ function registerPublicCoachRoutes(app: FastifyInstance) {
     const query = z.object({ city: z.string().trim().max(120).optional(), specialization: z.string().trim().max(80).optional(), language: z.string().trim().max(20).optional(), accepting: z.coerce.boolean().optional() }).parse(request.query ?? {});
     const profiles = await prisma.coachProfile.findMany({
       where: { status: "APPROVED", ...(query.city ? { city: query.city } : {}), ...(query.accepting === undefined ? {} : { acceptingOrders: query.accepting }) },
-      orderBy: [{ featured: "desc" }, { publicSince: "desc" }],
+      orderBy: [{ featured: "desc" }, { publicSince: "desc" }, { id: "asc" }],
       include: { calendlyConnection: true, serviceOffers: { where: { status: "APPROVED" }, orderBy: { amount: "asc" } }, sites: { where: { status: { in: ["ACTIVE", "GRACE"] } }, include: { plan: true }, take: 1 } }
     });
     const filtered = profiles.filter((profile) => (!query.specialization || (profile.specializations as any[] | null)?.includes(query.specialization)) && (!query.language || (profile.languages as any[] | null)?.includes(query.language)));
@@ -972,6 +1010,22 @@ function registerAdminCoachRoutes(app: FastifyInstance) {
     ]);
     const settings = new Map(cancellationSettings.map((item) => [item.key, item.value]));
     return { profiles: profiles.map((profile) => serializeCoachProfile(profile, true)), plans, sitePlans: sitePlans.map((plan) => ({ id: plan.id, code: plan.code, name: plan.name, setupAmount: plan.setupAmount, monthlySupportAmount: plan.monthlySupportAmount, currency: plan.currency, active: plan.active })), subscriptions: subscriptions.map((item) => ({ id: item.id, coach: item.coachProfile.displayName, plan: item.plan.name, status: item.status, amount: item.amount, currency: item.currency, clientLimit: item.clientLimit, currentPeriodEnd: item.currentPeriodEnd?.toISOString() ?? null })), orders: orders.map((item) => ({ id: item.id, coach: item.offer.coachProfile.displayName, client: item.user.name || item.user.email, service: item.offer.title, status: item.status, amount: item.amount, currency: item.currency, createdAt: item.createdAt.toISOString() })), offers: offers.map((item) => ({ ...serializeCoachOffer(item, true), coachName: item.coachProfile.displayName })), rewardsPendingReview: rewards.map(serializeReward), cancellationPolicy: { hoursBeforeStart: numericJson(settings.get("coach_consultation_cancel_hours"), 24), refundPercent: numericJson(settings.get("coach_consultation_refund_percent"), 100) }, publicContent: readCoachPublicContent(publicContentSetting?.value) };
+  });
+
+  app.patch("/api/admin/coaches/:id/catalog", async (request, reply) => {
+    if (!(await requireAdmin(request, reply))) return;
+    const { id } = idSchema.parse(request.params);
+    const body = z.object({ featured: z.boolean() }).strict().safeParse(request.body ?? {});
+    if (!body.success) return reply.code(400).send({ error: "Некорректные настройки каталога" });
+    const current = await prisma.coachProfile.findUnique({ where: { id }, select: { id: true } });
+    if (!current) return reply.code(404).send({ error: "Профиль не найден" });
+    const changed = await prisma.$transaction(async tx => {
+      const result = await tx.coachProfile.updateMany({ where: { id, ...(body.data.featured ? { status: "APPROVED" as const } : {}) }, data: { featured: body.data.featured } });
+      if (result.count) await tx.adminAuditLog.create({ data: { action: "coach.catalog.featured", targetType: "CoachProfile", targetId: id, payload: body.data } });
+      return result.count;
+    });
+    if (!changed) return reply.code(409).send({ error: "Сначала одобрите профиль коуча" });
+    return { featured: body.data.featured };
   });
 
   app.patch("/api/admin/coaches/:id/status", async (request, reply) => {
@@ -1183,7 +1237,7 @@ async function loadCoachClient(coachProfileId: string, relationshipId: string) {
 }
 
 async function workspaceSnapshot(coachProfileId: string) {
-  const [profile, plans, subscription, relationships, offers, sites, sitePlans, rewards, openAssignments, commerce, schedule, appointments] = await Promise.all([
+  const [profile, plans, subscription, relationships, offers, sites, sitePlans, rewards, openAssignments, commerce, schedule, appointments, connectionRequests] = await Promise.all([
     prisma.coachProfile.findUniqueOrThrow({ where: { id: coachProfileId }, include: { calendlyConnection: true, googleCalendarConnection: true } }),
     listCoachPlans(coachProfileId),
     getActiveCoachSubscription(coachProfileId),
@@ -1195,14 +1249,16 @@ async function workspaceSnapshot(coachProfileId: string) {
     prisma.coachAssignment.count({ where: { coachProfileId, status: "OPEN" } }),
     coachCommerceFlags(),
     ensureCoachScheduleSettings(coachProfileId),
-    prisma.coachAppointment.findMany({ where: { coachProfileId, startsAt: { gte: new Date(Date.now() - 7 * 86_400_000) } }, orderBy: { startsAt: "asc" }, take: 100, include: { user: { select: { email: true, name: true } }, order: { include: { offer: { select: { title: true } } } } } })
+    prisma.coachAppointment.findMany({ where: { coachProfileId, startsAt: { gte: new Date(Date.now() - 7 * 86_400_000) } }, orderBy: { startsAt: "asc" }, take: 100, include: { user: { select: { email: true, name: true } }, order: { include: { offer: { select: { title: true } } } } } }),
+    listCoachConnectionRequests(coachProfileId)
   ]);
   const clients = relationships.map(serializeCoachClient);
-  const coachPaidClients = clients.filter((client) => client.funding === "COACH_PAID" && client.status === "ACTIVE").length;
-  const clientPaidClients = clients.filter((client) => client.funding === "CLIENT_PAID" && client.status === "ACTIVE").length;
+  const coachPaidClients = clients.filter((client) => client.funding === "COACH_PAID" && ["PENDING", "ACTIVE"].includes(client.status)).length;
+  const clientPaidClients = clients.filter((client) => client.funding !== "COACH_PAID" && client.status === "ACTIVE").length;
   const planSummary = subscription ? plans.find((plan) => plan.id === subscription.planId)! : null;
   return {
     profile: serializeCoachProfile(profile, true),
+    connectionRequests: connectionRequests.map(row => serializeCoachConnectionRequest(row, true)),
     plans,
     subscription: subscription && planSummary ? { id: subscription.id, plan: planSummary, status: subscription.status, clientLimit: subscription.clientLimit, coachPaidClients, clientPaidClients, availableSlots: availableCoachSlots(subscription.clientLimit, coachPaidClients), currentPeriodEnd: subscription.currentPeriodEnd?.toISOString() ?? null, graceEndsAt: subscription.graceEndsAt?.toISOString() ?? null, cancelAtPeriodEnd: subscription.cancelAtPeriodEnd } : null,
     clients,

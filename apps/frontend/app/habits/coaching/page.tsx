@@ -7,7 +7,8 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { ArrowLeft, CalendarDays, Check, ClipboardCheck, Gift, MessageCircle, Send, ShieldCheck, UserRound, X } from "lucide-react";
 import type { HabitCoachingHubResponse } from "@levelup/contracts";
-import { api } from "@/lib/api";
+import { api, ApiRequestError } from "@/lib/api";
+import ConnectionPanel from "./ConnectionPanel";
 import styles from "../client-tools.module.css";
 
 type HubSection = "feedback" | "assignments";
@@ -21,6 +22,9 @@ function CoachingContent() {
   useUiLocale();
   const search = useSearchParams();
   const inviteToken = search.get("coach_invite") || "";
+  const candidateSlug = search.get("coach") || "";
+  const [loginRequired, setLoginRequired] = useState(false);
+  const [consentBusy, setConsentBusy] = useState(false);
   const [showInvite, setShowInvite] = useState(Boolean(inviteToken));
   const [data, setData] = useState<HabitCoachingHubResponse | null>(null);
   const [selected, setSelected] = useState(0);
@@ -34,11 +38,32 @@ function CoachingContent() {
   const [booking, setBooking] = useState<{ orderId: string; timezone: string; slots: Array<{ startsAt: string; endsAt: string }> } | null>(null);
   const [bookingBusy, setBookingBusy] = useState(false);
 
-  const load = () => api.habitCoaching().then(setData).catch((reason) => setError(reason instanceof Error ? reason.message : uiText("Не удалось загрузить Coaching Hub")));
+  const load = () => api.habitCoaching().then(result => { setData(result); setLoginRequired(false); }).catch((reason) => {
+    if (reason instanceof ApiRequestError && reason.status === 401) { setData(null); setLoginRequired(true); setError(""); }
+    else setError(reason instanceof Error ? reason.message : uiText("Не удалось загрузить Coaching Hub"));
+  });
   useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    const refresh = () => { if (document.visibilityState === "visible") void load(); };
+    window.addEventListener("focus", refresh);
+    const timer = window.setInterval(refresh, 60_000);
+    return () => { window.removeEventListener("focus", refresh); window.clearInterval(timer); };
+  }, []);
+  useEffect(() => {
+    const index = data?.relationships.findIndex(item => item.coach.slug === candidateSlug) ?? -1;
+    if (index >= 0) setSelected(index);
+  }, [candidateSlug, data?.relationships.length]);
 
   const relationship = data?.relationships[selected];
   const coachOrders = (data?.orders ?? []).filter((order) => !relationship || order.coachProfileId === relationship.coach.id);
+
+  async function updateConsent(metrics: boolean, journal: boolean) {
+    if (!relationship || consentBusy) return;
+    setConsentBusy(true); setError("");
+    try { await api.updateCoachConsent(relationship.relationshipId, metrics, journal); await load(); }
+    catch (reason) { setError(reason instanceof Error ? reason.message : uiText("Не удалось сохранить согласия")); }
+    finally { setConsentBusy(false); }
+  }
 
   async function acceptInvite() {
     if (!inviteToken || !metricsConsent || accepting) return;
@@ -87,13 +112,14 @@ function CoachingContent() {
     <header className={styles.header}><Link className={styles.brand} href="/">ORKEN.LIFE</Link><Link href="/habits"><ArrowLeft size={17} /> {uiText(" Кабинет привычек")}</Link></header>
     <section className={styles.intro}><span className={styles.badge}><MessageCircle size={14} /> Coaching Hub</span><h1>{uiText("Мой коуч")}</h1><p>{uiText("Обратная связь, задания и привычки, назначенные специалистом. Доступ к дневнику управляется отдельно.")}</p></section>
     {error && <p className={styles.error}>{error}</p>}{notice && <p className={styles.notice}>{notice}</p>}
+    <ConnectionPanel slug={candidateSlug} inviteToken={inviteToken} requests={data?.connectionRequests ?? []} relationships={data?.relationships ?? []} loginRequired={loginRequired} onChanged={load}/>
 
     {booking && <section className={`${styles.panel} ${styles.stack}`}>
       <div className={styles.taskTop}><div><h2>{uiText("Выберите время")}</h2><p>{uiText("Часовой пояс коуча: ")}{booking.timezone}</p></div><button className={`${styles.button} ${styles.secondary}`} onClick={() => setBooking(null)}><X size={16} /> {uiText(" Закрыть")}</button></div>
       {booking.slots.length ? <div className={styles.actions}>{booking.slots.map((slot) => <button key={slot.startsAt} className={`${styles.button} ${styles.secondary}`} disabled={bookingBusy} onClick={() => bookSlot(slot.startsAt)}>{formatSlot(slot.startsAt, booking.timezone)}</button>)}</div> : <div className={styles.empty}>{uiText("Свободного времени в ближайшие дни нет. Напишите коучу в сообщениях.")}</div>}
     </section>}
 
-    {showInvite && inviteToken && <section className={`${styles.panel} ${styles.consentPanel}`}>
+    {showInvite && inviteToken && !loginRequired && <section className={`${styles.panel} ${styles.consentPanel}`}>
       <ShieldCheck size={30} /><div><h2>{uiText("Подключить коуча")}</h2><p>{uiText("Коуч увидит только данные Навигатора, на которые вы дадите согласие. Диагностика, фото, аудио и отчёты не передаются.")}</p></div>
       <label><input type="checkbox" checked={metricsConsent} onChange={(event) => setMetricsConsent(event.target.checked)} /> {uiText(" Разрешить доступ к показателям состояния и привычкам")}</label>
       <label><input type="checkbox" checked={journalConsent} onChange={(event) => setJournalConsent(event.target.checked)} /> {uiText(" Разрешить читать записи дневника и инсайты")}</label>
@@ -106,8 +132,9 @@ function CoachingContent() {
         <section className={styles.panel}>
           <div className={styles.coachHead}><span className={styles.avatar}>{relationship.coach.avatarUrl ? <img src={relationship.coach.avatarUrl} alt="" /> : <UserRound />}</span><div><h2>{relationship.coach.displayName}</h2><p>{relationship.coach.headline || uiText("Персональное сопровождение в ORKEN")}</p></div><span className={styles.badge}>{relationshipStatus(relationship.status)}</span></div>
           <div className={styles.programMeta}><span>{relationship.funding === "COACH_PAID" ? uiText("Доступ оплачивает коуч") : uiText("Самостоятельная подписка")}</span><strong>{remainingLabel(relationship.accessEndsAt)}</strong></div>
-          {relationship.status === "PENDING" && <p className={styles.notice}>{uiText("Программа оплачена, но доступ коучу ещё не открыт. Разрешите метрики и привычки, чтобы начать работу. Дневник остаётся отдельным выбором.")}</p>}
-          <div className={styles.actions}><label><input type="checkbox" checked={relationship.metricsConsent} onChange={async (event) => { await api.updateCoachConsent(relationship.relationshipId, event.target.checked, relationship.journalConsent); await load(); }} /> {uiText(" Метрики и привычки")}</label><label><input type="checkbox" checked={relationship.journalConsent} onChange={async (event) => { await api.updateCoachConsent(relationship.relationshipId, relationship.metricsConsent, event.target.checked); await load(); }} /> {uiText(" Дневник")}</label></div>
+          {relationship.status === "PENDING" && <p className={styles.notice}>{uiText("Подключение ожидает вашего согласия на доступ к данным. Дневник остаётся отдельным выбором.")}</p>}
+          {relationship.status === "PENDING" && <Link href="/habits">{uiText("Открыть Навигатор")}</Link>}
+          <div className={styles.actions}><label><input type="checkbox" disabled={consentBusy} checked={relationship.metricsConsent} onChange={event => void updateConsent(event.target.checked, relationship.journalConsent)} /> {uiText(" Метрики и привычки")}</label><label><input type="checkbox" disabled={consentBusy} checked={relationship.journalConsent} onChange={event => void updateConsent(relationship.metricsConsent, event.target.checked)} /> {uiText(" Дневник")}</label></div>
         </section>
 
         {coachOrders.length > 0 && <section className={`${styles.panel} ${styles.stack}`} style={{ marginTop: 18 }}><h2>{uiText("Оплаченные услуги")}</h2>{coachOrders.map((order) => <article className={styles.task} key={order.id}><div className={styles.taskTop}><div><span className={styles.badge}>{order.status}</span><h3>{order.serviceTitle}</h3><p>{money(order.amount, order.currency)}{order.bookingDeadline ? uiText(" · записаться до {v0}", { v0: formatDate(order.bookingDeadline) }) : ""}{order.scheduledFor ? ` · ${formatDate(order.scheduledFor)}` : ""}</p>{order.appointment?.meetingUrl && <a className={styles.button} href={order.appointment.meetingUrl} target="_blank" rel="noreferrer">{uiText("Открыть видеовстречу")}</a>}</div><CalendarDays /></div>{order.status === "AWAITING_BOOKING" && <button className={styles.button} onClick={() => openBooking(order.id)}>{uiText("Выбрать время")}</button>}</article>)}</section>}
@@ -120,7 +147,7 @@ function CoachingContent() {
 
         {relationship.rewards.length > 0 && <section className={`${styles.panel} ${styles.stack}`} style={{ marginTop: 18 }}><h2><Gift size={19} /> {uiText(" Награды коуча")}</h2>{relationship.rewards.map((reward) => <article className={styles.reward} key={reward.id}><div><h3>{reward.title}</h3><p>{reward.description}</p></div><strong>{reward.pointsCost} Points</strong><button className={styles.button} onClick={async () => { try { await api.redeemCoachReward(reward.id, relationship.relationshipId, crypto.randomUUID()); setNotice(uiText("Награда получена")); } catch (reason) { setError(reason instanceof Error ? reason.message : uiText("Не удалось получить награду")); } }}>{uiText("Получить")}</button></article>)}</section>}
       </>}
-    </> : !showInvite && <section className={styles.panel}><ShieldCheck /><h2>{uiText("Коуч пока не подключён")}</h2><p>{uiText("Вы можете выбрать специалиста в каталоге или продолжать пользоваться Навигатором самостоятельно.")}</p><Link className={styles.button} href="/coaches">{uiText("Открыть каталог коучей")}</Link></section>}
+    </> : !showInvite && !loginRequired && !candidateSlug && <section className={styles.panel}><ShieldCheck /><h2>{uiText("Коуч пока не подключён")}</h2><p>{uiText("Вы можете выбрать специалиста в каталоге или продолжать пользоваться Навигатором самостоятельно.")}</p><Link className={styles.button} href="/coaches">{uiText("Открыть каталог коучей")}</Link></section>}
   </main>;
 }
 

@@ -21,6 +21,8 @@ ORKEN stores product-specific coaching data only:
 
 ## Authentication And Consent
 
+Catalog-initiated client applications and admin recommendations are described in [Coach Connections](coach-connections.md), including the `SELF_FUNDED` access boundary and migration.
+
 - `/coach` provides both registration and login and shares the same Partner Core identity and ORKEN BFF session with `/partners`.
 - Registration names are trimmed: `displayName` is 2-160 characters and `accountName` is 2-180 characters. The coach's practice name is optional; if blank, the frontend sends the display name as the account name. A non-empty short practice name is rejected in the form, not silently replaced. Passwords are 12-256 characters and are never trimmed. Invalid BFF registration/login bodies return a safe `400`, never a raw Zod exception or `500`; invalid requests never reach Core or create a session.
 - Logout uses `POST /api/partners/portal/logout`: the Core token is revoked, the local BFF session is revoked, and both cookies are cleared.

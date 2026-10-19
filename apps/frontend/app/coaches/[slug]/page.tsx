@@ -5,7 +5,7 @@ import { uiText, getFormatLocale, useUiLocale } from "@/lib/locale";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ArrowLeft, Bot, CalendarDays, Check, Clock3, ExternalLink, MapPin, MessageCircle, ShieldCheck, UserRound } from "lucide-react";
+import { ArrowLeft, Bot, CalendarDays, Check, Clock3, ExternalLink, MapPin, MessageCircle, ShieldCheck, UserPlus, UserRound } from "lucide-react";
 import type { CoachCatalogResponse } from "@levelup/contracts";
 import { coachCatalogApi } from "@/lib/api";
 import styles from "../catalog.module.css";
@@ -43,6 +43,7 @@ export default function CoachProfilePage() {
           <div className={styles.meta}>{coach.city && <span><MapPin size={16}/>{coach.city}</span>}<span><MessageCircle size={16}/>{coach.acceptingOrders ? uiText("Принимает новых клиентов") : uiText("Запись временно закрыта")}</span></div>
           <div className={styles.tags}>{coach.specializations.map((item) => <span key={item}>{item}</span>)}</div>
           <p className="coach-public-bio">{coach.bio || uiText("Коуч использует ORKEN для прозрачного сопровождения, обратной связи и наблюдения динамики между сессиями.")}</p>
+          {coach.acceptingOrders && <Link className={styles.connect} href={`/habits/coaching?coach=${encodeURIComponent(coach.slug)}`}><UserPlus size={18}/>{uiText("Подключиться к коучу")}</Link>}
           <div className="coach-public-links">{coach.siteUrl && <a href={coach.siteUrl} target="_blank"><ExternalLink size={17} /> {uiText(" Сайт коуча")}</a>}{coach.telegramBotUsername && <a href={`https://t.me/${coach.telegramBotUsername}?start=coach_${coach.slug}`} target="_blank"><Bot size={17} /> {uiText(" Открыть в Telegram")}</a>}</div>
         </div>
       </section>
@@ -55,6 +56,7 @@ export default function CoachProfilePage() {
             {offer.paymentModel === "INCLUDED" ? <>
               <strong>{uiText("Включено в программу коуча")}</strong>
               <p>{uiText("Доступно подключённым клиентам в рамках программы. Условия участия уточните у коуча.")}</p>
+              {coach.acceptingOrders && <Link className={styles.connect} href={`/habits/coaching?coach=${encodeURIComponent(coach.slug)}`}><UserPlus size={18}/>{uiText("Подключиться к коучу")}</Link>}
             </> : <>
               <ul><li><Check size={15}/> {uiText(" Оплата внутри ORKEN")}</li>{offer.type === "CONSULTATION" && <li><Clock3 size={15}/> {uiText(" Запись через календарь после оплаты")}</li>}</ul>
               <strong>{money(offer.amount, offer.currency)}{offer.type === "ONGOING_SUPPORT" ? uiText(" / месяц") : ""}</strong>

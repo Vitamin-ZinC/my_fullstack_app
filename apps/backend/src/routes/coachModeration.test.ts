@@ -33,6 +33,54 @@ test("admin snapshot denies unauthenticated access before reading any profiles",
   assert.equal((await app.inject("/api/admin/coaches/platform")).statusCode, 403);
   assert.equal((await app.inject({ method: "PATCH", url: "/api/admin/coaches/coach/status", payload: { status: "APPROVED" } })).statusCode, 403);
   assert.equal((await app.inject({ method: "PATCH", url: "/api/admin/coaches/offers/offer/status", payload: { status: "APPROVED" } })).statusCode, 403);
+  assert.equal((await app.inject({ method: "PATCH", url: "/api/admin/coaches/coach/catalog", payload: { featured: true } })).statusCode, 403);
+});
+
+test("catalog promotion only updates featured, keeps moderation and publication date, and is audited", async t => {
+  const current: any = { ...profile, status: "APPROVED", featured: false, acceptingOrders: true, publicSince: new Date("2026-10-01") };
+  const audits: any[] = [];
+  stub(t, prisma.coachProfile, "findUnique", async () => current);
+  stub(t, prisma, "$transaction", async (run: any) => run({
+    coachProfile: { updateMany: async ({ where, data }: any) => {
+      assert.deepEqual(Object.keys(data), ["featured"]);
+      if (where.status && current.status !== where.status) return { count: 0 };
+      Object.assign(current, data); return { count: 1 };
+    } },
+    adminAuditLog: { create: async ({ data }: any) => { audits.push(data); } }
+  }));
+  const app = await appFor(t);
+  const headers = { "x-admin-session": await createAdminSessionToken() };
+  const url = "/api/admin/coaches/coach/catalog";
+  assert.equal((await app.inject({ method: "PATCH", url, headers, payload: { featured: true, status: "APPROVED" } })).statusCode, 400);
+  assert.equal((await app.inject({ method: "PATCH", url, headers, payload: { featured: true } })).statusCode, 200);
+  assert.equal(current.status, "APPROVED"); assert.equal(current.acceptingOrders, true);
+  assert.equal(current.publicSince.toISOString(), "2026-10-01T00:00:00.000Z");
+  assert.equal(current.featured, true); assert.equal(audits[0].action, "coach.catalog.featured");
+  current.status = "PENDING_REVIEW";
+  assert.equal((await app.inject({ method: "PATCH", url, headers, payload: { featured: true } })).statusCode, 409);
+  assert.equal((await app.inject({ method: "PATCH", url, headers, payload: { featured: false } })).statusCode, 200);
+  assert.equal(current.status, "PENDING_REVIEW");
+});
+
+test("connection routes require the matching role, reject browser identity overrides and scope client inbox", async t => {
+  const app = await appFor(t);
+  for (const url of ["/api/coaches/coach/connection-requests", "/api/habits/coaching/connection-requests/request/cancel", "/api/coach/connection-requests/request/decision"]) {
+    assert.equal((await app.inject({ method: "POST", url, payload: {} })).statusCode, 401);
+  }
+  stub(t, prisma.session, "findFirst", async () => ({ id: "session", guestToken: "synthetic-token", userId: "client", locale: "ru" }));
+  const headers = { "x-session-id": "session", "x-guest-token": "synthetic-token" };
+  const invalid = await app.inject({ method: "POST", url: "/api/coaches/coach/connection-requests", headers, payload: { userId: "victim", partnerCorePartnerId: "other-project", message: "Hi" } });
+  assert.equal(invalid.statusCode, 400);
+  stub(t, prisma.coachClientRelationship, "findMany", async ({ where }: any) => { assert.equal(where.userId, "client"); return []; });
+  stub(t, prisma.coachServiceOrder, "findMany", async ({ where }: any) => { assert.equal(where.userId, "client"); return []; });
+  stub(t, prisma.coachConnectionRequest, "findMany", async ({ where }: any) => {
+    assert.equal(where.userId, "client");
+    return [{ id: "request", coachProfileId: "coach", coachProfile: { displayName: "Coach", slug: "coach" }, user: { email: "private@example.invalid", name: "Private" }, status: "PENDING", message: "Goals", decisionNote: null, relationshipId: null, createdAt: new Date(), decidedAt: null }];
+  });
+  const inbox = await app.inject({ url: "/api/habits/coaching", headers });
+  assert.equal(inbox.statusCode, 200);
+  assert.equal(inbox.json().connectionRequests.length, 1);
+  assert.equal(inbox.body.includes("private@example.invalid"), false);
 });
 
 test("admin snapshot includes rejected and paused services with private preview fields", async t => {
@@ -151,6 +199,8 @@ test("coach receives feedback, corrects only owned services and resubmits before
   });
   const app = await appFor(t);
   const headers = { cookie: `orken_partner_session=${session.rawSessionToken}; orken_partner_csrf=synthetic-csrf`, "x-partner-csrf": "synthetic-csrf" };
+  assert.equal((await app.inject({ method: "POST", url: "/api/coach/connection-requests/request/decision", headers: { cookie: headers.cookie }, payload: { decision: "accept", funding: "COACH_PAID" } })).statusCode, 403);
+  assert.equal((await app.inject({ method: "POST", url: "/api/coach/connection-requests/request/decision", headers, payload: { decision: "accept", funding: "CLIENT_PAID" } })).statusCode, 400);
   const owned = await app.inject({ url: "/api/coach/services", headers });
   assert.equal(owned.statusCode, 200);
   assert.equal(owned.json().offers[0].moderationNote, paidOffer.moderationNote);

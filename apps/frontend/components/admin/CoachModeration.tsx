@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Check, ChevronLeft, ChevronRight, Eye, RotateCcw, Search, UserRound, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Eye, RotateCcw, Search, Star, UserRound, X } from "lucide-react";
 import type { AdminCoachPlatformSnapshot, CoachProfileSummary, CoachServiceOfferSummary } from "@levelup/contracts";
 import { adminApi } from "@/lib/api";
 import { getFormatLocale, uiText, useUiLocale } from "@/lib/locale";
@@ -38,6 +38,17 @@ export default function CoachModeration({ mode, snapshot, refresh, setMessage, p
   const [status, setStatus] = useState("ALL");
   const [page, setPage] = useState(0);
   const [selection, setSelection] = useState<Selection | null>(null);
+  const [promoting, setPromoting] = useState("");
+  async function toggleFeatured(profile: CoachProfileSummary) {
+    if (promoting) return;
+    setPromoting(profile.id);
+    try {
+      await adminApi.setCoachCatalogFeatured(profile.id, !profile.featured);
+      await refresh();
+      setMessage(profile.featured ? uiText("Рекомендация снята") : uiText("Коуч поднят в начало каталога"));
+    } catch (reason) { setMessage(reason instanceof Error ? reason.message : uiText("Не удалось обновить каталог")); }
+    finally { setPromoting(""); }
+  }
   const pageSize = 20;
   const query = search.trim().toLocaleLowerCase();
   const rows = mode === "profiles" ? snapshot.profiles : snapshot.offers;
@@ -62,14 +73,15 @@ export default function CoachModeration({ mode, snapshot, refresh, setMessage, p
     </div>
     <div className="admin-table-wrap"><table className="admin-data-table"><thead><tr>
       <th>{mode === "profiles" ? uiText("Коуч") : uiText("Услуга")}</th><th>{mode === "profiles" ? uiText("Специализации") : uiText("Коуч")}</th>
-      <th>{uiText("Статус")}</th><th>{mode === "profiles" ? uiText("Заказы") : uiText("Цена и формат")}</th><th>{uiText("Проверка")}</th>
+      <th>{uiText("Статус")}</th><th>{mode === "profiles" ? uiText("Заказы") : uiText("Цена и формат")}</th>{mode === "profiles" && <th>{uiText("Каталог")}</th>}<th>{uiText("Проверка")}</th>
     </tr></thead><tbody>{filtered.slice(visiblePage * pageSize, (visiblePage + 1) * pageSize).map(row => <tr key={row.id}>
       <td>{"displayName" in row ? <div className={styles.identity}><span className={styles.avatar}>{row.avatarUrl ? <img src={row.avatarUrl} alt=""/> : <UserRound size={22}/>}</span><div><strong>{row.displayName}</strong><small>{row.headline || row.city || uiText("Город не указан")}</small></div></div> : <><strong>{row.title}</strong><small>{serviceType(row)}</small></>}</td>
       <td>{"displayName" in row ? row.specializations.join(", ") || uiText("Не указано") : row.coachName || snapshot.profiles.find(profile => profile.id === row.coachProfileId)?.displayName || uiText("Не указано")}</td>
       <td><span className="admin-status-pill">{moderationStatus(row.status, row.moderationNote)}</span></td>
       <td>{"displayName" in row ? row.acceptingOrders ? uiText("Принимает") : uiText("Закрыты") : <><strong>{formatPrice(row)}</strong><small>{row.paymentModel === "CLIENT_PAID" ? uiText("Клиент платит через ORKEN") : uiText("Включено в программу коуча")}</small></>}</td>
+      {"displayName" in row && <td><button type="button" className="button secondary compact" aria-pressed={row.featured} disabled={Boolean(promoting) || row.status !== "APPROVED"} title={row.status !== "APPROVED" ? uiText("Сначала одобрите профиль коуча") : uiText("Рекомендуемые коучи показываются первыми")} aria-label={uiText("Рекомендовать: {v0}", { v0: row.displayName })} onClick={() => void toggleFeatured(row)}><Star size={17} fill={row.featured ? "currentColor" : "none"}/>{uiText("Рекомендуем")}</button></td>}
       <td><button type="button" className="button secondary compact" onClick={() => setSelection({ kind: mode === "profiles" ? "profile" : "offer", id: row.id })}><Eye size={16}/>{uiText("Проверить")}</button></td>
-    </tr>)}{!filtered.length && <tr><td colSpan={5}>{uiText("По выбранным фильтрам ничего не найдено")}</td></tr>}</tbody></table></div>
+    </tr>)}{!filtered.length && <tr><td colSpan={mode === "profiles" ? 6 : 5}>{uiText("По выбранным фильтрам ничего не найдено")}</td></tr>}</tbody></table></div>
     <div className={styles.pager}><span>{visiblePage + 1} / {pageCount}</span><button type="button" className="button secondary compact" aria-label={uiText("Назад")} disabled={visiblePage === 0} onClick={() => setPage(visiblePage - 1)}><ChevronLeft size={16}/></button><button type="button" className="button secondary compact" aria-label={uiText("Далее")} disabled={visiblePage + 1 >= pageCount} onClick={() => setPage(visiblePage + 1)}><ChevronRight size={16}/></button></div>
     {selection && (selectedProfile || selectedOffer) && <ReviewDialog key={`${selection.kind}:${selection.id}`} profile={selectedProfile} offer={selectedOffer}
       owner={selectedOffer ? snapshot.profiles.find(profile => profile.id === selectedOffer.coachProfileId) : undefined}

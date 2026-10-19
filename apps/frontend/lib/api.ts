@@ -12,6 +12,7 @@ import type {
   CoachPartnershipMaterial,
   CoachCatalogResponse,
   CoachClientDetail,
+  CoachConnectionRequestSummary,
   CoachAppointmentSummary,
   CoachScheduleSummary,
   CoachServiceOfferSummary,
@@ -132,7 +133,7 @@ export type FounderIntakeListResponse = {
   items: FounderIntakeItem[];
 };
 
-class ApiRequestError extends Error {
+export class ApiRequestError extends Error {
   constructor(message: string, readonly status: number) {
     super(message);
     this.name = "ApiRequestError";
@@ -312,11 +313,11 @@ export const api = {
     storeSession(result);
     return result;
   },
-  requestMagicLink: async (email: string) => {
+  requestMagicLink: async (email: string, next?: string) => {
     await ensureGuestSession();
     return request<MagicLinkRequestResponse>("/api/auth/magic-link/request", {
       method: "POST",
-      body: JSON.stringify({ email })
+      body: JSON.stringify({ email, ...(next ? { next } : {}) })
     });
   },
   verifyMagicLink: async (token: string) => {
@@ -701,6 +702,11 @@ export const coachPartnershipApi = {
 };
 
 export const coachCatalogApi = {
+  requestConnection: async (coachId: string, message: string) => {
+    await ensureGuestSession();
+    return request<{ request: CoachConnectionRequestSummary }>(`/api/coaches/${encodeURIComponent(coachId)}/connection-requests`, { method: "POST", body: JSON.stringify({ message }) });
+  },
+  cancelConnectionRequest: (id: string) => request<{ request: CoachConnectionRequestSummary }>(`/api/habits/coaching/connection-requests/${encodeURIComponent(id)}/cancel`, { method: "POST", body: JSON.stringify({}) }),
   config: () => request<PublicCoachPlatformConfig>("/api/coaches/config"),
   list: (query?: { city?: string; specialization?: string; language?: string; accepting?: boolean }) => {
     const params = new URLSearchParams();
@@ -715,6 +721,7 @@ export const coachCatalogApi = {
 };
 
 export const coachApi = {
+  decideConnectionRequest: (id: string, payload: { decision: "accept" | "decline"; funding: "COACH_PAID" | "SELF_FUNDED"; note?: string }) => request<{ request: CoachConnectionRequestSummary }>(`/api/coach/connection-requests/${encodeURIComponent(id)}/decision`, { method: "POST", headers: partnerPortalWriteHeaders(), body: JSON.stringify(payload) }),
   workspace: () => request<CoachWorkspaceResponse>("/api/coach/workspace"),
   captureAttribution: (referralCode: string) => request<{ captured: boolean }>("/api/coach/attribution", { method: "POST", headers: partnerPortalWriteHeaders(), body: JSON.stringify({ referralCode }) }),
   profile: (payload: { displayName: string; slug: string; headline?: string | null; bio?: string | null; city?: string | null; specializations: string[]; languages: string[]; avatarUrl?: string | null; coverImageUrl?: string | null; acceptingOrders: boolean }) => request<{ profile: unknown }>("/api/coach/profile", { method: "PATCH", headers: partnerPortalWriteHeaders(), body: JSON.stringify(payload) }),
@@ -906,6 +913,7 @@ export const adminApi = {
   coachApplications: () => adminRequest<AdminCoachPartnershipLead[]>("/api/admin/coach-applications"),
   coachPlatform: () => adminRequest<AdminCoachPlatformSnapshot>("/api/admin/coaches/platform"),
   setCoachProfileStatus: (id: string, payload: { status: string; moderationNote?: string | null; featured?: boolean }) => adminRequest<{ profile: unknown }>(`/api/admin/coaches/${encodeURIComponent(id)}/status`, { method: "PATCH", body: JSON.stringify(payload) }),
+  setCoachCatalogFeatured: (id: string, featured: boolean) => adminRequest<{ featured: boolean }>(`/api/admin/coaches/${encodeURIComponent(id)}/catalog`, { method: "PATCH", body: JSON.stringify({ featured }) }),
   createCoachPlanPrice: (id: string, payload: { amount: number; currency: string; migrationMode: "NEW_ONLY" | "NEXT_RENEWAL" }) => adminRequest<{ version: unknown }>(`/api/admin/coaches/plans/${encodeURIComponent(id)}/prices`, { method: "POST", body: JSON.stringify(payload) }),
   setCoachPlanOverride: (coachId: string, planId: string, payload: { amount: number; currency: string; active: boolean }) => adminRequest<{ override: unknown }>(`/api/admin/coaches/${encodeURIComponent(coachId)}/plan-overrides/${encodeURIComponent(planId)}`, { method: "PUT", body: JSON.stringify(payload) }),
   setCoachOfferStatus: (id: string, payload: { status: string; coachShareBps?: number; platformShareBps?: number; moderationNote?: string | null }) => adminRequest<{ offer: unknown }>(`/api/admin/coaches/offers/${encodeURIComponent(id)}/status`, { method: "PATCH", body: JSON.stringify(payload) }),

@@ -3,6 +3,7 @@ import { uiText, getFormatLocale, useUiLocale } from "@/lib/locale";
 
 
 import Link from "next/link";
+import { safeAccountReturnPath } from "@levelup/contracts";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { api } from "@/lib/api";
@@ -35,6 +36,7 @@ function LoginContent() {
   useUiLocale();
   const router = useRouter();
   const params = useSearchParams();
+  const returnPath = safeAccountReturnPath(params.get("next"));
   const [mode, setMode] = useState<AuthMode>("magic");
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
@@ -59,14 +61,14 @@ function LoginContent() {
     api.verifyMagicLink(token)
       .then(() => {
         setMessage(uiText("Готово. Открываем личный кабинет..."));
-        router.replace("/account");
+        router.replace(returnPath);
       })
       .catch((reason) => {
         setError(reason instanceof Error ? reason.message : uiText("Ссылка входа не сработала"));
         setMessage("");
       })
       .finally(() => setBusy(false));
-  }, [params, router]);
+  }, [params, router, returnPath]);
 
   async function submitMagicLink(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -74,7 +76,7 @@ function LoginContent() {
     setError("");
     setMessage("");
     try {
-      const result = await api.requestMagicLink(email);
+      const result = await api.requestMagicLink(email, returnPath);
       setMessage(result.emailSent
         ? uiText("Отправили ссылку для входа. Проверьте почту.")
         : uiText("Запрос принят, но email-сервис сейчас не отправил письмо."));
@@ -96,7 +98,7 @@ function LoginContent() {
       } else {
         await api.login(email, password);
       }
-      router.push("/account");
+      router.push(returnPath);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : uiText("Не удалось войти"));
     } finally {
@@ -161,7 +163,7 @@ function LoginContent() {
       </section>
 
       <Link className="button secondary" href="/account">{uiText("Открыть личный кабинет")}</Link>
-      <Link className="btn-back" href="/login?mode=register">{uiText("Создать новый аккаунт")}</Link>
+      <Link className="btn-back" href={`/login?mode=register&next=${encodeURIComponent(returnPath)}`}>{uiText("Создать новый аккаунт")}</Link>
     </article>
   );
 }

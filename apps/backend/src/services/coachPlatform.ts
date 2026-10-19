@@ -189,8 +189,9 @@ function attentionReason(metrics: any[], lastCheckinAt: Date | null) {
 }
 
 export function serializeCoachClient(relationship: any) {
-  const metrics = relationship.habitProgram?.dailyMetrics ?? [];
-  const checkins = (relationship.habitProgram?.enrollments ?? []).flatMap((enrollment: any) => enrollment.checkins ?? []);
+  const shared = relationship.status === "ACTIVE" && Boolean(relationship.metricsConsentAt);
+  const metrics = shared ? relationship.habitProgram?.dailyMetrics ?? [] : [];
+  const checkins = shared ? (relationship.habitProgram?.enrollments ?? []).flatMap((enrollment: any) => enrollment.checkins ?? []) : [];
   const lastCheckinAt = checkins.map((item: any) => item.date as Date).sort((a: Date, b: Date) => b.getTime() - a.getTime())[0] ?? null;
   const weekMetrics = metrics.filter((metric: any) => Date.now() - metric.date.getTime() <= 7 * DAY_MS);
   const latest = metrics[0];
@@ -211,7 +212,7 @@ export function serializeCoachClient(relationship: any) {
     latestEnergy: latest?.energy ?? null,
     latestClarity: latest?.clarity ?? null,
     latestStability: latest?.stability ?? null,
-    attentionReason: attentionReason(metrics, lastCheckinAt)
+    attentionReason: shared ? attentionReason(metrics, lastCheckinAt) : null
   };
 }
 

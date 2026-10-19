@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
+import { safeAccountReturnPath } from "@levelup/contracts";
 import { env } from "../env.js";
 import {
   attachSessionToUser,
@@ -28,7 +29,8 @@ const loginSchema = z.object({
   password: passwordSchema
 });
 const magicLinkRequestSchema = z.object({
-  email: emailSchema
+  email: emailSchema,
+  next: z.string().max(600).optional()
 });
 const magicLinkVerifySchema = z.object({
   token: z.string().trim().min(24).max(512),
@@ -153,6 +155,7 @@ export async function authRoutes(app: FastifyInstance) {
 
     const loginUrl = new URL("/login", env.APP_ORIGIN);
     loginUrl.searchParams.set("token", token);
+    if (body.next) loginUrl.searchParams.set("next", safeAccountReturnPath(body.next));
     const emailResult = await sendMagicLinkEmail({
       email: body.email,
       loginUrl: loginUrl.toString(),

@@ -1,4 +1,4 @@
-FROM node:24.21.0-alpine AS vips
+FROM node:24.22.1-alpine AS vips
 RUN apk add --no-cache build-base python3 meson ninja pkgconf curl glib-dev expat-dev libjpeg-turbo-dev libpng-dev libwebp-dev
 RUN curl -fsSL https://github.com/libvips/libvips/releases/download/v8.18.7/vips-8.18.7.tar.xz -o /tmp/vips.tar.xz \
     && echo '5baaead3b0bb20ffdb9e9ff09aa9fda08620923df77b63b436654cb5e0b3bf94  /tmp/vips.tar.xz' | sha256sum -c - \
@@ -17,7 +17,7 @@ COPY packages/contracts/package.json packages/contracts/package.json
 RUN npm ci --workspace apps/frontend --workspace packages/contracts
 RUN npm explore sharp -- npm run build
 
-FROM node:24.21.0-alpine AS builder
+FROM node:24.22.1-alpine AS builder
 WORKDIR /repo
 RUN apk add --no-cache glib expat libjpeg-turbo libpng libwebp libwebpmux libwebpdemux
 COPY --from=vips /opt/vips/lib /opt/vips/lib
@@ -31,7 +31,7 @@ COPY . .
 RUN npm run test:image-runtime
 RUN npm --workspace apps/frontend run build
 
-FROM node:24.21.0-alpine
+FROM node:24.22.1-alpine
 WORKDIR /repo
 RUN apk add --no-cache glib expat libjpeg-turbo libpng libwebp libwebpmux libwebpdemux
 COPY --from=vips /opt/vips/lib /opt/vips/lib

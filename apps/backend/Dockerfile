@@ -1,4 +1,4 @@
-FROM node:24.21.0-alpine AS deps
+FROM node:24.22.1-alpine AS deps
 WORKDIR /repo
 RUN apk add --no-cache openssl
 COPY package.json package-lock.json* ./
@@ -6,7 +6,7 @@ COPY apps/backend/package.json apps/backend/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
 RUN npm ci --workspace apps/backend --workspace packages/contracts
 
-FROM node:24.21.0-alpine
+FROM node:24.22.1-alpine
 WORKDIR /repo
 RUN apk add --no-cache openssl ffmpeg
 COPY --from=deps /repo/node_modules ./node_modules

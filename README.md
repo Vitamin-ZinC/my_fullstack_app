@@ -4,7 +4,7 @@ Production scaffold for the ORKEN.LIFE diagnostic product.
 
 The original `index.html` stays in the repository as the approved UX prototype. The production app is split into:
 
-- `apps/frontend`: Next.js 14 App Router frontend, user flow, report pages, admin dashboard.
+- `apps/frontend`: Next.js 16 App Router frontend, user flow, report pages, admin dashboard.
 - `apps/backend`: Fastify API, Prisma schema, Stripe, media upload flow, analytics, settings, prompts, worker integration.
 - `packages/contracts`: shared API/report/admin types.
 
@@ -70,6 +70,8 @@ Use the value from `ADMIN_API_TOKEN` in the admin token field.
 
 ## Production Notes
 
+- See [Dependency Security Baseline](docs/technical/dependency-security-2026-10-23.md)
+  for the patched Node/Next/Fastify versions, CPU-compatible image build and release checks.
 - Set `DEV_TOOLS_ENABLED=false`.
 - Configure `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_BUCKET`, and optional `S3_ENDPOINT`.
 - Configure `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`.
@@ -86,4 +88,4 @@ Use the value from `ADMIN_API_TOKEN` in the admin token field.
 - Configure durable S3/R2 object storage credentials for production media retention.
 - Add migrations committed under `apps/backend/prisma/migrations`.
 - Add tests for ownership checks, payment webhook handling, media validation, and admin guards.
-- Upgrade vulnerable Next/Fastify dependency chains and refresh `package-lock.json`.
+- Keep the dependency security baseline and authoritative lockfile current.

@@ -434,8 +434,8 @@ export async function coachWorkspaceRoutes(app: FastifyInstance) {
     if (!context) return;
     const { id } = idSchema.parse(request.params);
     const body = z.object({
-      content: z.record(z.unknown()).optional(),
-      theme: z.record(z.unknown()).optional(),
+      content: z.record(z.string(), z.unknown()).optional(),
+      theme: z.record(z.string(), z.unknown()).optional(),
       customDomain: z.string().trim().max(255).optional().nullable()
     }).parse(request.body ?? {});
     const site = await prisma.coachSite.findFirst({ where: { id, coachProfileId: context.profile.id }, include: { plan: true } });

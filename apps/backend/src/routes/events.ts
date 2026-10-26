@@ -7,7 +7,7 @@ const eventSchema = z.object({
   name: z.string().min(1).max(80),
   analysisId: z.string().optional(),
   locale: z.string().optional(),
-  properties: z.record(z.unknown()).optional()
+  properties: z.record(z.string(), z.unknown()).optional()
 });
 
 export async function eventRoutes(app: FastifyInstance) {

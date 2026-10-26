@@ -1,5 +1,8 @@
 # Dependency Security Baseline
 
+See [26 October follow-up](dependency-security-2026-10-26.md) for the additional
+validator, SDK and parser fixes required by the subsequent deployment audit.
+
 Date: 2026-10-23. This update supersedes the older dependency version examples
 in the project map; application APIs and data contracts are unchanged.
 

@@ -24,6 +24,7 @@ import { publicReportFailureMessage, resolveAnalysisProgress } from "../services
 import { sendReportEmail } from "../services/email.js";
 import { buildFallbackFreeReport, buildFallbackReport } from "../services/report.js";
 import { normalizeUiLocale } from "@levelup/contracts";
+import { recordTrafficConversion, recordTrafficReportPaid } from "../services/webTraffic.js";
 
 const ikigaiAnswersSchema = z.object({
   love: z.array(z.string()),
@@ -93,6 +94,7 @@ export async function analysisRoutes(app: FastifyInstance) {
         }
       }
     });
+    await recordTrafficConversion(request, "DIAGNOSTIC_STARTED", `analysis:${analysis.id}`);
     return {
       analysisId: analysis.id,
       audioUploadUrl: media.audioUploadUrl,
@@ -277,6 +279,7 @@ export async function analysisRoutes(app: FastifyInstance) {
     const analysis = access.analysis;
     if (analysis.payment?.status !== "SUCCEEDED") return reply.code(402).send({ error: "Payment required" });
     if (!analysis.reportFull) return reply.code(409).send({ error: "Full report is not available" });
+    await recordTrafficReportPaid(request, analysis.id, analysis.payment);
     const reportFull = normalizeFullReportValue(analysis.reportFull, normalizeUiLocale(analysis.locale));
     await prisma.analyticsEvent.create({
       data: {

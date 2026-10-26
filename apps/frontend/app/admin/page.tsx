@@ -6,6 +6,7 @@ import { uiText, getFormatLocale, useUiLocale } from "@/lib/locale";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import CoachModeration from "@/components/admin/CoachModeration";
+import TrafficReport from "@/components/admin/TrafficReport";
 import {
   BarChart3,
   BadgeDollarSign,
@@ -77,7 +78,7 @@ import {
 import { defaultSiteText } from "@/lib/messages";
 import { DEFAULT_COACH_PUBLIC_CONTENT, localizeStaticText } from "@levelup/contracts";
 
-export type AdminSection = "overview" | "reports" | "users" | "commercial" | "ai" | "content" | "integrations" | "coaches" | "partners" | "system";
+export type AdminSection = "overview" | "reports" | "traffic" | "users" | "commercial" | "ai" | "content" | "integrations" | "coaches" | "partners" | "system";
 type PartnerAdminView = "overview" | "applications" | "partners" | "program" | "offers" | "operations";
 
 type AdminSectionDefinition = {
@@ -92,6 +93,7 @@ type AdminSectionDefinition = {
 function adminSections(): AdminSectionDefinition[] { return [
   { id: "overview", href: "/admin", label: uiText("Обзор"), title: uiText("Обзор продукта"), description: uiText("Ключевые показатели диагностики и Навигатора привычек."), icon: LayoutDashboard },
   { id: "reports", href: "/admin/reports", label: uiText("Отчёты"), title: uiText("Отчёты и аналитика"), description: uiText("Пользователи, подписки, платежи, коучи и партнёрская воронка."), icon: BarChart3 },
+  { id: "traffic", href: "/admin/traffic", label: uiText("Посещаемость"), title: uiText("Посещаемость и конверсии"), description: uiText("Посетители, источники переходов, страницы и подтверждённые действия."), icon: BarChart3 },
   { id: "users", href: "/admin/users", label: uiText("Пользователи"), title: uiText("Пользователи"), description: uiText("Активность, диагностики, привычки, Telegram и подаренные дни."), icon: Users },
   { id: "commercial", href: "/admin/commercial", label: uiText("Коммерция"), title: uiText("Цены и промокоды"), description: uiText("Стоимость отчёта, подписка, trial и промокоды."), icon: BadgeDollarSign },
   { id: "ai", href: "/admin/ai", label: uiText("AI и промпты"), title: uiText("AI и промпты"), description: uiText("Режим генерации, модели и версионируемые системные промпты."), icon: BrainCircuit },
@@ -1237,9 +1239,9 @@ export function AdminConsole({ section }: { section: AdminSection }) {
             <h1>{activeSection.title}</h1>
             <p>{activeSection.description}</p>
           </div>
-          <button className="admin-icon-button" onClick={() => void refresh()} aria-label={uiText("Обновить данные")} title={uiText("Обновить данные")} disabled={loading}>
+          {section !== "traffic" && <button className="admin-icon-button" onClick={() => void refresh()} aria-label={uiText("Обновить данные")} title={uiText("Обновить данные")} disabled={loading}>
             <RefreshCw size={19} className={loading ? "spinning" : ""} aria-hidden="true" />
-          </button>
+          </button>}
         </header>
 
         {message && <div className="admin-notice error">{message}</div>}
@@ -1273,6 +1275,7 @@ export function AdminConsole({ section }: { section: AdminSection }) {
             </section>
           )}
 
+          {section === "traffic" && <TrafficReport />}
           {section === "reports" && businessReport && <>
             <section className="admin-report-toolbar">
               <div>

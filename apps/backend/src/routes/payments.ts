@@ -6,6 +6,7 @@ import { getRequestedLocale, requireAnalysisAccess } from "../lib/auth.js";
 import { prisma } from "../lib/prisma.js";
 import { calculatePromoDiscount, normalizePromoCode, validatePromoCode } from "../services/promoCodes.js";
 import { getReportPriceConfig } from "../services/pricing.js";
+import { recordTrafficConversion } from "../services/webTraffic.js";
 import { handleCoachCheckoutCompleted, handleCoachInvoicePaid, handleCoachRefund, handleCoachSubscriptionLifecycle } from "../services/coachCommerce.js";
 import {
   recordPaymentConversionForPayment,
@@ -58,6 +59,7 @@ export async function paymentRoutes(app: FastifyInstance) {
       };
     }
 
+    await recordTrafficConversion(request, "REPORT_CHECKOUT", `report:${analysis.id}`);
     const price = await getReportPriceConfig();
     let promoResult: Awaited<ReturnType<typeof resolvePromoDiscount>>;
     try {
@@ -259,6 +261,7 @@ export async function paymentRoutes(app: FastifyInstance) {
       };
     }
 
+    await recordTrafficConversion(request, "REPORT_CHECKOUT", `report:${analysis.id}`);
     const price = await getReportPriceConfig();
     let promoResult: Awaited<ReturnType<typeof resolvePromoDiscount>>;
     try {

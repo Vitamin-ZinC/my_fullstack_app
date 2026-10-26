@@ -1,0 +1,14 @@
+.control { padding: 12px 20px; text-align: center; }
+.control button { display: inline-flex; align-items: center; gap: 6px; color: #aebbc5; background: none; border: 0; font: inherit; font-size: 12px; cursor: pointer; }
+.banner { position: fixed; z-index: 1000; bottom: 12px; left: 12px; right: 12px; max-width: 1120px; margin: auto; display: flex; align-items: center; gap: 24px; padding: 20px; border: 1px solid #3d535d; border-radius: 8px; background: #10191e; color: #edf4f5; box-shadow: 0 6px 24px #0008; }
+.banner h2 { font-size: 17px; margin: 0 0 8px; letter-spacing: 0; }
+.banner p { font-size: 13px; line-height: 1.6; margin: 0; max-width: 680px; color: #c0cbd0; }
+.banner a { color: #4fd6dd; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; flex-shrink: 0; }
+.actions button { min-height: 40px; padding: 8px 12px; border: 1px solid #53636b; border-radius: 4px; background: transparent; color: #edf4f5; font: inherit; font-size: 13px; cursor: pointer; }
+.actions .accept { background: #42ced6; color: #061318; border-color: #42ced6; }
+.actions .close { width: 40px; padding: 0; display: grid; place-items: center; }
+.actions button:disabled { opacity: .45; cursor: not-allowed; }
+.control button:focus-visible, .actions button:focus-visible { outline: 2px solid #edf4f5; outline-offset: 3px; }
+@media (max-width: 900px) { .banner { align-items: stretch; flex-direction: column; gap: 16px; } }
+@media (max-width: 480px) { .banner { padding: 16px; max-height: 70dvh; overflow: auto; } .actions { flex-shrink: 1; } .actions button { flex: 1; } .actions .close { flex: none; } }

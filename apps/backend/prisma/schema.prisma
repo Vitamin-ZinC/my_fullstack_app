@@ -743,6 +743,46 @@ model FeatureFlag {
   updatedAt DateTime @updatedAt
 }
 
+model WebTrafficVisit {
+  id          String   @id
+  visitorHash String
+  source      String
+  medium      String
+  campaign    String?
+  device      String
+  entryPage   String
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  lastSeenAt  DateTime @default(now()) @db.Timestamptz(3)
+  pageViews   WebTrafficPageView[]
+  conversions WebTrafficConversion[]
+
+  @@index([createdAt])
+  @@index([visitorHash, createdAt])
+}
+
+model WebTrafficPageView {
+  id        String   @id
+  visitId   String
+  page      String
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  visit     WebTrafficVisit @relation(fields: [visitId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt, page])
+  @@index([visitId])
+}
+
+model WebTrafficConversion {
+  id         String   @id @default(cuid())
+  visitId    String
+  kind       String
+  entityHash String
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  visit      WebTrafficVisit @relation(fields: [visitId], references: [id], onDelete: Cascade)
+
+  @@unique([kind, entityHash])
+  @@index([visitId, kind])
+}
+
 model AnalyticsEvent {
   id         String    @id @default(cuid())
   name       String

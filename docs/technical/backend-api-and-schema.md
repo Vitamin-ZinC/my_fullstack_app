@@ -20,6 +20,9 @@ Current models in `apps/backend/prisma/schema.prisma`:
 - `AppSetting`
 - `FeatureFlag`
 - `AnalyticsEvent`
+- `WebTrafficVisit`
+- `WebTrafficPageView`
+- `WebTrafficConversion`
 - `JobEvent`
 - `AdminAuditLog`
 - `HabitDefinition`
@@ -356,6 +359,10 @@ Runtime settings are stored in `AppSetting` and edited through the admin setting
 
 Week summary LLM mode is optional and always falls back to rule-based summaries if the provider fails.
 
+`traffic_analytics_enabled` is the boolean first-party web analytics switch (default
+true). Collection additionally requires browser consent. See
+[Web Traffic Analytics](web-traffic-analytics.md) for retention and conversion semantics.
+
 ## Implemented API Endpoints
 
 ### Auth
@@ -488,6 +495,8 @@ record.
 
 - `GET /api/content/:locale`
 - `POST /api/events`
+- `GET /api/traffic/config` - public collection switch and retention, no identities.
+- `POST /api/traffic/views` - strict consent-based anonymous page-template event.
 
 ### Protected Technical Documentation
 
@@ -530,6 +539,7 @@ Local watcher for this workstation:
 - `POST /api/admin/login`
 - `GET /api/admin/stats`
 - `GET /api/admin/reports/business?days=30` - protected management report for users, diagnostics, one-time report payments, habits subscriptions/access types, coach applications, and local partner events. `days` accepts `1..3650`.
+- `GET /api/admin/reports/traffic?days=30` - protected aggregate opt-in traffic report, `1..180` UTC calendar days. Operational business totals are separate from visit attribution.
 - `GET /api/admin/analyses`
 - `GET /api/admin/settings`
 - `PUT /api/admin/settings/:key`
@@ -565,6 +575,7 @@ Shared API types live in:
 Important habit contracts:
 
 - `AdminBusinessReport`
+- `AdminTrafficReport`
 - `HabitConfigResponse`
 - `HabitDefinitionSummary`
 - `HabitCycleSummary`

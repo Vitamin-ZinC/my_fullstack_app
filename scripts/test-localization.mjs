@@ -12,7 +12,7 @@ function readModule(file) {
   modules.set(absolute, exports);
   const source = fs.readFileSync(absolute, "utf8");
   const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
-  const aliases = { "@levelup/contracts": "packages/contracts/src/index.ts", "#localization": "packages/contracts/src/localization/index.ts", "#english-catalog": "packages/contracts/src/localization/english.ts" };
+  const aliases = { "@levelup/contracts": "packages/contracts/src/index.ts", "#traffic": "packages/contracts/src/traffic.ts", "#localization": "packages/contracts/src/localization/index.ts", "#english-catalog": "packages/contracts/src/localization/english.ts" };
   const require = id => readModule(aliases[id] ?? path.resolve(path.dirname(absolute), id.replace(/\.js$/, ".ts")));
   vm.runInNewContext(js, { exports, require }, { filename: absolute });
   return exports;

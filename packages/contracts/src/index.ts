@@ -1528,3 +1528,4 @@ export function safeAccountReturnPath(value: string | null | undefined): string 
     return url.pathname === "/habits" ? "/habits" : "/account";
   } catch { return "/account"; }
 }
+export * from "#traffic";

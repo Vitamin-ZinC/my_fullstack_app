@@ -15,6 +15,7 @@ import {
 import { prisma } from "../lib/prisma.js";
 import { sendMagicLinkEmail } from "../services/email.js";
 import { handleReferralSignup, normalizeReferralCode } from "../services/partnerCore.js";
+import { recordTrafficConversion } from "../services/webTraffic.js";
 
 const emailSchema = z.string().trim().email().max(254).transform((value) => value.toLowerCase());
 const passwordSchema = z.string().min(8).max(128);
@@ -94,6 +95,7 @@ export async function authRoutes(app: FastifyInstance) {
       }
     });
     await attachSessionToUser(session, user.id);
+    if (!existing) await recordTrafficConversion(request, "REGISTRATION", `user:${user.id}`);
     await prisma.analyticsEvent.create({
       data: {
         name: "user_registered",
@@ -198,6 +200,7 @@ export async function authRoutes(app: FastifyInstance) {
     });
     if (!token) return reply.code(400).send({ error: "Magic link is invalid or expired" });
 
+    const existingMagicUser = await prisma.user.findUnique({ where: { email: token.email }, select: { id: true } });
     const user = await prisma.$transaction(async (tx) => {
       const nextUser = await tx.user.upsert({
         where: { email: token.email },
@@ -220,6 +223,7 @@ export async function authRoutes(app: FastifyInstance) {
       return nextUser;
     });
     await attachSessionToUser(session, user.id);
+    if (!existingMagicUser) await recordTrafficConversion(request, "REGISTRATION", `user:${user.id}`);
     await prisma.analyticsEvent.create({
       data: {
         name: "user_logged_in",

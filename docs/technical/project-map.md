@@ -27,6 +27,12 @@ For RU/EN web interfaces, locale propagation and data-preservation rules, see [W
 
 ## Current Product Areas
 
+### Web Traffic
+
+Consent-based first-party analytics and `/admin/traffic` are documented in
+[Web Traffic Analytics](web-traffic-analytics.md). These aggregate visits are separate
+from operational business reports and never contain media or private cabinet text.
+
 ### Diagnostic Flow
 
 Frontend flow pages collect:

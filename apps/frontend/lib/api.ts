@@ -2,6 +2,7 @@ import type {
   AdminGiftDaysResponse,
   AdminCoachPartnershipLead,
   AdminBusinessReport,
+  AdminTrafficReport,
   AdminCoachPlatformSnapshot,
   AdminStats,
   AdminUserSummary,
@@ -72,6 +73,7 @@ import type {
   PromptTemplate
 } from "@levelup/contracts";
 import { getStoredLocale } from "@/lib/locale";
+import { trafficRequestHeaders } from "@/lib/webTraffic";
 import { translateSystemText } from "@levelup/contracts";
 export { getStoredLocale, setStoredLocale } from "@/lib/locale";
 
@@ -147,6 +149,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     headers: {
       "Content-Type": "application/json",
       ...sessionHeaders(),
+      ...trafficRequestHeaders(),
       ...(init?.headers ?? {})
     }
   });
@@ -837,6 +840,7 @@ export const adminApi = {
   }),
   stats: () => adminRequest<AdminStats>("/api/admin/stats"),
   businessReport: (days = 30) => adminRequest<AdminBusinessReport>(`/api/admin/reports/business?days=${encodeURIComponent(String(days))}`),
+  trafficReport: (days = 30) => adminRequest<AdminTrafficReport>(`/api/admin/reports/traffic?days=${encodeURIComponent(String(days))}`),
   analyses: () => adminRequest<unknown[]>("/api/admin/analyses"),
   users: (query?: { q?: string; limit?: number; offset?: number }) => {
     const params = new URLSearchParams();

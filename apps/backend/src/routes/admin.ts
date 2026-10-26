@@ -9,6 +9,7 @@ import { HABIT_ASSISTANT_AVATAR_URL_KEY } from "../services/pricing.js";
 import { defaultReportPromptTemplates, resolveActivePrompt } from "../services/reportPrompts.js";
 import { calculateGiftedTrialEnd, calculateTrialDaysLeft } from "../services/adminUsers.js";
 import { getAdminBusinessReport } from "../services/adminReports.js";
+import { getAdminTrafficReport } from "../services/webTraffic.js";
 import { createDemoAccessCode, listDemoAccessCodes, setDemoAccessCodeActive } from "../services/demoAccess.js";
 
 const jsonValueSchema: z.ZodType<unknown> = z.lazy(() =>
@@ -259,6 +260,13 @@ export async function adminRoutes(app: FastifyInstance) {
     return getAdminBusinessReport(query.days);
   });
 
+  app.get("/api/admin/reports/traffic", async (request, reply) => {
+    reply.header("Cache-Control", "no-store");
+    const query = z.object({ days: z.coerce.number().int().min(1).max(180).default(30) }).safeParse(request.query);
+    if (!query.success) return reply.code(400).send({ error: "Invalid reporting period" });
+    return getAdminTrafficReport(query.data.days);
+  });
+
   app.get("/api/admin/analyses", async (request) => {
     const query = z.object({
       limit: z.coerce.number().int().min(1).max(100).default(25),
@@ -412,9 +420,10 @@ export async function adminRoutes(app: FastifyInstance) {
     return prisma.appSetting.findMany({ orderBy: { key: "asc" } });
   });
 
-  app.put("/api/admin/settings/:key", async (request) => {
+  app.put("/api/admin/settings/:key", async (request, reply) => {
     const params = z.object({ key: z.string().min(1).max(120) }).parse(request.params);
     const body = settingSchema.parse(request.body);
+    if (params.key === "traffic_analytics_enabled" && typeof body.value !== "boolean") return reply.code(400).send({ error: "Expected a boolean setting" });
     const setting = await prisma.appSetting.upsert({
       where: { key: params.key },
       update: { value: body.value as any },

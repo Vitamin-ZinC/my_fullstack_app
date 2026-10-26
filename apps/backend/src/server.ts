@@ -15,6 +15,8 @@ import { coachWorkspaceRoutes, runCoachCalendlyReconciliation } from "./routes/c
 import { docsRoutes } from "./routes/docs.js";
 import { demoRoutes } from "./routes/demo.js";
 import { eventRoutes } from "./routes/events.js";
+import { webTrafficRoutes } from "./routes/webTraffic.js";
+import { cleanupWebTraffic } from "./services/webTraffic.js";
 import { habitsRoutes } from "./routes/habits.js";
 import { meRoutes } from "./routes/me.js";
 import { partnerRoutes } from "./routes/partners.js";
@@ -72,6 +74,7 @@ await app.register(demoRoutes);
 await app.register(analysisRoutes);
 await app.register(paymentRoutes);
 await app.register(eventRoutes);
+await app.register(webTrafficRoutes);
 await app.register(habitsRoutes);
 await app.register(meRoutes);
 await app.register(partnerRoutes);
@@ -88,5 +91,10 @@ const coachMaintenanceTimer = setInterval(() => {
   ]).catch((error) => app.log.error({ error }, "coach platform maintenance failed"));
 }, 30 * 60 * 1000);
 coachMaintenanceTimer.unref();
+
+const trafficCleanupTimer = setInterval(() => {
+  void cleanupWebTraffic().catch(() => app.log.warn("Web traffic retention cleanup failed"));
+}, 6 * 60 * 60 * 1000);
+trafficCleanupTimer.unref();
 
 await app.listen({ port: env.PORT, host: "0.0.0.0" });

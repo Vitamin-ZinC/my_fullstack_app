@@ -1,0 +1,41 @@
+.root { min-width: 0; color: #e4edf2; }
+.toolbar, .status { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
+.periods, .tools { display: flex; gap: 4px; }
+.toolbar button { height: 40px; padding: 8px 14px; border: 1px solid #344955; border-radius: 4px; background: transparent; color: #c2d0d7; font: inherit; font-size: 13px; cursor: pointer; }
+.periods button[aria-pressed="true"] { background: #16383c; border-color: #51d5df; color: #d8fcff; }
+.tools button { width: 40px; padding: 0; display: grid; place-items: center; }
+.toolbar button:disabled { opacity: .45; cursor: not-allowed; }
+.toolbar button:focus-visible, .status input:focus-visible { outline: 2px solid #51d5df; outline-offset: 3px; }
+.status { font-size: 13px; color: #afbdc6; }
+.status label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.status input { width: 18px; height: 18px; accent-color: #51d5df; }
+.note { color: #a9bac6; font-size: 13px; line-height: 1.6; max-width: 940px; margin: 10px 0 16px; }
+.metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-block: 1px solid #2c404d; margin-block: 20px; }
+.metric { padding: 18px 12px; min-width: 0; }
+.metric > span { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #b7c6cf; }
+.metric svg { flex-shrink: 0; }
+.metric strong { display: block; font-size: 28px; margin-top: 8px; overflow-wrap: anywhere; }
+.section { padding: 20px 0; border-bottom: 1px solid #2c404d; min-width: 0; }
+.section h2 { font-size: 19px; margin: 0 0 12px; letter-spacing: 0; }
+.legend { display: flex; gap: 18px; flex-wrap: wrap; font-size: 12px; color: #bccbd3; }
+.legend span { display: flex; gap: 6px; align-items: center; }
+.legend i { height: 3px; width: 16px; }
+.chart { overflow-x: auto; padding-block: 18px; }
+.chart svg { width: 100%; min-width: 500px; height: 230px; display: block; }
+.section summary { cursor: pointer; color: #9ce5e8; font-size: 13px; padding-block: 8px; }
+.scroll { overflow-x: auto; max-width: 100%; }
+.root table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: left; }
+.root th { color: #a8bbc8; font-weight: 500; white-space: nowrap; }
+.root th, .root td { padding: 12px 14px 12px 0; border-bottom: 1px solid #243945; }
+.root td { overflow-wrap: anywhere; }
+.conversions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+.conversions > div { display: grid; gap: 8px; padding-block: 8px; }
+.conversions span { font-size: 13px; color: #bfccd5; overflow-wrap: anywhere; min-width: 0; }
+.conversions strong { font-size: 24px; }
+.conversions small { color: #a6dd76; }
+.columns { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 28px; }
+.error { color: #ffb5b5; }
+.empty { padding: 20px 0; font-size: 14px; color: #b3c3ce; line-height: 1.6; }
+.notice { color: #f1be65; }
+@media (max-width: 700px) { .columns { grid-template-columns: minmax(0, 1fr); gap: 0; } .periods button { padding-inline: 10px; } .metric { padding-inline: 4px; } .metric > span { font-size: 11px; gap: 4px; } .metric strong { font-size: 24px; } .conversions { gap: 10px; } }
+@media (max-width: 600px) { .conversions { grid-template-columns: minmax(0, 1fr); gap: 0; } .conversions > div { grid-template-columns: minmax(0, 1fr) 40px 90px; align-items: center; padding-block: 14px; border-bottom: 1px solid #243945; } .conversions strong, .conversions small { text-align: right; } }

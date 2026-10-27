@@ -1,0 +1,32 @@
+.guide { position: fixed; z-index: 80; right: max(20px, env(safe-area-inset-right)); bottom: max(20px, env(safe-area-inset-bottom)); display: flex; flex-direction: column; align-items: flex-end; gap: 10px; max-width: calc(100vw - 32px); color: #f1f7fa; animation: arrive 240ms ease-out; }
+.bubble { width: 328px; max-width: calc(100vw - 32px); max-height: calc(100dvh - 180px); overflow-y: auto; padding: 16px; border: 1px solid #457078; border-radius: 8px; background: #0c1924; box-shadow: 0 12px 36px #0006; opacity: 0; transform: translateY(8px); transition: opacity 180ms ease, transform 180ms ease; pointer-events: none; }
+.open { opacity: 1; transform: translateY(0); pointer-events: auto; animation: bubble-in 180ms ease-out; }
+.bubble header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.bubble strong { font-size: 15px; font-weight: 700; letter-spacing: 0; }
+.bubble p { color: #d0dce5; font-size: 14px; line-height: 1.6; margin: 8px 0 16px; overflow-wrap: anywhere; }
+.close { width: 32px; height: 32px; flex: none; display: grid; place-items: center; border: 0; border-radius: 4px; color: #bdcbd5; background: transparent; cursor: pointer; }
+.close:hover { background: #243543; color: #fff; }
+.actions { display: grid; gap: 8px; }
+.actions a, .actions button { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; min-height: 42px; padding: 9px 12px; border: 1px solid transparent; border-radius: 4px; font: inherit; font-size: 13px; font-weight: 600; text-align: left; line-height: 1.4; text-decoration: none; cursor: pointer; overflow-wrap: anywhere; }
+.actions svg { flex: none; }
+.actions .primary { color: #03161d; background: #37d5e4; }
+.actions .primary:hover { background: #70e4ed; }
+.actions .secondary { border-color: #415265; background: transparent; color: #e2eaf0; }
+.actions .secondary:hover { background: #1b2c3a; }
+.preference { display: flex; align-items: flex-start; gap: 8px; margin-top: 14px; color: #aebdc8; font-size: 12px; line-height: 1.5; cursor: pointer; }
+.preference input { width: 16px; height: 16px; flex: none; margin: 1px 0 0; accent-color: #37d5e4; }
+.launcher { position: relative; display: grid; place-items: center; width: 64px; height: 76px; padding: 0; border: 0; border-radius: 8px; background: transparent; cursor: pointer; transition: transform 180ms ease; }
+.launcher img { width: 64px; height: 76px; object-fit: contain; filter: drop-shadow(0 4px 7px #0008); }
+.launcher:hover { transform: translateY(-3px); }
+.tooltip { position: absolute; right: calc(100% + 10px); bottom: 14px; width: max-content; max-width: 200px; padding: 6px 9px; border: 1px solid #415265; border-radius: 4px; background: #0c1924; color: #e2eaf0; font-size: 12px; line-height: 1.5; opacity: 0; visibility: hidden; pointer-events: none; }
+.launcher:hover .tooltip, .launcher:focus-visible .tooltip { opacity: 1; visibility: visible; }
+.guide button:focus-visible, .guide a:focus-visible, .guide input:focus-visible { outline: 2px solid #f1f7fa; outline-offset: 3px; }
+@keyframes arrive { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes bubble-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@media (max-width: 820px) {
+  .guide { right: max(16px, env(safe-area-inset-right)); bottom: calc(88px + env(safe-area-inset-bottom)); gap: 6px; }
+  .guide[data-context="landing"], .guide[data-context="partner"] { bottom: calc(16px + env(safe-area-inset-bottom)); }
+  .bubble { max-height: calc(100dvh - 260px); }
+  .launcher, .launcher img { width: 52px; height: 62px; }
+}
+@media (prefers-reduced-motion: reduce) { .guide, .bubble { animation: none; } .bubble, .launcher { transition: none; } .launcher:hover { transform: none; } }

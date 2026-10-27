@@ -10,6 +10,7 @@ import type { HabitConfigResponse, HabitProgramSummary, MeReportSummary, MeRespo
 import { api } from "@/lib/api";
 import { openTelegramConnectUrl } from "@/lib/telegram";
 import { useSiteText } from "@/lib/useSiteText";
+import { OrkenGuide } from "@/components/OrkenGuide";
 
 type ChatMessage = { role: "user" | "assistant"; text: string };
 type TelegramFrequency = "off" | "daily" | "weekdays" | "weekly";
@@ -17,7 +18,8 @@ type TelegramFrequency = "off" | "daily" | "weekdays" | "weekly";
 export default function AccountPage() {
   useUiLocale();
   const router = useRouter();
-  const text = useSiteText().accountDiagnostics;
+  const siteText = useSiteText();
+  const text = siteText.accountDiagnostics;
   const [me, setMe] = useState<MeResponse | null>(null);
   const [reports, setReports] = useState<MeReportSummary[]>([]);
   const [program, setProgram] = useState<HabitProgramSummary | null>(null);
@@ -276,6 +278,10 @@ export default function AccountPage() {
 
   return (
     <article className="account-page stack" data-testid="account-page">
+      <OrkenGuide context="user" scope={program?.id ?? me.user.id} message={program ? siteText.guide.user : siteText.guide.userStart} suspended={busy || telegramBusy} actions={[
+        { label: program ? siteText.guide.journey : siteText.guide.navigator, href: program ? "/habits?tab=journey" : "/habits" },
+        { label: siteText.guide.help, href: "/habits?tab=guide" }
+      ]} />
       <section className="account-hero card cyan-border">
         <div>
           <div className="eyebrow">{uiText("Личный кабинет")}</div>

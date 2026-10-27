@@ -34,6 +34,8 @@ import type {
   PartnerPortalSessionResponse
 } from "@levelup/contracts";
 import { partnerPortalApi } from "@/lib/api";
+import { OrkenGuide } from "@/components/OrkenGuide";
+import { useSiteText } from "@/lib/useSiteText";
 
 type Tab = "overview" | "links" | "offers" | "results" | "finances" | "profile";
 type DataRecord = Record<string, unknown>;
@@ -278,6 +280,7 @@ function metricsFromDashboard(dashboard: PartnerPortalDashboard | null) {
 
 export default function PartnersPage() {
   useUiLocale();
+  const guideText = useSiteText().guide;
   const [portalSession, setPortalSession] = useState<PartnerPortalSessionResponse | null>(null);
   const [dashboard, setDashboard] = useState<PartnerPortalDashboard | null>(null);
   const [ledger, setLedger] = useState<PartnerPortalLedgerResponse | null>(null);
@@ -518,6 +521,10 @@ export default function PartnersPage() {
 
   return (
     <main className="partner-portal">
+      {identity && <OrkenGuide context="partner" scope={identity.partnerCorePartnerId} message={status.tone === "approved" ? guideText.partner : guideText.partnerReview} suspended={submitting} actions={status.tone === "approved" ? [
+        { label: guideText.results, onClick: () => navigate("results") },
+        { label: guideText.links, onClick: () => navigate("links") }
+      ] : [{ label: guideText.status, onClick: () => navigate("profile") }]} />}
       <aside className="partner-sidebar">
         <a className="partner-brand" href="/">ORKEN.LIFE</a>
         <div className="partner-user-summary">

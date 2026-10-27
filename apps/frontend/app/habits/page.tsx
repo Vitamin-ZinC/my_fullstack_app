@@ -2,11 +2,13 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useMemo, useState, type CSSProperties } from "react";
+import { Suspense, useEffect, useId, useMemo, useRef, useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import {
   Archive,
   Activity,
   Bot,
+  BookOpen,
   CalendarPlus,
   CheckCircle2,
   ChevronDown,
@@ -22,6 +24,7 @@ import { api, restoreSessionFromUrl } from "@/lib/api";
 import { uiText, getFormatLocale, useUiLocale } from "@/lib/locale";
 import { openTelegramConnectUrl } from "@/lib/telegram";
 import { useSiteText } from "@/lib/useSiteText";
+import { OrkenGuide } from "@/components/OrkenGuide";
 
 type Tab = "dashboard" | "journey" | "habits" | "navigator" | "archive" | "rewards" | "guide" | "settings";
 type ArchiveFilter = "all" | "insights" | "rewards" | "weeks";
@@ -30,26 +33,26 @@ type OnboardingStep = "choice" | "questions" | "activating";
 type OnboardingZone = "passion" | "mission" | "profession" | "vocation";
 type TelegramFrequency = "off" | "daily" | "weekdays" | "weekly";
 type ChatMessage = { role: "user" | "assistant"; text: string };
-type NavItem = { id: Tab; icon: string } | { id: Tab; penguin: true };
+type NavItem = { id: Tab; icon: string | typeof Compass } | { id: Tab; penguin: true };
 
 const orkenAvatarSrc = "/assets/orken12.jpg";
 
 const navItems: NavItem[] = [
   { id: "dashboard", icon: "⬡" },
-  { id: "journey", icon: "🧭" },
+  { id: "journey", icon: Compass },
   { id: "habits", icon: "✦" },
   { id: "navigator", penguin: true },
-  { id: "archive", icon: "📚" },
+  { id: "archive", icon: Archive },
   { id: "rewards", icon: "★" },
-  { id: "guide", icon: "📖" },
+  { id: "guide", icon: BookOpen },
   { id: "settings", icon: "⚙" }
 ];
 
 const mobileNavItems: NavItem[] = [
   { id: "dashboard", icon: "⬡" },
-  { id: "journey", icon: "🧭" },
+  { id: "journey", icon: Compass },
   { id: "navigator", penguin: true },
-  { id: "archive", icon: "📚" }
+  { id: "archive", icon: Archive }
 ];
 
 const cycleVisuals = [
@@ -103,6 +106,10 @@ function PenguinHeadIcon({ size = 24 }: { size?: number }) {
 function NavIcon({ item, size }: { item: NavItem; size: number }) {
   useUiLocale();
   if ("penguin" in item) return <PenguinHeadIcon size={size + 5} />;
+  if (typeof item.icon !== "string") {
+    const Icon = item.icon;
+    return <span className="habits-nav-symbol" style={{ width: size + 5, height: size + 5 }}><Icon size={size + 2} strokeWidth={1.8} aria-hidden="true" /></span>;
+  }
   return <span className="habits-nav-symbol" style={{ width: size + 5, height: size + 5 }}>{item.icon}</span>;
 }
 
@@ -124,7 +131,9 @@ function HabitsContent() {
   const analysisId = searchParams.get("analysisId");
   const entryPoint = searchParams.get("from");
   const locale = useUiLocale();
-  const t = useSiteText(locale).habits.app;
+  const siteText = useSiteText(locale);
+  const t = siteText.habits.app;
+  const requestedTab = searchParams.get("tab");
 
   const [tab, setTab] = useState<Tab>("dashboard");
   const [showMobileMore, setShowMobileMore] = useState(false);
@@ -164,7 +173,6 @@ function HabitsContent() {
   const [chatInput, setChatInput] = useState("");
   const [threadId, setThreadId] = useState<string | undefined>();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [showCoachmark, setShowCoachmark] = useState(false);
 
   const [settingsName, setSettingsName] = useState("");
   const [settingsZone, setSettingsZone] = useState<string>("clarity");
@@ -234,14 +242,8 @@ function HabitsContent() {
   }, [program?.id]);
 
   useEffect(() => {
-    if (!program || typeof window === "undefined") return;
-    const key = `orken_habits_coachmark_v1_${program.id}`;
-    setShowCoachmark(window.localStorage.getItem(key) !== "1");
-  }, [program?.id]);
-
-  useEffect(() => {
-    if (tab !== "dashboard") setShowCoachmark(false);
-  }, [tab]);
+    if (requestedTab === "journey" || requestedTab === "guide") setTab(requestedTab);
+  }, [requestedTab]);
 
   useEffect(() => {
     if (!program) {
@@ -295,13 +297,6 @@ function HabitsContent() {
     setSavedMessage(message);
     setSavedAt(new Date());
     setError("");
-  }
-
-  function dismissCoachmark() {
-    if (program && typeof window !== "undefined") {
-      window.localStorage.setItem(`orken_habits_coachmark_v1_${program.id}`, "1");
-    }
-    setShowCoachmark(false);
   }
 
   async function startFromLatestReport() {
@@ -755,17 +750,6 @@ function HabitsContent() {
         {savedMessage && <p className="auth-message">{savedMessage}</p>}
         {savedAt && <p className="habits-save-state">{t.saved} {formatTime(savedAt)}</p>}
         {error && <p className="auth-error">{error}</p>}
-        {showCoachmark && (
-          <Coachmark
-            t={t}
-            onClose={dismissCoachmark}
-            onGuide={() => {
-              dismissCoachmark();
-              setTab("guide");
-            }}
-          />
-        )}
-
         {tab === "dashboard" && (
           <DashboardTab
             t={t}
@@ -872,6 +856,10 @@ function HabitsContent() {
           />
         )}
       </section>
+      <OrkenGuide context="user" scope={program.id} suspended={showMobileMore || busy} actions={[
+        { label: siteText.guide.journey, onClick: () => setTab("journey") },
+        { label: siteText.guide.help, onClick: () => setTab("guide") }
+      ]} />
     </main>
   );
 }
@@ -2071,45 +2059,50 @@ function HabitDetailsCard({ habit, t }: { habit: HabitEnrollmentSummary; t: Retu
   );
 }
 
-function Coachmark(props: {
-  t: ReturnType<typeof useSiteText>["habits"]["app"];
-  onClose: () => void;
-  onGuide: () => void;
-}) {
-  useUiLocale();
-  return (
-    <section className="habits-coachmark" aria-label={props.t.habitsUx.coachmark.title}>
-      <div>
-        <h2>{props.t.habitsUx.coachmark.title}</h2>
-        <p>{props.t.habitsUx.coachmark.copy}</p>
-      </div>
-      <div className="habits-coachmark-steps">
-        {props.t.habitsUx.coachmark.steps.map((step) => <span key={step}>{step}</span>)}
-      </div>
-      <div className="habits-action-row">
-        <button className="button habits-cta" type="button" onClick={props.onClose}>{props.t.habitsUx.coachmark.primary}</button>
-        <button className="button secondary habits-cta" type="button" onClick={props.onGuide}>{props.t.habitsUx.coachmark.guide}</button>
-      </div>
-    </section>
-  );
-}
-
 function HelpTip({ label }: { label: string }) {
   useUiLocale();
   const [open, setOpen] = useState(false);
+  const [position, setPosition] = useState<CSSProperties | null>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const popover = useRef<HTMLSpanElement>(null);
+  const tooltipId = useId();
+
+  useEffect(() => {
+    if (!open) { setPosition(null); return; }
+    const place = () => {
+      if (!trigger.current || !popover.current) return;
+      const rect = trigger.current.getBoundingClientRect();
+      const width = Math.min(340, window.innerWidth - 24);
+      const height = popover.current.offsetHeight;
+      const left = Math.max(12, Math.min(rect.left + rect.width / 2 - width / 2, window.innerWidth - width - 12));
+      const top = rect.bottom + 8 + height < window.innerHeight - 12 ? rect.bottom + 8 : Math.max(12, rect.top - height - 8);
+      setPosition({ width, left, top, maxHeight: window.innerHeight - 24 });
+    };
+    place();
+    const observer = new ResizeObserver(place);
+    if (popover.current) observer.observe(popover.current);
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => { observer.disconnect(); window.removeEventListener("resize", place); window.removeEventListener("scroll", place, true); };
+  }, [open, label]);
+
   return (
-    <span className="habits-help-wrap">
+    <span className="habits-help-wrap" onPointerEnter={event => { if (event.pointerType === "mouse") setOpen(true); }} onPointerLeave={() => setOpen(false)}>
       <button
+        ref={trigger}
         className="habits-help-tip"
         type="button"
         aria-label={label}
         aria-expanded={open}
+        aria-describedby={open ? tooltipId : undefined}
+        onFocus={event => { if (event.currentTarget.matches(":focus-visible")) setOpen(true); }}
         onClick={() => setOpen((value) => !value)}
-        onBlur={() => window.setTimeout(() => setOpen(false), 120)}
+        onBlur={() => setOpen(false)}
+        onKeyDown={event => { if (event.key === "Escape") setOpen(false); }}
       >
       ?
       </button>
-      <span className={`habits-help-popover ${open ? "open" : ""}`}>{label}</span>
+      {open && createPortal(<span ref={popover} id={tooltipId} role="tooltip" data-orken-guide-blocker className="habits-help-popover" style={{ ...position, visibility: position ? "visible" : "hidden" }}>{label}</span>, document.body)}
     </span>
   );
 }

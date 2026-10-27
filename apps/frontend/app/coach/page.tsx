@@ -10,6 +10,8 @@ import type { CoachClientDetail, CoachServiceOfferSummary, CoachWorkspaceRespons
 import { coachApi, partnerPortalApi } from "@/lib/api";
 import styles from "./coach.module.css";
 import ConnectionRequests from "@/components/coach/ConnectionRequests";
+import { OrkenGuide } from "@/components/OrkenGuide";
+import { useSiteText } from "@/lib/useSiteText";
 
 type Tab = "overview"|"clients"|"scheduling"|"services"|"plans"|"site"|"telegram"|"rewards"|"profile";
 type ClientSection = "state"|"insights"|"feedback"|"assignments";
@@ -21,6 +23,7 @@ const makeKey=()=>typeof crypto!=="undefined"&&crypto.randomUUID?crypto.randomUU
 
 export default function CoachWorkspacePage(){
   useUiLocale();
+  const guideText = useSiteText().guide;
   const [workspace,setWorkspace]=useState<CoachWorkspaceResponse|null>(null);
   const [tab,setTab]=useState<Tab>("overview");const [loading,setLoading]=useState(true);const [loginRequired,setLoginRequired]=useState(false);const [error,setError]=useState("");const [notice,setNotice]=useState("");const [logoutBusy,setLogoutBusy]=useState(false);
   const [checkoutPolls,setCheckoutPolls]=useState(0);
@@ -40,7 +43,12 @@ export default function CoachWorkspacePage(){
   if(loginRequired)return <CoachLogin onDone={load}/>;
   if(!workspace)return <main className={styles.page}><div className={styles.error}>{error}</div></main>;
   const counts=workspace.counts;
-  return <main className={styles.page}><div className={styles.shell}>
+  return <main className={styles.page}>
+    <OrkenGuide context="coach" scope={workspace.profile.id} message={workspace.clients.length ? guideText.coach : guideText.coachStart} actions={[
+      { label: workspace.clients.length ? guideText.clients : guideText.invite, onClick: () => { setSelected(null); setTab("clients"); } },
+      { label: guideText.profile, onClick: () => setTab("profile") }
+    ]} />
+    <div className={styles.shell}>
     <aside className={styles.sidebar}><Link className={styles.brand} href="/">ORKEN.LIFE</Link><nav>{tabs().map(([id,label,Icon])=><button key={id} className={tab===id?styles.active:""} onClick={()=>{setTab(id);setSelected(null)}}><Icon size={18}/>{label}</button>)}</nav><div className={styles.sidebarFoot}><Link className={styles.link} href="/partners"><Link2 size={15}/> {uiText(" Рефералы и финансы")}</Link><Link className={styles.link} href="/coaches">{uiText("Открыть каталог")}</Link></div></aside>
     <section className={styles.main}><header className={styles.top}><div><span className={styles.badge}>{uiText("Кабинет коуча")}</span><h1>{title(tab)}</h1><p>{description(tab)}</p></div><div className={styles.topActions}><span className={styles.status}>{statusLabel(workspace.profile.status)}</span><button className={styles.logoutButton} type="button" onClick={logout} disabled={logoutBusy}><LogOut size={16}/>{logoutBusy?uiText("Выходим..."):uiText("Выйти")}</button></div></header>
     {error&&<p className={styles.error}>{error}</p>}{notice&&<p className={styles.success}>{notice}</p>}

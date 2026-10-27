@@ -28,6 +28,7 @@ import { api } from "@/lib/api";
 import { SUPPORT_EMAIL } from "@/lib/legal";
 import { useSiteText } from "@/lib/useSiteText";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { OrkenGuide } from "@/components/OrkenGuide";
 
 function cabinetLinks() { return [
   { href: "/account", label: uiText("Кабинет пользователя"), Icon: UserCircle },
@@ -79,6 +80,10 @@ export default function LandingPage() {
       <LandingNav />
       <main className="screen landing-v2-screen">
         <section id="about" className="landing-v2-hero">
+          <div className="landing-v2-hero-art" aria-label={uiText("Визуализация анализа лица")}>
+            <img src="/assets/ai-face-hero.jpg" alt={uiText("Цифровая модель лица в неоновом интерфейсе ORKEN")} />
+            <span className="landing-v2-scan-line" aria-hidden="true" />
+          </div>
           <div className="landing-v2-container landing-v2-hero-grid">
             <div className="landing-v2-hero-copy">
               <p className="landing-v2-eyebrow">{landing.kicker}</p>
@@ -110,10 +115,6 @@ export default function LandingPage() {
                   </div>
                 ))}
               </div>
-            </div>
-            <div className="landing-v2-hero-art" aria-label={uiText("Визуализация анализа лица")}>
-              <img src="/assets/ai-face-hero.jpg" alt={uiText("Цифровая модель лица в неоновом интерфейсе ORKEN")} />
-              <span className="landing-v2-scan-line" aria-hidden="true" />
             </div>
           </div>
         </section>
@@ -230,6 +231,7 @@ export default function LandingPage() {
           </div>
         </footer>
       </main>
+      <OrkenGuide context="landing" scope="public" actions={[{ label: text.guide.diagnose, href: "/flow/voice" }]} />
     </div>
   );
 }
@@ -256,7 +258,7 @@ function LandingNav() {
           <img src="/assets/orken-penguin-transparent.png" alt={uiText("Пингвин ORKEN")} />
           <span>ORKEN.LIFE</span>
         </Link>
-        <div id="landing-navigation" className={`landing-v2-nav-panel${mobileOpen ? " is-open" : ""}`}>
+        <div id="landing-navigation" className={`landing-v2-nav-panel${mobileOpen ? " is-open" : ""}`} data-orken-guide-blocker={mobileOpen ? "" : undefined}>
           <nav className="landing-v2-section-links" aria-label={uiText("Разделы сайта")}>
             {sectionLinks.map(([href, label]) => <a href={href} key={href} onClick={closeMobile}>{label}</a>)}
           </nav>

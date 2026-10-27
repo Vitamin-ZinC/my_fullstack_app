@@ -2278,7 +2278,6 @@ svg {
   display: flex;
   align-items: center;
   position: relative;
-  isolation: isolate;
 }
 
 .landing-v2-hero-copy {
@@ -2425,14 +2424,14 @@ svg {
 .landing-v2-hero-art {
   position: absolute;
   z-index: 0;
-  top: -56px;
+  top: 0;
   right: 0;
-  bottom: -64px;
+  bottom: 0;
   width: 58%;
   overflow: hidden;
   pointer-events: none;
-  -webkit-mask-image: linear-gradient(to right, transparent 0%, rgba(0, 0, 0, 0.58) 28%, #000 62%);
-  mask-image: linear-gradient(to right, transparent 0%, rgba(0, 0, 0, 0.58) 28%, #000 62%);
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, rgba(0, 0, 0, 0.58) 28%, #000 62%, #000 94%, rgba(0, 0, 0, 0.86));
+  mask-image: linear-gradient(to right, transparent 0%, rgba(0, 0, 0, 0.58) 28%, #000 62%, #000 94%, rgba(0, 0, 0, 0.86));
 }
 
 .landing-v2-hero-art::after {
@@ -2992,10 +2991,10 @@ svg {
   }
 
   .landing-v2-hero-art {
-    top: -32px;
-    right: -14px;
-    bottom: -38px;
-    width: calc(100% + 28px);
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
     opacity: 0.3;
     -webkit-mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.86), transparent 88%);
     mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.86), transparent 88%);
@@ -5469,10 +5468,9 @@ svg {
 }
 
 .habits-help-popover {
-  position: absolute;
-  z-index: 12;
-  top: calc(100% + 8px);
-  left: 50%;
+  position: fixed;
+  z-index: 110;
+  overflow: auto;
   width: min(340px, 84vw);
   border: 1px solid rgba(0, 212, 255, 0.24);
   border-radius: 12px;
@@ -5483,20 +5481,11 @@ svg {
   font-family: Inter, sans-serif;
   font-size: 12px;
   line-height: 1.5;
-  opacity: 0;
   padding: 10px 12px;
   pointer-events: none;
   text-align: left;
-  transform: translate(-50%, -4px);
   transition: opacity 0.15s ease, transform 0.15s ease;
   white-space: pre-line;
-}
-
-.habits-help-wrap:hover .habits-help-popover,
-.habits-help-wrap:focus-within .habits-help-popover,
-.habits-help-popover.open {
-  opacity: 1;
-  transform: translate(-50%, 0);
 }
 
 .habits-onboarding-options {

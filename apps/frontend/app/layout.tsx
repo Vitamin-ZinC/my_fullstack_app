@@ -7,7 +7,7 @@ import { Suspense } from "react";
 import { TrafficAnalytics } from "@/components/TrafficAnalytics";
 
 export const metadata: Metadata = {
-  title: `Икигай — ${BRAND_NAME}`,
+  title: `Икигай - ${BRAND_NAME}`,
   description: "AI диагностика Икигай по голосу, лицу и карьерным сигналам"
 };
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useSyncExternalStore } from "react";
 import { translateGeneratedSystemText, type UiLocale } from "@levelup/contracts";
+import { presentInterfaceCopy } from "./interfaceCopy";
 
 const STORAGE_KEY = "levelup_locale";
 const COOKIE_KEY = "orken_locale";
@@ -31,7 +32,7 @@ export function setStoredLocale(locale: UiLocale) {
     try { window.localStorage.setItem(STORAGE_KEY, locale); } catch { /* Cookie is the fallback. */ }
     document.cookie = `${COOKIE_KEY}=${locale}; Path=/; Max-Age=31536000; SameSite=Lax${window.location.protocol === "https:" ? "; Secure" : ""}`;
     document.documentElement.lang = locale;
-    document.title = locale === "en" ? "Ikigai - ORKEN.LIFE" : "Икигай — ORKEN.LIFE";
+    document.title = locale === "en" ? "Ikigai - ORKEN.LIFE" : "Икигай - ORKEN.LIFE";
     const url = new URL(window.location.href);
     if (url.searchParams.has("lang")) {
       url.searchParams.set("lang", locale);
@@ -62,7 +63,7 @@ function subscribe(listener: () => void) {
 }
 
 export function uiText(source: string, values: Record<string, unknown> = {}) {
-  const template = translateGeneratedSystemText(source, activeLocale);
+  const template = presentInterfaceCopy(translateGeneratedSystemText(source, activeLocale));
   return template.replace(/\{(v\d+)\}/g, (match, key: string) => key in values ? String(values[key] ?? "") : match);
 }
 

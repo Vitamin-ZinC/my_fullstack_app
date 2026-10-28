@@ -1,0 +1,21 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import vm from "node:vm";
+import ts from "typescript";
+
+const source = fs.readFileSync("apps/frontend/lib/interfaceCopy.ts", "utf8");
+const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+const exports = {};
+vm.runInNewContext(js, { exports });
+assert.equal(exports.presentInterfaceCopy("Кабинет Коуча/HR"), "Кабинет эксперта");
+assert.equal(exports.presentInterfaceCopy("Данные из кабинета коуча"), "Данные из кабинета эксперта");
+assert.equal(exports.presentInterfaceCopy("Прогресс подопечных"), "Прогресс клиентов");
+assert.equal(exports.presentInterfaceCopy("Coach Workspace"), "Expert Workspace");
+assert.equal(exports.presentInterfaceCopy("Добрый день, {v0}"), "Добрый день, {v0}");
+const input = { title: "Полный отчёт — {price}, разово", items: ["Диагностика и навигатор — для разных задач"] };
+const presented = exports.presentLandingCopy(input);
+assert.equal(presented.title, "Полный отчёт: {price}, разово");
+assert.equal(presented.items[0], "Диагностика и навигатор для разных задач");
+assert.ok(input.title.includes("—"));
+assert.equal(JSON.stringify(presented).includes("—"), false);
+console.log("Interface terminology, placeholders, immutable landing copy and punctuation passed");

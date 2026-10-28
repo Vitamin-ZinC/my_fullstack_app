@@ -10,7 +10,7 @@ export function GlobalLanguageSwitcher() {
   const pathname = usePathname();
   useEffect(() => {
     document.documentElement.lang = locale;
-    const title = locale === "en" ? "Ikigai - ORKEN.LIFE" : "Икигай — ORKEN.LIFE";
+    const title = locale === "en" ? "Ikigai - ORKEN.LIFE" : "Икигай - ORKEN.LIFE";
     const syncTitle = () => { if (document.title !== title) document.title = title; };
     // Next's streamed metadata can arrive after language initialization.
     const observer = new MutationObserver(syncTitle);

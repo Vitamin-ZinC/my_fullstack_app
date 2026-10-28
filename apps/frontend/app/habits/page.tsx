@@ -17,7 +17,24 @@ import {
   Save,
   MessagesSquare,
   Trophy,
-  User
+  User,
+  Target,
+  Zap,
+  Brain,
+  ShieldCheck,
+  Lightbulb,
+  Sprout,
+  Rocket,
+  Leaf,
+  Star,
+  Heart,
+  Globe2,
+  Wallet,
+  Award,
+  Gift,
+  Gem,
+  Flame,
+  type LucideIcon
 } from "lucide-react";
 import type { HabitConfigResponse, HabitEnrollmentSummary, HabitProgramResponse, HabitProgramSummary, PartnerMarketplaceResponse, TelegramStatusResponse } from "@levelup/contracts";
 import { api, restoreSessionFromUrl } from "@/lib/api";
@@ -25,6 +42,8 @@ import { uiText, getFormatLocale, useUiLocale } from "@/lib/locale";
 import { openTelegramConnectUrl } from "@/lib/telegram";
 import { useSiteText } from "@/lib/useSiteText";
 import { OrkenGuide } from "@/components/OrkenGuide";
+import { HabitArchiveSearch } from "@/components/habits/HabitArchiveSearch";
+import { publishHabitProgramUpdate, subscribeHabitProgramUpdates } from "@/lib/habitProgramUpdates";
 
 type Tab = "dashboard" | "journey" | "habits" | "navigator" | "archive" | "rewards" | "guide" | "settings";
 type ArchiveFilter = "all" | "insights" | "rewards" | "weeks";
@@ -56,10 +75,10 @@ const mobileNavItems: NavItem[] = [
 ];
 
 const cycleVisuals = [
-  { icon: "🌱", color: "#00d4ff" },
-  { icon: "🚀", color: "#a855f7" },
-  { icon: "🌿", color: "#10b981" },
-  { icon: "🌟", color: "#f59e0b" }
+  { icon: "🌱", Icon: Sprout, color: "#00d4ff" },
+  { icon: "🚀", Icon: Rocket, color: "#a855f7" },
+  { icon: "🌿", Icon: Leaf, color: "#10b981" },
+  { icon: "🌟", Icon: Star, color: "#f59e0b" }
 ] as const;
 
 const zoneIds = ["passion", "mission", "profession", "vocation", "resource", "clarity", "stability", "ikigai"] as const;
@@ -105,7 +124,7 @@ function PenguinHeadIcon({ size = 24 }: { size?: number }) {
 
 function NavIcon({ item, size }: { item: NavItem; size: number }) {
   useUiLocale();
-  if ("penguin" in item) return <PenguinHeadIcon size={size + 5} />;
+  if ("penguin" in item) return <span aria-hidden="true"><PenguinHeadIcon size={size + 5} /></span>;
   if (typeof item.icon !== "string") {
     const Icon = item.icon;
     return <span className="habits-nav-symbol" style={{ width: size + 5, height: size + 5 }}><Icon size={size + 2} strokeWidth={1.8} aria-hidden="true" /></span>;
@@ -135,7 +154,7 @@ function HabitsContent() {
   const t = siteText.habits.app;
   const requestedTab = searchParams.get("tab");
 
-  const [tab, setTab] = useState<Tab>("dashboard");
+  const [tab, setTab] = useState<Tab>("journey");
   const [showMobileMore, setShowMobileMore] = useState(false);
   const [program, setProgram] = useState<HabitProgramSummary | null>(null);
   const [config, setConfig] = useState<HabitConfigResponse | null>(null);
@@ -179,6 +198,7 @@ function HabitsContent() {
   const [settingsAvatar, setSettingsAvatar] = useState("P");
   const [reminderEnabled, setReminderEnabled] = useState(true);
   const [reminderTime, setReminderTime] = useState("09:00");
+  const programRevision = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -196,7 +216,7 @@ function HabitsContent() {
         }
         if (analysisId) {
           const result = await api.activateHabitsFromReport(analysisId);
-          if (!cancelled) applyProgramResponse(result);
+          if (!cancelled) { applyProgramResponse(result); setTab("journey"); }
           return;
         }
         const result = await api.habitsMe();
@@ -225,9 +245,10 @@ function HabitsContent() {
   useEffect(() => {
     if (!program) return;
     let cancelled = false;
+    const revision = programRevision.current;
     // A language change only reloads the read model, never activates a new program.
     api.habitsMe().then((result) => {
-      if (!cancelled) { setProgram(result.program); setConfig(result.config); }
+      if (!cancelled && revision === programRevision.current) { setProgram(result.program); setConfig(result.config); }
     }).catch(() => undefined);
     return () => { cancelled = true; };
   }, [locale]);
@@ -242,8 +263,24 @@ function HabitsContent() {
   }, [program?.id]);
 
   useEffect(() => {
-    if (requestedTab === "journey" || requestedTab === "guide") setTab(requestedTab);
+    if (navItems.some(item => item.id === requestedTab)) setTab(requestedTab as Tab);
   }, [requestedTab]);
+
+  useEffect(() => {
+    if (!program) return;
+    let cancelled = false;
+    const unsubscribe = subscribeHabitProgramUpdates(program.id, () => {
+      const revision = programRevision.current;
+      void api.habitsMe().then(result => {
+        if (!cancelled && revision === programRevision.current && result.program?.id === program.id) {
+          setProgram(result.program);
+          setConfig(result.config);
+          setSettingsZone(result.program.weakZone || "clarity");
+        }
+      }).catch(() => undefined);
+    });
+    return () => { cancelled = true; unsubscribe(); };
+  }, [program?.id]);
 
   useEffect(() => {
     if (!program) {
@@ -289,6 +326,7 @@ function HabitsContent() {
   }), [activeHabit?.title, clarity, energy, program, stability, tab]);
 
   function applyProgramResponse(result: HabitProgramResponse) {
+    programRevision.current += 1;
     setProgram(result.program);
     setConfig(result.config);
   }
@@ -308,6 +346,7 @@ function HabitsContent() {
     try {
       const result = await api.activateHabitsFromReport(latestReport.analysisId);
       applyProgramResponse(result);
+      setTab("journey");
       setLatestReport(null);
       markSaved(program ? t.messages.programUpdated : t.messages.programSaved);
     } catch (reason) {
@@ -334,6 +373,7 @@ function HabitsContent() {
       applyProgramResponse(result);
       setLatestReport(null);
       markSaved(t.messages.programSaved);
+      setTab("journey");
     } catch (reason) {
       setError(readableError(reason, t.errors.start));
       setOnboardingStep("questions");
@@ -433,6 +473,8 @@ function HabitsContent() {
       });
       applyProgramResponse(result);
       markSaved(t.messages.settingsSaved);
+      setSettingsZone(result.program.weakZone || settingsZone);
+      publishHabitProgramUpdate(result.program.id);
     } catch (reason) {
       setError(readableError(reason, t.errors.settings));
     } finally {
@@ -689,7 +731,6 @@ function HabitsContent() {
           })}
           <Link className="habits-nav-link" href="/habits/progress"><Activity size={19} />{uiText("Прогресс")}</Link>
           <Link className="habits-nav-link" href="/habits/coaching"><MessagesSquare size={19} />{uiText("Мой коуч")}</Link>
-          <Link className="habits-nav-link" href="/habits/archive"><Archive size={19} />{uiText("Архив с поиском")}</Link>
         </nav>
         <div className="habits-sidebar-profile">
           <div className="habits-sidebar-avatar-wrap">
@@ -724,7 +765,6 @@ function HabitsContent() {
           <div className="habits-mobile-more-menu">
             <Link className="habits-mobile-more-link" href="/habits/progress"><Activity size={18} /><span>{uiText("Прогресс")}</span></Link>
             <Link className="habits-mobile-more-link" href="/habits/coaching"><MessagesSquare size={18} /><span>{uiText("Мой коуч")}</span></Link>
-            <Link className="habits-mobile-more-link" href="/habits/archive"><Archive size={18} /><span>{uiText("Архив с поиском")}</span></Link>
             {navItems.filter((item) => !mobileNavItems.some((mobileItem) => mobileItem.id === item.id)).map((item) => (
               <button key={item.id} className={tab === item.id ? "active" : ""} type="button" title={t.habitsUx.tooltips[item.id]} onClick={() => {
                 setTab(item.id);
@@ -1052,30 +1092,26 @@ function DashboardTab(props: {
     ? props.program.weakZone as (typeof zoneIds)[number]
     : "ikigai";
   const weakZoneLabel = props.t.zones[weakZoneId];
-  const weakZoneIcon = weakZoneId === "passion" ? "💗"
-    : weakZoneId === "mission" ? "🌍"
-      : weakZoneId === "profession" ? "⭐"
-        : weakZoneId === "vocation" ? "💰"
-          : weakZoneId === "resource" ? "🌱"
-            : weakZoneId === "clarity" ? "🧭"
-              : weakZoneId === "stability" ? "🌳"
-                : "✦";
+  const WeakZoneIcon = weakZoneId === "passion" ? Heart : weakZoneId === "mission" ? Globe2
+    : weakZoneId === "profession" ? Star : weakZoneId === "vocation" ? Wallet
+      : weakZoneId === "resource" ? Sprout : weakZoneId === "clarity" ? Compass
+        : weakZoneId === "stability" ? ShieldCheck : Target;
   const zoneProgress = clampPercent((checkinsDone / Math.max(1, props.program.enrollments.length * 7)) * 100);
   const rankLevel = Math.max(1, Math.round(finiteNumber(props.program.stats.rank.level, 1)));
-  const rankIcon = ["🌱", "🔥", "🧭", "⚡", "🌟", "👑"][Math.max(0, Math.min(5, rankLevel - 1))];
-  const statTiles: Array<{ label: string; value: string | number; icon: string; color: string }> = [
-    { label: props.t.stats.checkins, value: checkinsDone, icon: "✅", color: "#00d4ff" },
-    { label: props.t.stats.insights, value: insightsCount, icon: "💡", color: "#a855f7" },
-    { label: props.t.stats.xp, value: xp, icon: "⭐", color: "#f59e0b" },
-    { label: props.t.dashboard.rankShort, value: props.program.stats.rank.title, icon: rankIcon, color: "#f59e0b" }
+  const RankIcon = [Sprout, Flame, Compass, Zap, Star, Award][Math.max(0, Math.min(5, rankLevel - 1))];
+  const statTiles: Array<{ label: string; value: string | number; icon: LucideIcon; color: string }> = [
+    { label: props.t.stats.checkins, value: checkinsDone, icon: CheckCircle2, color: "#00d4ff" },
+    { label: props.t.stats.insights, value: insightsCount, icon: Lightbulb, color: "#a855f7" },
+    { label: props.t.stats.xp, value: xp, icon: Star, color: "#f59e0b" },
+    { label: props.t.dashboard.rankShort, value: props.program.stats.rank.title, icon: RankIcon, color: "#f59e0b" }
   ];
   return (
-    <div className="habits-grid">
+    <div className="habits-grid habits-visual-workspace">
       <section className="habits-panel habits-wide habits-dashboard-hero">
         <div className="habits-old-stat-grid">
           {statTiles.map((tile) => (
             <div className="habits-old-stat-card" key={tile.label} style={{ "--tile-color": tile.color } as CSSProperties}>
-              <div className="habits-old-stat-icon">{tile.icon}</div>
+              <div className="habits-old-stat-icon"><tile.icon size={24} aria-hidden="true" /></div>
               <strong>{tile.value}</strong>
               <span>{tile.label}</span>
             </div>
@@ -1084,7 +1120,7 @@ function DashboardTab(props: {
 
         <div className="habits-rank-overview">
           <article className="habits-rank-overview-card">
-            <RankEmblem rank={props.program.stats.rank} size="large" />
+            <RankEmblem rank={props.program.stats.rank} size="large" outline />
             <div>
               <span>{props.t.dashboard.currentRank}</span>
               <h3>{props.program.stats.rank.title}</h3>
@@ -1093,7 +1129,7 @@ function DashboardTab(props: {
             <strong>{monthPercent}%</strong>
           </article>
           <article className="habits-rank-overview-card reward">
-            <div className="habits-rank-reward-icon">{weekProgress >= 100 ? "🏆" : weekProgress >= 70 ? "🎁" : "💠"}</div>
+            <div className="habits-rank-reward-icon">{weekProgress >= 100 ? <Trophy /> : weekProgress >= 70 ? <Gift /> : <Gem />}</div>
             <div>
               <span>{props.t.dashboard.weeklyReward}</span>
               <h3>{weekProgress >= 100 ? uiText("Золотой сундук") : weekProgress >= 70 ? uiText("Серебряный сундук") : uiText("Недельный ритм")}</h3>
@@ -1115,7 +1151,7 @@ function DashboardTab(props: {
               {props.t.dashboard.openJourney}
             </button>
             <button className="button secondary habits-cta" type="button" title={props.t.habitsUx.tooltips.navigator} onClick={props.openNavigator}>
-              <PenguinHeadIcon size={18} />
+              <MessagesSquare size={18} />
               {props.t.dashboard.askOrken}
             </button>
           </div>
@@ -1123,17 +1159,17 @@ function DashboardTab(props: {
 
         <div className="habits-status-strip">
           <div className="habits-status-card">
-            <span><span className="habits-inline-icon">{rankIcon}</span>{props.t.dashboard.currentRank}</span>
+            <span><span className="habits-inline-icon"><RankIcon size={18} /></span>{props.t.dashboard.currentRank}</span>
             <strong>{props.program.stats.rank.title}</strong>
             <small>{monthXp}/{monthMaxXp} {uiText(" XP месяца · ")}{xpToNextRank > 0 ? uiText("{v0} XP до {v1}", { v0: xpToNextRank, v1: nextRank }) : props.t.dashboard.rankComplete}</small>
           </div>
           <div className="habits-status-card">
-            <span><span className="habits-inline-icon">🧭</span>{props.t.dashboard.totalRoute}</span>
+            <span><span className="habits-inline-icon"><Compass size={18} /></span>{props.t.dashboard.totalRoute}</span>
             <strong>{currentSortOrder}/{totalWeeks}</strong>
             <small>{routeProgress}%</small>
           </div>
           <div className="habits-status-card">
-            <span><span className="habits-inline-icon">✦</span>{props.t.dashboard.weeklyRhythm}</span>
+            <span><span className="habits-inline-icon"><Activity size={18} /></span>{props.t.dashboard.weeklyRhythm}</span>
             <strong>{completedWeekCheckins}/7</strong>
             <small>{weekProgress}%</small>
           </div>
@@ -1143,7 +1179,7 @@ function DashboardTab(props: {
           <div className="habits-current-cycle-card" style={{ "--cycle-color": activeCycleVisual.color } as CSSProperties}>
             <div>
               <div className="habit-week">{props.t.dashboard.currentCycle}</div>
-              <h3><span className="habits-current-cycle-icon">{activeCycleVisual.icon}</span>{activeCycle.label} - {activeCycle.title}</h3>
+              <h3><span className="habits-current-cycle-icon"><activeCycleVisual.Icon size={20} /></span>{activeCycle.label} - {activeCycle.title}</h3>
               <p>{activeCycle.goal}</p>
               <div className="habits-tag-row">
                 {activeCycle.areas.map((area) => <span key={area} style={{ "--cycle-color": activeCycleVisual.color } as CSSProperties}>{area}</span>)}
@@ -1172,7 +1208,7 @@ function DashboardTab(props: {
             const progress = isDone ? 100 : isActive ? activeCycleProgress : 0;
             return (
               <article className={`habits-cycle-step ${isActive ? "active" : ""} ${isDone ? "done" : ""}`} key={cycle.id} style={{ "--cycle-color": visual.color } as CSSProperties}>
-                <div className="habits-cycle-step-icon">{visual.icon}</div>
+                <div className="habits-cycle-step-icon"><visual.Icon size={23} /></div>
                 <span>{cycle.label}</span>
                 <h3>{cycle.title}</h3>
                 <p>{cycle.goal}</p>
@@ -1225,7 +1261,7 @@ function DashboardTab(props: {
 
       <section className="habits-panel habits-growth-panel">
         <div className="habit-week">{props.t.dashboard.growthPoint}</div>
-        <h2><span>{weakZoneIcon}</span>{weakZoneLabel}</h2>
+        <h2><WeakZoneIcon size={22} />{weakZoneLabel}</h2>
         <div className="row habits-growth-row">
           <span>{props.t.dashboard.zoneProgress}</span>
           <strong>{zoneProgress}<small>/100</small></strong>
@@ -1241,7 +1277,7 @@ function DashboardTab(props: {
         <div className="habits-reward-list">
           {props.program.rewards.slice(0, 5).map((reward) => (
             <div className="habits-mini-reward" key={reward.id}>
-              <span className="habits-reward-emoji">{rewardIcon(reward.type)}</span>
+              <span className="habits-reward-emoji"><Gift size={19} /></span>
               <span>{reward.label}</span>
               <strong>+{reward.xp} XP</strong>
             </div>
@@ -1294,13 +1330,15 @@ function JourneyTab(props: {
   const habitTitle = activeHabit?.title
     ? uiText("{v0}: день {v1}", { v0: activeHabit.title, v1: habitDay })
     : todayTask?.title ?? props.t.journey.title;
+  const focusId = zoneIds.includes(props.program.weakZone as typeof zoneIds[number]) ? props.program.weakZone as typeof zoneIds[number] : "ikigai";
   return (
-    <div className="habits-grid">
+    <div className="habits-grid habits-visual-workspace">
       <section className="habits-panel habits-wide habits-journey-daily">
         <div className="row">
           <div>
             <div className="habit-week">{props.t.habitsUx.journeySteps.habit}</div>
-            <h2 className="habits-today-title">{habitTitle}</h2>
+            <h2 className="habits-today-title"><Target size={23} />{habitTitle}</h2>
+            <p className="habits-focus-label" data-testid="today-ikigai-focus"><Compass size={16} />{uiText("Фокус Икигай")}: <strong>{props.t.zones[focusId]}</strong></p>
           </div>
           <div className="habits-mini-reward">
             <Trophy size={15} />
@@ -1344,7 +1382,7 @@ function JourneyTab(props: {
         <h2>{props.t.dashboard.metricTitle}<HelpTip label={props.t.habitsUx.tooltips.saveMetric} /></h2>
         <p className="habits-muted">{props.t.dashboard.metricCopy}</p>
         <MetricSlider
-          icon="⚡"
+          icon={Zap}
           color="#00d4ff"
           label={props.t.metrics.energy}
           value={props.energy}
@@ -1354,7 +1392,7 @@ function JourneyTab(props: {
           onChange={props.setEnergy}
         />
         <MetricSlider
-          icon="🧠"
+          icon={Brain}
           color="#a855f7"
           label={props.t.metrics.clarity}
           value={props.clarity}
@@ -1364,7 +1402,7 @@ function JourneyTab(props: {
           onChange={props.setClarity}
         />
         <MetricSlider
-          icon="🌳"
+          icon={ShieldCheck}
           color="#10b981"
           label={props.t.metrics.stability}
           value={props.stability}
@@ -1556,6 +1594,7 @@ function ArchiveTab(props: {
   const groupedRewards = groupByMonth(props.program.rewards, (item) => item.createdAt);
   return (
     <div className="habits-grid">
+      <section className="habits-panel habits-wide"><HabitArchiveSearch /></section>
       <section className="habits-panel habits-wide">
         <div className="habits-tabs">
           {(Object.keys(props.t.archive.filters) as ArchiveFilter[]).map((filter) => (
@@ -2142,7 +2181,7 @@ function rankVisual(rank: RankLike) {
   };
 }
 
-function RankEmblem({ rank, size = "normal" }: { rank: RankLike; size?: "normal" | "large" }) {
+function RankEmblem({ rank, size = "normal", outline = false }: { rank: RankLike; size?: "normal" | "large"; outline?: boolean }) {
   useUiLocale();
   const visual = rankVisual(rank);
   return (
@@ -2152,7 +2191,7 @@ function RankEmblem({ rank, size = "normal" }: { rank: RankLike; size?: "normal"
       title={visual.title}
       aria-label={visual.title}
     >
-      {visual.badge}
+      {outline ? <Award size={size === "large" ? 30 : 22} /> : visual.badge}
     </span>
   );
 }
@@ -2267,7 +2306,7 @@ function groupWeekSummariesByMonth(summaries: HabitProgramSummary["weekSummaries
   return Array.from(groups.values());
 }
 
-function MetricSlider(props: { icon: string; color: string; label: string; value: number; hint: string; scale: readonly string[]; numberHints: readonly string[]; onChange: (value: number) => void }) {
+function MetricSlider(props: { icon: LucideIcon; color: string; label: string; value: number; hint: string; scale: readonly string[]; numberHints: readonly string[]; onChange: (value: number) => void }) {
   useUiLocale();
   const progress = Math.max(0, Math.min(100, ((props.value - 1) / 9) * 100));
   const selectedNumberHint = props.numberHints[Math.max(0, props.value - 1)] ?? props.hint;
@@ -2276,7 +2315,7 @@ function MetricSlider(props: { icon: string; color: string; label: string; value
   return (
     <div className="habits-slider" style={{ "--metric-color": props.color, "--metric-progress": `${progress}%` } as CSSProperties}>
       <label htmlFor={`metric-${props.label}`}>
-        <span className="habits-inline-icon">{props.icon}</span>
+        <span className="habits-inline-icon"><props.icon size={19} aria-hidden="true" /></span>
         {props.label}
         <HelpTip label={helpText} />
       </label>

@@ -26,6 +26,114 @@ const habitConfig = {
   priceLabel: "$8",
   trialDays: 30
 };
+
+test("Navigator preserves the combined archive and synchronizes saved Ikigai focus", async ({ page, context }) => {
+  let program = createHabitProgram();
+  program.rankHistory = [];
+  program.insights = [{ id: "retained-insight", text: "Мой сохранённый инсайт", source: "user", createdAt: "2026-10-20T12:00:00Z" }];
+  program.weekSummaries = [{ id: "retained-week", cycle: 1, week: 1, habitTitle: "Завершённая привычка", summary: "Итоги сохранённой недели", rewardLabel: "Недельная награда", pingviFeedback: "Сохранённая обратная связь", xpAwarded: 20, checkinsDone: 5, completionMode: "AUTO", createdAt: "2026-10-21T12:00:00Z" }];
+  const originalXp = program.stats.xp;
+  const searches = [];
+  await context.addInitScript(() => {
+    localStorage.setItem("levelup_locale", "ru");
+    localStorage.setItem("orken_guide_v1:user:habit-program-1", JSON.stringify({ disabled: true, lastShownAt: 0 }));
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: async text => { window.__copiedArchive = text; } } });
+  });
+  await context.route(`${apiBase}/api/**`, async route => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/api/auth/guest") return fulfillJson(route, { sessionId: "refresh-session", guestToken: "synthetic" });
+    if (url.pathname === "/api/habits/me") return fulfillJson(route, { program, config: habitConfig, latestReport: null });
+    if (url.pathname === "/api/traffic/config") return fulfillJson(route, { enabled: false });
+    if (url.pathname === "/api/telegram/status") return fulfillJson(route, { configured: true, linked: false });
+    if (url.pathname === "/api/habits/settings" && route.request().method() === "PATCH") {
+      const body = route.request().postDataJSON();
+      expect(body.programId).toBe(program.id);
+      program = { ...program, weakZone: body.weakZone, profile: { ...program.profile, onboardingWeakZone: body.weakZone } };
+      expect(program.stats.xp).toBe(originalXp);
+      return fulfillJson(route, { program, config: habitConfig });
+    }
+    if (url.pathname === "/api/habits/archive/search") {
+      searches.push(Object.fromEntries(url.searchParams));
+      return fulfillJson(route, { insights: [{ id: "searched", text: "Найденная запись клиента", source: "coach", createdAt: "2026-10-20T12:00:00Z" }], metrics: [{ date: "2026-10-20", energy: 7, clarity: 8, stability: 6 }] });
+    }
+    return fulfillJson(route, {});
+  });
+  await page.goto(`${appBase}/habits`);
+  await expect(page.getByRole("heading", { name: "Мой путь", exact: true })).toBeVisible();
+  await expect(page.getByTestId("today-ikigai-focus")).toContainText("Навыки и мастерство");
+  await expect(page.locator(".habits-nav").getByRole("button", { name: "Чат с ORKEN", exact: true })).toBeVisible();
+  const other = await context.newPage();
+  await other.goto(`${appBase}/habits`);
+  await expect(other.getByTestId("today-ikigai-focus")).toContainText("Навыки и мастерство");
+  await page.locator(".habits-nav button").filter({ hasText: "Настройки" }).click();
+  await page.getByRole("combobox").first().selectOption("passion");
+  await page.getByRole("button", { name: "Сохранить настройки", exact: true }).click();
+  await expect(page.getByText("Настройки сохранены", { exact: true })).toBeVisible();
+  await page.locator(".habits-nav button").filter({ hasText: "Мой путь" }).click();
+  await expect(page.getByTestId("today-ikigai-focus")).toContainText("Интерес и энергия");
+  await expect(other.getByTestId("today-ikigai-focus")).toContainText("Интерес и энергия");
+  await other.close();
+  await page.reload();
+  await expect(page.getByTestId("today-ikigai-focus")).toContainText("Интерес и энергия");
+  await page.locator(".habits-nav button").filter({ hasText: "Архив" }).click();
+  await expect(page.getByTestId("habit-archive-search")).toBeVisible();
+  await expect(page.locator(".habits-nav button").filter({ hasText: "Архив" })).toHaveCount(1);
+  await expect(page.getByText("Архив с поиском", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Мой сохранённый инсайт", { exact: true })).toBeVisible();
+  await expect(page.getByText("Итоги сохранённой недели", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Скопировать", exact: true }).first().click();
+  expect(await page.evaluate(() => window.__copiedArchive)).toBe("Мой сохранённый инсайт");
+  await page.getByLabel("Ключевое слово", { exact: true }).fill("клиента");
+  await page.getByLabel("Дата от", { exact: true }).fill("2026-10-01");
+  await page.getByLabel("Дата до", { exact: true }).fill("2026-10-28");
+  await page.getByLabel("Автор", { exact: true }).selectOption("coach");
+  await page.getByLabel("Минимальная энергия", { exact: true }).selectOption("7");
+  await page.getByRole("button", { name: "Найти", exact: true }).click();
+  await expect.poll(() => searches.at(-1)?.q).toBe("клиента");
+  expect(searches.at(-1)).toMatchObject({ author: "coach", minEnergy: "7", from: "2026-10-01", to: "2026-10-28" });
+  await expect(page.getByText("Найденная запись клиента", { exact: true })).toBeVisible();
+  await page.goto(`${appBase}/habits/archive`);
+  await expect(page).toHaveURL(/\/habits\?tab=archive$/);
+  await expect(page.getByTestId("habit-archive-search")).toBeVisible();
+  expect(program.stats.xp).toBe(originalXp);
+});
+
+test("refreshed landing and Navigator use consistent responsive copy in RU and EN", async ({ page }, info) => {
+  await page.addInitScript(() => localStorage.setItem("orken_guide_v1:user:habit-program-1", JSON.stringify({ disabled: true, lastShownAt: 0 })));
+  await page.route(`${apiBase}/api/**`, route => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/api/auth/guest") return fulfillJson(route, { sessionId: "copy-session", guestToken: "synthetic" });
+    if (url.pathname === "/api/habits/me") return fulfillJson(route, { program: createHabitProgram(), config: habitConfig });
+    if (url.pathname === "/api/payments/config") return fulfillJson(route, { priceLabel: "$3" });
+    if (url.pathname === "/api/habits/config") return fulfillJson(route, habitConfig);
+    if (url.pathname === "/api/traffic/config") return fulfillJson(route, { enabled: false });
+    return fulfillJson(route, {});
+  });
+  for (const locale of ["ru", "en"]) {
+    await page.goto(`${appBase}/?lang=${locale}`);
+    await expect(page.locator("#partners .landing-v2-partner-grid article")).toHaveCount(4);
+    expect(await page.locator("body").innerText()).not.toContain("—");
+    await expect(page.locator("#coaches")).not.toContainText("Коуч / Клиент");
+    await expect(page.locator(".landing-v2-partner-note")).toContainText(locale === "ru" ? "одновременно" : "both");
+    for (const width of [360, 768, 1024, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await page.screenshot({ path: info.outputPath(`landing-refresh-${locale}-${width}.png`), fullPage: true });
+    }
+    await page.goto(`${appBase}/habits?lang=${locale}`);
+    await expect(page.getByRole("heading", { name: locale === "ru" ? "Мой путь" : "My journey", exact: true })).toBeVisible();
+    for (const tab of ["journey", "dashboard"]) {
+      await page.goto(`${appBase}/habits?lang=${locale}&tab=${tab}`);
+      await expect(page.locator(".habits-visual-workspace")).toBeVisible();
+      expect(await page.locator(".habits-visual-workspace").innerText()).not.toMatch(/[\u{1F300}-\u{1FAFF}]/u);
+      for (const width of [360, 768, 1024, 1440]) {
+        await page.setViewportSize({ width, height: 900 });
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        await page.screenshot({ path: info.outputPath(`${tab}-refresh-${locale}-${width}.png`), fullPage: true });
+      }
+    }
+  }
+});
 const habitCycles = [
   { id: 1, code: "foundation", title: "ОСНОВА", label: "Цикл 1", areas: ["Энергия", "Ясность", "Устойчивость"], goal: "Собрать опору.", weeks: 12 },
   { id: 2, code: "realization", title: "РЕАЛИЗАЦИЯ", label: "Цикл 2", areas: ["Роль", "Формат", "Ценность"], goal: "Перевести выводы в действия.", weeks: 12 },
@@ -625,7 +733,7 @@ test("ORKEN.LIFE frontend flow works with mocked backend", async ({ page }) => {
   await page.getByTestId("activate-habits-link").click();
   await expect(page).toHaveURL(/\/habits\?from=ikigai&analysisId=analysis-test$/);
   await expect(page.getByTestId("habits-app")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Главная: где я сейчас" })).toBeVisible({ timeout: 15000 });
+  await expect(page.getByRole("heading", { name: "Мой путь", exact: true })).toBeVisible({ timeout: 15000 });
 });
 
 test("face step rejects an unsuitable photo and allows a valid replacement", async ({ page }) => {
@@ -769,7 +877,7 @@ test("habits tracker records daily marks and uses AI navigator", async ({ page }
 
   await page.goto(`${appBase}/habits`);
   await expect(page.getByTestId("habits-app")).toBeVisible({ timeout: 15000 });
-  await expect(page.getByRole("heading", { name: "Главная: где я сейчас" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Мой путь", exact: true })).toBeVisible();
   await page.locator(".habits-nav button").filter({ hasText: "Мой путь" }).click();
   await expect(page.getByRole("heading", { name: "Мой путь" })).toBeVisible();
 

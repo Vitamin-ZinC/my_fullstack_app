@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { presentLandingCopy, presentStaticCopy } from "./interfaceCopy";
 import { API_URL } from "@/lib/api";
 import { defaultSiteText, mergeSiteText, parseLocale, type Locale, type SiteText } from "@/lib/messages";
 import { useUiLocale } from "@/lib/locale";
@@ -30,5 +31,27 @@ export function useSiteText(locale?: Locale): SiteText {
     };
   }, [resolvedLocale]);
 
-  return text.locale === resolvedLocale ? text.value : defaultSiteText[resolvedLocale];
+  const current = text.locale === resolvedLocale ? text.value : defaultSiteText[resolvedLocale];
+  return useMemo(() => {
+    const value = presentStaticCopy(current);
+    const defaults = defaultSiteText[resolvedLocale];
+    const legacyCoaching = value.landing.v2.coaches.features.some(item => /Переключение|Switch.*Coach|Coach.*Client/i.test(item));
+    return {
+      ...value,
+      landing: presentLandingCopy({ ...value.landing, v2: {
+        ...value.landing.v2,
+        menu: { ...value.landing.v2.menu, coaches: defaults.landing.v2.menu.coaches },
+        coaches: legacyCoaching ? defaults.landing.v2.coaches : value.landing.v2.coaches,
+        partners: {
+          ...value.landing.v2.partners,
+          eyebrow: defaults.landing.v2.partners.eyebrow,
+          programs: value.landing.v2.partners.programs.length < 4 ? defaults.landing.v2.partners.programs : value.landing.v2.partners.programs
+        }
+      } }),
+      habits: { ...value.habits, app: { ...value.habits.app,
+        nav: { ...value.habits.app.nav, navigator: defaults.habits.app.nav.navigator },
+        navigator: { ...value.habits.app.navigator, title: defaults.habits.app.navigator.title }
+      } }
+    };
+  }, [current, resolvedLocale]);
 }

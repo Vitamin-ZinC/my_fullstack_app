@@ -13,6 +13,8 @@ import {
   Compass,
   FileText,
   Handshake,
+  Globe2,
+  Megaphone,
   LifeBuoy,
   Mail,
   Menu,
@@ -203,12 +205,13 @@ export default function LandingPage() {
             <div className="landing-v2-partner-grid">
               {landing.partners.programs.map((program, index) => (
                 <article key={program.title}>
-                  {index === 0 ? <Handshake size={22} aria-hidden="true" /> : <BriefcaseBusiness size={22} aria-hidden="true" />}
+                  {index === 0 ? <Handshake size={22} aria-hidden="true" /> : index === 1 ? <Globe2 size={22} aria-hidden="true" /> : index === 2 ? <BriefcaseBusiness size={22} aria-hidden="true" /> : <Megaphone size={22} aria-hidden="true" />}
                   <h3>{program.title}</h3>
                   <p>{program.copy}</p>
                 </article>
               ))}
             </div>
+            <p className="landing-v2-partner-note">{landing.partners.dualRegistration}</p>
             <Link className="landing-v2-button landing-v2-button-inline" href="/partners">
               {landing.partners.cta}
               <ArrowRight size={17} aria-hidden="true" />

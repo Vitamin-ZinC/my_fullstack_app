@@ -56,7 +56,7 @@ for (const width of [360, 768, 1024, 1440]) {
     await fits(page);
     await expect(page).toHaveTitle("Ikigai - ORKEN.LIFE");
     await page.screenshot({ path: info.outputPath(`landing-${width}.png`), fullPage: true });
-    for (const [route, heading] of [["/login", /Sign in|Login/], ["/coach", "Coach login"], ["/partners", /Partner|partner/], ["/admin", /Admin|Administration/]]) {
+    for (const [route, heading] of [["/login", /Sign in|Login/], ["/coach", "Expert login"], ["/partners", /Partner|partner/], ["/admin", /Admin|Administration/]]) {
       if (route === "/coach") await page.route(`${apiBase}/api/coach/workspace`, r => json(r, { error: "Partner login required" }, 401));
       if (route === "/partners") await page.route(`${apiBase}/api/partners/portal/me`, r => json(r, { error: "Partner login required" }, 401));
       await page.goto(`${appBase}${route}`);

@@ -1,5 +1,24 @@
 @import url("https://fonts.googleapis.com/css2?family=Mulish:wght@300;400;600;700;800;900&family=Unbounded:wght@400;700;900&display=swap");
 
+.landing-v2-partner-note { margin: 20px 0; color: #b8c9db; line-height: 1.6; }
+.habits-focus-label { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; color: #9fb6cd; font-size: 13px; }
+.habits-focus-label svg { color: #13d4ec; flex-shrink: 0; }
+.habits-focus-label strong { color: #d7f5fb; }
+.habits-visual-workspace :is(.habits-panel, .habits-old-stat-card, .habits-status-card, .habits-rank-overview-card, .habits-current-cycle-card, .habits-cycle-step, .habits-rank-card) {
+  background: #0a1623;
+  border: 1px solid #1e3148;
+  border-radius: 8px;
+  box-shadow: none;
+}
+.habits-visual-workspace .habits-panel h2 { font-size: 20px; display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.habits-visual-workspace .habits-panel h2 > svg { color: #13d4ec; flex-shrink: 0; }
+.habits-visual-workspace :is(.habits-old-stat-icon, .habits-inline-icon, .habits-cycle-step-icon, .habits-current-cycle-icon, .habits-rank-reward-icon, .habits-reward-emoji) {
+  display: inline-flex; align-items: center; justify-content: center; color: var(--tile-color, var(--cycle-color, #13d4ec));
+}
+.habits-visual-workspace svg:not(.habits-progress-ring-svg) { stroke-width: 1.8; }
+.habits-visual-workspace .habits-progress-ring-value { stroke: #13d4ec; }
+.habits-visual-workspace .habits-day-plan-card { background: #08131f; border-color: #23374f; border-radius: 8px; }
+
 :root {
   --cyan: #00d4ff;
   --violet: #9b5de5;

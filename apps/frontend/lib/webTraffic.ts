@@ -1,6 +1,7 @@
 import { trafficPageForPath, type TrafficViewInput } from "@levelup/contracts";
 
-export const TRAFFIC_CONSENT_KEY = "orken_analytics_choice_v1";
+// Re-consent is required: v1 covered first-party measurement only.
+export const TRAFFIC_CONSENT_KEY = "orken_analytics_choice_v2";
 const VISITOR_KEY = "orken_analytics_browser_v1";
 const VISIT_KEY = "orken_analytics_visit_v1";
 export const TRAFFIC_CHOICE_EVENT = "orken-analytics-choice";

@@ -2,7 +2,7 @@ const { test, expect } = require("@playwright/test");
 
 const apiBase = process.env.E2E_API_BASE ?? "http://localhost:3001";
 const appBase = process.env.E2E_APP_BASE ?? "http://localhost:3000";
-const choiceKey = "orken_analytics_choice_v1";
+const choiceKey = "orken_analytics_choice_v2";
 const headers = { "access-control-allow-origin": appBase, "access-control-allow-credentials": "true",
   "access-control-allow-headers": "content-type,x-admin-session,x-admin-token,x-traffic-visitor,x-traffic-visit,x-locale,x-session-id,x-guest-token",
   "access-control-allow-methods": "GET,POST,PUT,OPTIONS" };
@@ -10,6 +10,9 @@ const fulfill = (route, json, status = 200) => route.fulfill(route.request().met
 
 async function trafficFixture(page, options = {}) {
   const views = [];
+  // Never send synthetic test traffic to the real Google property.
+  await page.route("https://www.googletagmanager.com/**", route => route.fulfill({ contentType: "application/javascript", body: "/* Google stub */" }));
+  await page.route(/https:\/\/[^/]*google-analytics\.com\//, route => route.fulfill({ status: 204 }));
   await page.addInitScript(() => localStorage.setItem("levelup_locale", "ru"));
   await page.route(`${apiBase}/api/**`, route => {
     const path = new URL(route.request().url()).pathname;
@@ -21,6 +24,8 @@ async function trafficFixture(page, options = {}) {
     if (path === "/api/content/ru" || path === "/api/content/en") return fulfill(route, { value: null });
     if (path === "/api/auth/guest") return fulfill(route, { sessionId: "guest", guestToken: "synthetic" });
     if (path === "/api/auth/session") return fulfill(route, { user: null, sessionId: "guest", guestToken: "synthetic" });
+    if (["/api/me", "/api/habits/me", "/api/coach/workspace", "/api/partners/portal/me"].includes(path)) return fulfill(route, { error: "Unauthorized" }, 401);
+    if (path === "/api/me/reports") return fulfill(route, []);
     if (path === "/api/coaches") return fulfill(route, { coaches: [], filters: { cities: [], specializations: [] } });
     return fulfill(route, {});
   });
@@ -51,6 +56,50 @@ test("optional analytics waits for consent, counts route views once and never se
   await page.goto(`${appBase}/admin/traffic`);
   await expect(page.getByRole("region", { name: "Настройки аналитики" })).toHaveCount(0);
   expect(views).toHaveLength(2);
+});
+
+test("Google tag requires new consent, sends only public page data and stops on withdrawal", async ({ page }) => {
+  await trafficFixture(page);
+  const scripts = [];
+  page.on("request", request => { if (request.url().startsWith("https://www.googletagmanager.com/")) scripts.push(request.url()); });
+  await page.addInitScript(() => localStorage.setItem("orken_analytics_choice_v1", JSON.stringify({ choice: "allow", expiresAt: Date.now() + 86400000 })));
+  await page.goto(`${appBase}/privacy`);
+  await expect(page.getByRole("region", { name: "Настройки аналитики" })).toBeVisible();
+  expect(scripts).toHaveLength(0);
+  await page.getByRole("button", { name: "Разрешить аналитику", exact: true }).click();
+  await expect.poll(() => scripts.length).toBe(1);
+  expect(scripts[0]).toBe("https://www.googletagmanager.com/gtag/js?id=G-T661WL38LP");
+  const calls = await page.evaluate(() => window.dataLayer.map(value => Array.from(value)));
+  expect(calls.find(value => value[0] === "config")[2]).toMatchObject({ send_page_view: false, allow_google_signals: false, allow_ad_personalization_signals: false });
+  expect(calls.filter(value => value[0] === "event")).toEqual([["event", "page_view", { send_to: "G-T661WL38LP", page_location: `${appBase}/privacy`, page_referrer: "", page_title: "ORKEN.LIFE" }]]);
+  await page.evaluate(() => { document.cookie = "_ga=synthetic; Path=/"; document.cookie = "_ga_T661WL38LP=synthetic; Path=/"; });
+  await page.getByRole("button", { name: "Настройки аналитики", exact: true }).click();
+  await page.getByRole("button", { name: "Не разрешать", exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window["ga-disable-G-T661WL38LP"])).toBe(true);
+  expect(await page.evaluate(() => document.cookie)).not.toContain("_ga");
+  await page.reload();
+  expect(scripts).toHaveLength(1);
+});
+
+test("Google tag stays absent on sensitive URLs, disabled collection and privacy signals", async ({ page }) => {
+  await trafficFixture(page);
+  const scripts = [];
+  page.on("request", request => { if (request.url().includes("googletagmanager.com")) scripts.push(request.url()); });
+  await page.addInitScript(key => localStorage.setItem(key, JSON.stringify({ choice: "allow", expiresAt: Date.now() + 86400000 })), choiceKey);
+  for (const path of ["/privacy?access_token=synthetic-secret", "/privacy#synthetic-secret", "/login", "/account", "/coach", "/partners"]) {
+    await page.goto(`${appBase}${path}`);
+    await expect(page.getByRole("button", { name: "Настройки аналитики", exact: true })).toBeVisible();
+    expect(scripts).toHaveLength(0);
+  }
+  await trafficFixture(page, { enabled: false });
+  await page.goto(`${appBase}/privacy`);
+  await expect(page.getByRole("button", { name: "Настройки аналитики", exact: true })).toBeVisible();
+  expect(scripts).toHaveLength(0);
+  await trafficFixture(page);
+  await page.addInitScript(() => Object.defineProperty(navigator, "globalPrivacyControl", { value: true, configurable: true }));
+  await page.goto(`${appBase}/privacy`);
+  await expect(page.getByRole("button", { name: "Настройки аналитики", exact: true })).toBeVisible();
+  expect(scripts).toHaveLength(0);
 });
 
 test("decline persists across tabs, privacy signals override opt-in and token UTMs are dropped", async ({ page, context }) => {

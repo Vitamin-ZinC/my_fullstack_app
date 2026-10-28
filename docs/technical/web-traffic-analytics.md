@@ -16,9 +16,9 @@ and does not change authentication, Partner Core, habit access, XP or payment ru
 - Existing admin setting `traffic_analytics_enabled` is a boolean, default true.
   Disabling collection retains historical reports and prevents new conversion writes.
 
-Client consent lives in `orken_analytics_choice_v1` for 180 days. Only opt-in creates
-random browser/visit identifiers. No IP/UA fingerprinting, cookies or third-party SDKs
-are introduced. DNT/GPC overrides an earlier opt-in. The footer control can revoke
+Client consent lives in `orken_analytics_choice_v2` for 180 days. Only opt-in creates
+random browser/visit identifiers. First-party measurement uses no IP/UA fingerprinting.
+Optional Google Analytics is described below. DNT/GPC overrides an earlier opt-in. The footer control can revoke
 consent; revocation clears browser identifiers and stops future events, but does not
 claim to erase historical rows. Renewed consent after expiry creates fresh identifiers.
 
@@ -74,7 +74,7 @@ frontend analytics regression tests, localization and partner-boundary checks.
 Back up production, apply migration using the normal deploy flow BEFORE switching
 backend/frontend, then check: anonymous report access denied, no view before consent,
 one view after consent, no tokens in payloads, opt-out, admin empty/loaded states.
-No environment secret or external analytics account is required. Rollback code can
+No environment secret or external account is required for first-party analytics. Rollback code can
 leave the additive analytics tables intact; never reset the production database.
 
 `webTrafficPersistence.test.ts` additionally checks real PostgreSQL concurrency,
@@ -83,3 +83,31 @@ with `WEB_TRAFFIC_TEST_DATABASE_URL`, rejects database names outside the explici
 `orken_traffic_test_*` namespace, requires empty analytics tables and removes only
 its own synthetic rows. Apply migrations to a disposable test database first;
 never provide a production database URL to this test.
+
+## Optional Google Analytics 4
+
+`GoogleAnalytics` uses measurement ID `G-T661WL38LP` (a public ID, not a secret).
+The external gtag script loads only after v2 consent and while the existing admin
+analytics toggle is enabled. v1 consent is NOT migrated: its notice excluded Google.
+DNT/GPC, opt-out and expired consent prevent loading; opt-out disables the loaded
+tag and removes accessible GA cookies. Cookies are host-only, Secure/SameSite=Lax,
+with a 180-day lifetime. No Google Ads personalization or Google Signals.
+
+Only `/`, `/coaches`, `/for-coaches`, `/offer`, `/privacy` without query/hash are
+eligible. Auth, workspaces, diagnostics, individual profiles/reports, payments,
+admin/docs and unknown URLs never initiate GA loading. Route transitions disable
+the loaded tag outside the allowlist. Manual page_view uses a fixed brand title,
+origin + allowlisted path and empty referrer; no user IDs or business events.
+First-party anonymous analytics retains its existing broader page-template scope.
+
+**Before production release**, in Google Analytics Admin > Data streams > Web >
+Enhanced measurement, turn Enhanced measurement OFF for this stream. In particular,
+history-based pageviews and automatic form, search, outbound-link and download
+measurement must be OFF: `send_page_view: false` alone does not disable those
+property-side features. Do not add other tags or destinations to this stream.
+The application cannot verify these Google account settings through gtag.
+Configure Google-side event retention and access separately. Verify in Realtime
+using a consented public visit; automated tests stub Google and send no real events.
+
+References: https://developers.google.com/analytics/devguides/collection/ga4/views
+and https://developers.google.com/tag-platform/security/guides/privacy.

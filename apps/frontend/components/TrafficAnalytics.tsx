@@ -8,6 +8,7 @@ import { API_URL } from "@/lib/api";
 import { uiText, useUiLocale } from "@/lib/locale";
 import { prepareTrafficView, readTrafficChoice, saveTrafficChoice, trafficPrivacySignal, TRAFFIC_CHOICE_EVENT, TRAFFIC_CONSENT_KEY } from "@/lib/webTraffic";
 import styles from "./TrafficAnalytics.module.css";
+import { GoogleAnalytics } from "./GoogleAnalytics";
 
 export function TrafficAnalytics() {
   useUiLocale();
@@ -63,9 +64,10 @@ export function TrafficAnalytics() {
   const show = open || (config.enabled && choice === null);
   function decide(value: "allow" | "deny") { saveTrafficChoice(value); setOpen(false); }
   return <>
+    <GoogleAnalytics enabled={config.enabled} />
     <footer className={styles.control}><button type="button" onClick={() => setOpen(true)}><BarChart3 size={14} />{uiText("Настройки аналитики")}</button></footer>
     {show && <section className={styles.banner} data-orken-guide-blocker role="region" aria-label={uiText("Настройки аналитики")}>
-      <div><h2>{uiText("Помочь улучшить ORKEN?")}</h2><p>{uiText("Разрешите подсчёт посещений и действий на сайте. Без содержимого дневника, фото, аудио и сторонних счётчиков. Отказ не ограничивает сервис.")} <a href="/privacy">{uiText("Политика конфиденциальности")}</a></p>
+      <div><h2>{uiText("Помочь улучшить ORKEN?")}</h2><p>{uiText("Разрешите аналитику ORKEN и Google Analytics на публичных страницах. Google использует cookies для статистики посещений. Содержимое кабинетов, дневник, фото и аудио в Google Analytics не передаются. Отказ не ограничивает сервис.")} <a href="/privacy">{uiText("Политика конфиденциальности")}</a></p>
         {privacySignal && <p>{uiText("В браузере включён запрет отслеживания. Аналитика отключена.")}</p>}</div>
       <div className={styles.actions}>
         <button type="button" onClick={() => decide("deny")}>{uiText("Не разрешать")}</button>

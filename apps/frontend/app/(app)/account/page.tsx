@@ -306,172 +306,177 @@ export default function AccountPage() {
 
       {savedMessage && <p className="auth-message">{savedMessage}</p>}
 
-      <AccountAccordion title={uiText("Управление подпиской")} icon={<CreditCard size={18} />} defaultOpen>
-        <div className="account-subscription-grid">
-          <AccountFact label={uiText("Тариф")} value={config?.priceLabel ? uiText("{v0} / мес", { v0: config.priceLabel }) : "—"} />
-          <AccountFact label="Trial" value={config?.trialDays ? uiText("{v0} дней", { v0: config.trialDays }) : uiText("Trial отключен")} />
-          <AccountFact label={uiText("Статус")} value={subscriptionStatus} />
-        </div>
-        <p className="muted account-copy">
-          {uiText(" Цена, trial и статус приходят с backend. Обновление платежных данных сейчас выполняется через защищенный Stripe Checkout; карта не вводится и не хранится в ORKEN.LIFE. ")}</p>
-        <div className="account-action-stack horizontal">
-          <button className="button" type="button" disabled={busy} onClick={startSubscriptionCheckout}>
-            <CreditCard size={17} />
-            {uiText(" Открыть Stripe Checkout ")}</button>
-          <button className="button secondary" type="button" disabled={busy || program?.settings.subscriptionStatus !== "ACTIVE"} onClick={pauseSubscription}>
-            {uiText(" Пауза ")}</button>
-          <button className="btn-back danger" type="button" disabled={busy || !program} onClick={cancelSubscription}>
-            {uiText(" Отменить подписку ")}</button>
-        </div>
-      </AccountAccordion>
-
-      <AccountAccordion title={uiText("Спросить ORKEN")} icon={<Bot size={18} />}>
-        <div className="account-orken-head">
-          <OrkenAvatar />
-          <div>
-            <strong>{uiText("ORKEN онлайн")}</strong>
-            <p className="muted">{uiText("Отвечает с учетом отчетов, привычек, метрик, сохраненных инсайтов и текущего шага.")}</p>
-          </div>
-        </div>
-        <div className="habits-tabs">
-          {orkenPrompts.map((prompt) => (
-            <button className="btn-back" type="button" key={prompt} onClick={() => askOrken(prompt)}>{prompt}</button>
-          ))}
-        </div>
-        <div className="habits-chat-log account-chat-log">
-          {messages.length === 0 ? (
-            <div className="habits-bubble ai">
-              {uiText(" Можно спросить: что уже видно по моим привычкам, какой шаг выбрать сегодня или как связать отчет с действиями. ")}</div>
-          ) : (
-            messages.map((message, index) => (
-              <div className={`habits-bubble ${message.role === "assistant" ? "ai" : "user"}`} key={`${message.role}-${index}`}>
-                {message.text}
+      <div className="account-workspace">
+        <div className="account-column account-overview">
+          <AccountAccordion title={text.title} icon={<History size={18} />} defaultOpen>
+            <p className="muted">{text.progressNote}</p>
+            {reports.length === 0 ? (
+              <div className="account-empty-panel">
+                <p className="muted">{uiText("Здесь появятся все ваши отчёты после прохождения диагностики. Привычки уже доступны отдельно, без обязательного теста.")}</p>
+                <Link className="button secondary account-inline-link" href="/habits?from=account">{uiText("Открыть навигатор")}</Link>
               </div>
-            ))
-          )}
-        </div>
-        <div className="habits-chat-form">
-          <input
-            className="input"
-            value={chatInput}
-            placeholder={uiText("Спросить ORKEN")}
-            onChange={(event) => setChatInput(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") askOrken();
-            }}
-          />
-          <button className="button habits-cta" type="button" disabled={busy} onClick={() => askOrken()}>
-            <Send size={17} />
-            {uiText(" Спросить ")}</button>
-        </div>
-      </AccountAccordion>
+            ) : (
+              reports.map((report) => (
+                <article className="report-history-card" key={report.id}>
+                  <div>
+                    <div className="report-date">{formatDate(report.completedAt || report.createdAt)}</div>
+                    <h3>{report.profession || uiText("Диагностика ORKEN.LIFE")}</h3>
+                    <p>{report.summary || uiText("Отчёт формируется или ожидает завершения анализа.")}</p>
+                  </div>
+                  <div className="report-history-actions">
+                    <Link className="button secondary" href={`/report/${report.id}/free`}>{uiText("Бесплатный")}</Link>
+                    {report.fullReportAvailable ? (
+                      <Link className="button" href={`/report/${report.id}/full`}>{uiText("Открыть PRO")}</Link>
+                    ) : (
+                      <Link className="button" href={`/pay/${report.id}`}>{uiText("Открыть PRO")}</Link>
+                    )}
+                  </div>
+                </article>
+              ))
+            )}
+          </AccountAccordion>
 
-      <AccountAccordion title={uiText("Подключение Telegram-бота")} icon={<Bot size={18} />}>
-        <p className="muted account-copy">{uiText("ORKEN может напоминать о шаге дня, принимать отметки и отвечать с учетом привычек, метрик и инсайтов.")}</p>
-        <div className="account-telegram-status">
-          {!telegramConfigured
-            ? uiText("Бот не настроен на сервере.")
-            : telegramLinked
-              ? uiText("Подключен{v0}", { v0: telegramStatus?.account?.username ? `: @${telegramStatus.account.username}` : "" })
-              : uiText("Еще не подключен. Нажми кнопку и открой бота.")}
+          <section className="card green-border account-navigator">
+            <div>
+              <h2 className="ub">{uiText("Навигатор")}</h2>
+              <p className="muted">{uiText("Отдельное приложение для ежедневных шагов, состояния, XP и архива инсайтов. Можно начать без повторной диагностики.")}</p>
+              {activeHabit ? (
+                <div className="account-daily-step">
+                  <span>{uiText("Сегодня")}</span>
+                  <strong>{activeHabit.title}</strong>
+                  <p>{activeHabit.focus}</p>
+                </div>
+              ) : (
+                <div className="account-daily-step">
+                  <span>{uiText("Старт без теста")}</span>
+                  <strong>{uiText("Базовый путь привычек")}</strong>
+                  <p>{uiText("Можно начать с мягкого ритма прямо сейчас, а персонализацию добавить позже.")}</p>
+                </div>
+              )}
+            </div>
+            <div className="account-action-stack">
+              <Link className="button" href="/habits?from=account">{uiText("Открыть навигатор")}</Link>
+              {program ? (
+                <button className="button secondary" type="button" disabled={busy} onClick={completeTodayStep}>
+                  <CheckCircle2 size={17} />
+                  {uiText(" Отметить шаг сегодня ")}</button>
+              ) : (
+                <button className="button secondary" type="button" disabled={busy} onClick={startHabits}>
+                  <Sparkles size={17} />
+                  {uiText(" Начать без диагностики ")}</button>
+              )}
+            </div>
+          </section>
         </div>
-        <div className="account-action-stack horizontal">
-          <button className="button secondary" type="button" disabled={telegramBusy || !telegramConfigured} onClick={connectTelegram}>
-            <Bot size={17} />
-            {telegramLinked ? uiText("Открыть Telegram") : uiText("Подключить Telegram")}
-          </button>
-          {telegramConnectUrl && (
-            <a className="button secondary" href={telegramConnectUrl} target="_blank" rel="noopener noreferrer">
-              <ExternalLink size={17} />
-              {uiText(" Открыть бота вручную ")}</a>
-          )}
-          <label className="habits-toggle account-toggle">
-            <input
-              type="checkbox"
-              checked={telegramEnabled}
-              disabled={!telegramLinked || telegramBusy}
-              onChange={(event) => saveTelegramPreferences({ telegramEnabled: event.target.checked })}
-            />
-            <span>{uiText("Включить Telegram-напоминания")}</span>
-          </label>
-        </div>
-        <label className="habits-field">
-          <span>{uiText("Частота мотивации")}</span>
-          <select
-            className="input"
-            value={telegramFrequency}
-            disabled={!telegramLinked || telegramBusy}
-            onChange={(event) => saveTelegramPreferences({ motivationFrequency: event.target.value as TelegramFrequency })}
-          >
-            <option value="daily">{uiText("Каждый день")}</option>
-            <option value="weekdays">{uiText("По будням")}</option>
-            <option value="weekly">{uiText("Раз в неделю")}</option>
-            <option value="off">{uiText("Не присылать")}</option>
-          </select>
-        </label>
-        <button className="button" type="button" disabled={!telegramLinked || telegramBusy} onClick={() => saveTelegramPreferences()}>
-          {uiText(" Сохранить Telegram ")}</button>
-      </AccountAccordion>
+        <div className="account-column account-tools">
+          <AccountAccordion title={uiText("Управление подпиской")} icon={<CreditCard size={18} />} defaultOpen>
+            <div className="account-subscription-grid">
+              <AccountFact label={uiText("Тариф")} value={config?.priceLabel ? uiText("{v0} / мес", { v0: config.priceLabel }) : "—"} />
+              <AccountFact label="Trial" value={config?.trialDays ? uiText("{v0} дней", { v0: config.trialDays }) : uiText("Trial отключен")} />
+              <AccountFact label={uiText("Статус")} value={subscriptionStatus} />
+            </div>
+            <p className="muted account-copy">
+              {uiText(" Цена, trial и статус приходят с backend. Обновление платежных данных сейчас выполняется через защищенный Stripe Checkout; карта не вводится и не хранится в ORKEN.LIFE. ")}</p>
+            <div className="account-action-stack horizontal">
+              <button className="button" type="button" disabled={busy} onClick={startSubscriptionCheckout}>
+                <CreditCard size={17} />
+                {uiText(" Открыть Stripe Checkout ")}</button>
+              <button className="button secondary" type="button" disabled={busy || program?.settings.subscriptionStatus !== "ACTIVE"} onClick={pauseSubscription}>
+                {uiText(" Пауза ")}</button>
+              <button className="btn-back danger" type="button" disabled={busy || !program} onClick={cancelSubscription}>
+                {uiText(" Отменить подписку ")}</button>
+            </div>
+          </AccountAccordion>
 
-      <AccountAccordion title={text.title} icon={<History size={18} />} defaultOpen>
-        <p className="muted">{text.progressNote}</p>
-        {reports.length === 0 ? (
-          <div className="account-empty-panel">
-            <p className="muted">{uiText("Здесь появятся все ваши отчёты после прохождения диагностики. Привычки уже доступны отдельно, без обязательного теста.")}</p>
-            <Link className="button secondary account-inline-link" href="/habits?from=account">{uiText("Перейти в привычки")}</Link>
-          </div>
-        ) : (
-          reports.map((report) => (
-            <article className="report-history-card" key={report.id}>
+          <AccountAccordion title={uiText("Спросить ORKEN")} icon={<Bot size={18} />}>
+            <div className="account-orken-head">
+              <OrkenAvatar />
               <div>
-                <div className="report-date">{formatDate(report.completedAt || report.createdAt)}</div>
-                <h3>{report.profession || uiText("Диагностика ORKEN.LIFE")}</h3>
-                <p>{report.summary || uiText("Отчёт формируется или ожидает завершения анализа.")}</p>
+                <strong>{uiText("ORKEN онлайн")}</strong>
+                <p className="muted">{uiText("Отвечает с учетом отчетов, привычек, метрик, сохраненных инсайтов и текущего шага.")}</p>
               </div>
-              <div className="report-history-actions">
-                <Link className="button secondary" href={`/report/${report.id}/free`}>{uiText("Бесплатный")}</Link>
-                {report.fullReportAvailable ? (
-                  <Link className="button" href={`/report/${report.id}/full`}>{uiText("Открыть PRO")}</Link>
-                ) : (
-                  <Link className="button" href={`/pay/${report.id}`}>{uiText("Открыть PRO")}</Link>
-                )}
-              </div>
-            </article>
-          ))
-        )}
-      </AccountAccordion>
+            </div>
+            <div className="habits-tabs">
+              {orkenPrompts.map((prompt) => (
+                <button className="btn-back" type="button" key={prompt} onClick={() => askOrken(prompt)}>{prompt}</button>
+              ))}
+            </div>
+            <div className="habits-chat-log account-chat-log">
+              {messages.length === 0 ? (
+                <div className="habits-bubble ai">
+                  {uiText(" Можно спросить: что уже видно по моим привычкам, какой шаг выбрать сегодня или как связать отчет с действиями. ")}</div>
+              ) : (
+                messages.map((message, index) => (
+                  <div className={`habits-bubble ${message.role === "assistant" ? "ai" : "user"}`} key={`${message.role}-${index}`}>
+                    {message.text}
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="habits-chat-form">
+              <input
+                className="input"
+                value={chatInput}
+                placeholder={uiText("Спросить ORKEN")}
+                onChange={(event) => setChatInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") askOrken();
+                }}
+              />
+              <button className="button habits-cta" type="button" disabled={busy} onClick={() => askOrken()}>
+                <Send size={17} />
+                {uiText(" Спросить ")}</button>
+            </div>
+          </AccountAccordion>
 
-      <section className="card green-border account-navigator">
-        <div>
-          <h2 className="ub">{uiText("Навигатор привычек")}</h2>
-          <p className="muted">{uiText("Отдельное приложение для ежедневных шагов, состояния, XP и архива инсайтов. Можно начать без повторной диагностики.")}</p>
-          {activeHabit ? (
-            <div className="account-daily-step">
-              <span>{uiText("Сегодня")}</span>
-              <strong>{activeHabit.title}</strong>
-              <p>{activeHabit.focus}</p>
+          <AccountAccordion title={uiText("Подключение Telegram-бота")} icon={<Bot size={18} />}>
+            <p className="muted account-copy">{uiText("ORKEN может напоминать о шаге дня, принимать отметки и отвечать с учетом привычек, метрик и инсайтов.")}</p>
+            <div className="account-telegram-status">
+              {!telegramConfigured
+                ? uiText("Бот не настроен на сервере.")
+                : telegramLinked
+                  ? uiText("Подключен{v0}", { v0: telegramStatus?.account?.username ? `: @${telegramStatus.account.username}` : "" })
+                  : uiText("Еще не подключен. Нажми кнопку и открой бота.")}
             </div>
-          ) : (
-            <div className="account-daily-step">
-              <span>{uiText("Старт без теста")}</span>
-              <strong>{uiText("Базовый путь привычек")}</strong>
-              <p>{uiText("Можно начать с мягкого ритма прямо сейчас, а персонализацию добавить позже.")}</p>
+            <div className="account-action-stack horizontal">
+              <button className="button secondary" type="button" disabled={telegramBusy || !telegramConfigured} onClick={connectTelegram}>
+                <Bot size={17} />
+                {telegramLinked ? uiText("Открыть Telegram") : uiText("Подключить Telegram")}
+              </button>
+              {telegramConnectUrl && (
+                <a className="button secondary" href={telegramConnectUrl} target="_blank" rel="noopener noreferrer">
+                  <ExternalLink size={17} />
+                  {uiText(" Открыть бота вручную ")}</a>
+              )}
+              <label className="habits-toggle account-toggle">
+                <input
+                  type="checkbox"
+                  checked={telegramEnabled}
+                  disabled={!telegramLinked || telegramBusy}
+                  onChange={(event) => saveTelegramPreferences({ telegramEnabled: event.target.checked })}
+                />
+                <span>{uiText("Включить Telegram-напоминания")}</span>
+              </label>
             </div>
-          )}
+            <label className="habits-field">
+              <span>{uiText("Частота мотивации")}</span>
+              <select
+                className="input"
+                value={telegramFrequency}
+                disabled={!telegramLinked || telegramBusy}
+                onChange={(event) => saveTelegramPreferences({ motivationFrequency: event.target.value as TelegramFrequency })}
+              >
+                <option value="daily">{uiText("Каждый день")}</option>
+                <option value="weekdays">{uiText("По будням")}</option>
+                <option value="weekly">{uiText("Раз в неделю")}</option>
+                <option value="off">{uiText("Не присылать")}</option>
+              </select>
+            </label>
+            <button className="button" type="button" disabled={!telegramLinked || telegramBusy} onClick={() => saveTelegramPreferences()}>
+              {uiText(" Сохранить Telegram ")}</button>
+          </AccountAccordion>
         </div>
-        <div className="account-action-stack">
-          <Link className="button" href="/habits?from=account">{uiText("Открыть привычки")}</Link>
-          {program ? (
-            <button className="button secondary" type="button" disabled={busy} onClick={completeTodayStep}>
-              <CheckCircle2 size={17} />
-              {uiText(" Отметить шаг сегодня ")}</button>
-          ) : (
-            <button className="button secondary" type="button" disabled={busy} onClick={startHabits}>
-              <Sparkles size={17} />
-              {uiText(" Начать без диагностики ")}</button>
-          )}
-        </div>
-      </section>
+      </div>
     </article>
   );
 }

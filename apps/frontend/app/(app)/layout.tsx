@@ -3,17 +3,19 @@ import { uiText, getFormatLocale, useUiLocale } from "@/lib/locale";
 
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useSiteText } from "@/lib/useSiteText";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   useUiLocale();
   const text = useSiteText();
+  const pathname = usePathname();
 
   return (
     <>
       <div className="glow-tl" />
       <div className="glow-br" />
-      <div id="app">
+      <div id="app" className={pathname === "/account" ? "account-shell" : undefined}>
         <nav className="app-nav">
           <Link className="logo-wrap" href="/">
             <div className="logo-mark" aria-hidden="true">

@@ -1,12 +1,13 @@
 "use client";
 
 import { useLayoutEffect, useRef } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { disableGoogleAnalytics, enableGoogleAnalytics, googleAnalyticsPage, recordGooglePage } from "@/lib/googleAnalytics";
 import { readTrafficChoice, TRAFFIC_CHOICE_EVENT, TRAFFIC_CONSENT_KEY } from "@/lib/webTraffic";
 
 export function GoogleAnalytics({ enabled }: { enabled: boolean }) {
   const pathname = usePathname();
+  const search = useSearchParams().toString();
   const lastPage = useRef("");
   useLayoutEffect(() => {
     const sync = () => {
@@ -39,6 +40,6 @@ export function GoogleAnalytics({ enabled }: { enabled: boolean }) {
       document.removeEventListener("visibilitychange", sync);
       window.clearInterval(timer);
     };
-  }, [pathname, enabled]);
+  }, [pathname, search, enabled]);
   return null;
 }

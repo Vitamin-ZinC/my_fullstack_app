@@ -675,7 +675,7 @@ function HabitsContent() {
           <PenguinIcon size={38} />
           <div>
             <div className="habits-brand-title">ORKEN.LIFE</div>
-            <div className="habits-brand-sub">{uiText("Кабинет привычек")}</div>
+            <div className="habits-brand-sub">{uiText("Навигатор")}</div>
           </div>
         </Link>
         <nav className="habits-nav">

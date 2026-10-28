@@ -93,8 +93,12 @@ DNT/GPC, opt-out and expired consent prevent loading; opt-out disables the loade
 tag and removes accessible GA cookies. Cookies are host-only, Secure/SameSite=Lax,
 with a 180-day lifetime. No Google Ads personalization or Google Signals.
 
-Only `/`, `/coaches`, `/for-coaches`, `/offer`, `/privacy` without query/hash are
-eligible. Auth, workspaces, diagnostics, individual profiles/reports, payments,
+Only `/`, `/coaches`, `/for-coaches`, `/offer`, `/privacy` are eligible. The query
+allowlist permits `lang=ru|en`, bounded `gtm_debug=x|numeric`, and validated
+`utm_source`, `utm_medium`, `utm_campaign` slugs. Only known landing anchors are
+allowed. Unknown/duplicate parameters, token links and arbitrary hashes block GA.
+Parameters and hashes are never included in our page_view payload.
+Auth, workspaces, diagnostics, individual profiles/reports, payments,
 admin/docs and unknown URLs never initiate GA loading. Route transitions disable
 the loaded tag outside the allowlist. Manual page_view uses a fixed brand title,
 origin + allowlisted path and empty referrer; no user IDs or business events.
@@ -108,6 +112,21 @@ property-side features. Do not add other tags or destinations to this stream.
 The application cannot verify these Google account settings through gtag.
 Configure Google-side event retention and access separately. Verify in Realtime
 using a consented public visit; automated tests stub Google and send no real events.
+
+The automatic Google installation checker may report "tag not detected" before
+consent. Do NOT bypass the banner to make it pass. In Tag Assistant, connect to
+`https://orken.life/`, allow analytics on the site, then return to the assistant.
+`gtm_debug` must not disable collection. Consent queues denied defaults followed
+by an analytics-only grant before the external script loads (basic consent mode).
+Check the matching property `G-T661WL38LP` in Realtime/DebugView. Ad blockers,
+DNT/GPC and a previous decline can intentionally keep the tag absent.
+
+Live verification on 2026-10-28 confirmed gtag.js HTTP 200 and a matching
+page_view accepted by region1.google-analytics.com/g/collect (HTTP 204).
+An automatic scroll event was also observed: Enhanced Measurement was still
+enabled in the Google property at that check. It cannot be disabled by deploying
+this application. Recheck the property setting separately before collecting
+anything beyond the explicit public-page events.
 
 References: https://developers.google.com/analytics/devguides/collection/ga4/views
 and https://developers.google.com/tag-platform/security/guides/privacy.

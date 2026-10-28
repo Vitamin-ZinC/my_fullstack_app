@@ -20,7 +20,6 @@ import {
   ShieldCheck,
   Sparkles,
   UserCircle,
-  UserRound,
   UsersRound,
   X
 } from "lucide-react";
@@ -32,7 +31,7 @@ import { OrkenGuide } from "@/components/OrkenGuide";
 
 function cabinetLinks() { return [
   { href: "/account", label: uiText("Кабинет пользователя"), Icon: UserCircle },
-  { href: "/habits", label: uiText("Кабинет клиента"), Icon: UserRound },
+  { href: "/habits", label: uiText("Навигатор"), Icon: Compass },
   { href: "/coach", label: uiText("Кабинет коуча"), Icon: UsersRound },
   { href: "/partners", label: uiText("Кабинет партнёра"), Icon: Handshake }
 ] as const; }

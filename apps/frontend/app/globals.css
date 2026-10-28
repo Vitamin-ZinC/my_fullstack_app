@@ -1050,6 +1050,55 @@ svg {
   padding-bottom: 24px;
 }
 
+#app.account-shell {
+  width: 100%;
+  max-width: none;
+  height: auto;
+  min-height: calc(100dvh - 38px);
+  overflow: visible;
+}
+
+.account-shell .app-nav {
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.account-shell .nav-actions {
+  margin-left: auto;
+}
+
+.account-shell .app-screen {
+  flex: none;
+  overflow: visible;
+  padding: 24px clamp(16px, 3vw, 40px) 40px;
+}
+
+.account-page,
+.account-workspace,
+.account-column,
+.account-column > * {
+  min-width: 0;
+}
+
+.account-workspace,
+.account-column {
+  display: grid;
+  gap: 18px;
+  align-content: start;
+}
+
+.account-column p,
+.account-column strong {
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 1100px) {
+  .account-workspace {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    align-items: start;
+  }
+}
+
 .auth-card {
   display: grid;
   gap: 16px;

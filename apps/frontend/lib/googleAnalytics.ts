@@ -1,9 +1,10 @@
-import { readTrafficChoice } from "./webTraffic";
+import { readTrafficChoice, safeMarketingTag } from "./webTraffic";
 
 export const GOOGLE_ANALYTICS_ID = "G-T661WL38LP";
 const SCRIPT_ID = "orken-google-analytics";
 // Never load third-party analytics on authenticated, diagnostic or token-bearing pages.
 const PUBLIC_PAGES = new Set(["/", "/coaches", "/for-coaches", "/offer", "/privacy"]);
+const LANDING_ANCHORS = new Set(["#about", "#diagnostic", "#navigator", "#security", "#coaches", "#partners", "#feedback"]);
 type AnalyticsWindow = Window & {
   dataLayer?: unknown[];
   gtag?: (...args: unknown[]) => void;
@@ -16,7 +17,19 @@ function analyticsWindow() { return window as AnalyticsWindow; }
 export function enableGoogleAnalytics() { analyticsWindow()[`ga-disable-${GOOGLE_ANALYTICS_ID}`] = false; }
 
 export function googleAnalyticsPage(pathname: string) {
-  return PUBLIC_PAGES.has(pathname) && !location.search && !location.hash ? pathname : null;
+  if (!PUBLIC_PAGES.has(pathname)) return null;
+  if (location.hash && (pathname !== "/" || !LANDING_ANCHORS.has(location.hash))) return null;
+  const params = new URLSearchParams(location.search);
+  const seen = new Set<string>();
+  for (const [key, value] of params) {
+    if (seen.has(key)) return null;
+    seen.add(key);
+    if (key === "lang" && (value === "ru" || value === "en")) continue;
+    if (key === "gtm_debug" && /^(x|[0-9]{1,20})$/.test(value)) continue;
+    if (["utm_source", "utm_medium", "utm_campaign"].includes(key) && safeMarketingTag(value)) continue;
+    return null;
+  }
+  return pathname;
 }
 
 export function disableGoogleAnalytics(clearCookies = false) {
@@ -44,7 +57,8 @@ export function recordGooglePage(pathname: string) {
   const safeLocation = `${location.origin}${page}`;
   if (!initialized) {
     initialized = true;
-    target.gtag("consent", "default", { analytics_storage: "granted", ad_storage: "denied", ad_user_data: "denied", ad_personalization: "denied" });
+    target.gtag("consent", "default", { analytics_storage: "denied", ad_storage: "denied", ad_user_data: "denied", ad_personalization: "denied" });
+    target.gtag("consent", "update", { analytics_storage: "granted", ad_storage: "denied", ad_user_data: "denied", ad_personalization: "denied" });
     target.gtag("js", new Date());
     target.gtag("config", GOOGLE_ANALYTICS_ID, {
       send_page_view: false, allow_google_signals: false, allow_ad_personalization_signals: false,

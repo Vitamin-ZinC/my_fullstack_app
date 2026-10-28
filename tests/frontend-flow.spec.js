@@ -946,11 +946,66 @@ test("password registration opens account with report history", async ({ page })
 
   await expect(page).toHaveURL(/\/account$/, { timeout: 10000 });
   await expect(page.getByTestId("account-page")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Навигатор привычек" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Навигатор", exact: true })).toBeVisible();
   await expect(page.getByText("Продуктовый стратег")).toBeVisible();
   await expect(page.getByRole("link", { name: "Открыть PRO" })).toBeVisible();
   await page.getByText("История диагностик").click();
   await expect(page.getByText("Продуктовый стратег")).toBeHidden();
   await page.getByText("История диагностик").click();
   await expect(page.getByText("Продуктовый стратег")).toBeVisible();
+});
+
+test("account fills the viewport, preserves its tools and links to Navigator in both languages", async ({ page }, info) => {
+  await page.addInitScript(() => localStorage.setItem("orken_guide_v1:user:habit-program-1", JSON.stringify({ disabled: true, lastShownAt: 0 })));
+  await page.route(`${apiBase}/api/**`, async route => {
+    const path = new URL(route.request().url()).pathname;
+    const user = { id: "layout-user", email: "long.account.name@example.invalid", name: "Пользователь с длинным именем для проверки переноса", lastLoginAt: "2026-10-28T08:00:00Z" };
+    if (path === "/api/auth/guest") return fulfillJson(route, { sessionId: "layout-session", guestToken: "synthetic" });
+    if (path === "/api/me") return fulfillJson(route, { user, reportCount: 1 });
+    if (path === "/api/me/reports") return fulfillJson(route, [{ id: "layout-report", createdAt: "2026-10-28T08:00:00Z", profession: "Research and development", summary: "Saved diagnostic report", fullReportAvailable: true }]);
+    if (path === "/api/habits/me") return fulfillJson(route, { program: createHabitProgram(), config: habitConfig, latestReport: null });
+    if (path === "/api/habits/config") return fulfillJson(route, habitConfig);
+    if (path === "/api/payments/config") return fulfillJson(route, { amount: 300, currency: "usd", priceLabel: "$3" });
+    if (path === "/api/telegram/status") return fulfillJson(route, { configured: true, linked: false, preferences: null });
+    if (path === "/api/traffic/config") return fulfillJson(route, { enabled: false, retentionDays: 180 });
+    return fulfillJson(route, {});
+  });
+  for (const locale of ["ru", "en"]) {
+    await page.goto(`${appBase}/account?lang=${locale}`);
+    await expect(page.getByTestId("account-page")).toBeVisible();
+    const copy = locale === "ru"
+      ? { history: "История диагностик", navigator: "Навигатор", open: "Открыть навигатор", telegram: "Подключение Telegram-бота", chat: "Спросить ORKEN" }
+      : { history: "Diagnostic history", navigator: "Navigator", open: "Open Navigator", telegram: "Connect Telegram bot", chat: "Ask ORKEN" };
+    await expect(page.locator("summary").filter({ hasText: copy.history })).toBeVisible();
+    await expect(page.getByRole("heading", { name: copy.navigator, exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: copy.open, exact: true })).toHaveAttribute("href", "/habits?from=account");
+    await expect(page.getByRole("link", { name: "PRO", exact: false })).toHaveAttribute("href", "/report/layout-report/full");
+    for (const label of [copy.telegram, copy.chat]) await page.locator("summary").filter({ hasText: label }).click();
+    for (const width of [360, 768, 1024, 1440, 1920]) {
+      await page.setViewportSize({ width, height: 900 });
+      const layout = await page.evaluate(() => {
+        const overview = document.querySelector(".account-overview").getBoundingClientRect();
+        const tools = document.querySelector(".account-tools").getBoundingClientRect();
+        return { shell: document.querySelector("#app").getBoundingClientRect().width, overflow: document.documentElement.scrollWidth > innerWidth,
+          mainOverflow: getComputedStyle(document.querySelector(".app-screen")).overflowY,
+          sideBySide: tools.left >= overview.right, stacked: tools.top >= overview.bottom };
+      });
+      expect(layout.shell).toBe(width);
+      expect(layout.overflow).toBe(false);
+      expect(layout.mainOverflow).toBe("visible");
+      expect(width >= 1100 ? layout.sideBySide : layout.stacked).toBe(true);
+      const telegramPanel = page.locator("details").filter({ has: page.locator("summary").filter({ hasText: copy.telegram }) });
+      await telegramPanel.scrollIntoViewIfNeeded();
+      await expect(telegramPanel.locator("button").first()).toBeVisible();
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      await page.screenshot({ path: info.outputPath(`account-${locale}-${width}.png`), fullPage: true });
+    }
+    await page.goto(`${appBase}/?lang=${locale}`);
+    const menu = page.getByRole("button", { name: locale === "ru" ? "Открыть меню" : "Open Menu", exact: true });
+    if (await menu.isVisible()) await menu.click();
+    await page.locator("details").filter({ has: page.locator("summary", { hasText: locale === "ru" ? "Кабинет" : "Account" }) }).locator("summary").click();
+    await expect(page.locator('a[href="/habits"]').filter({ hasText: copy.navigator }).first()).toBeVisible();
+    await expect(page.getByRole("link", { name: /Кабинет клиента|Client Dashboard/ })).toHaveCount(0);
+  }
 });

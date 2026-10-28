@@ -102,6 +102,32 @@ test("Google tag stays absent on sensitive URLs, disabled collection and privacy
   expect(scripts).toHaveLength(0);
 });
 
+test("Google tag works with Tag Assistant and public anchors without forwarding URL parameters", async ({ page }) => {
+  await trafficFixture(page);
+  await page.goto(`${appBase}/?gtm_debug=x&utm_source=telegram#about`);
+  await expect(page.getByRole("region", { name: "Настройки аналитики" })).toBeVisible();
+  expect(await page.locator("#orken-google-analytics").count()).toBe(0);
+  await page.getByRole("button", { name: "Разрешить аналитику", exact: true }).click();
+  await expect(page.locator("#orken-google-analytics")).toHaveCount(1);
+  const commands = await page.evaluate(() => window.dataLayer.map(value => Array.from(value)));
+  expect(commands.filter(command => command[0] === "consent")).toEqual([
+    ["consent", "default", { analytics_storage: "denied", ad_storage: "denied", ad_user_data: "denied", ad_personalization: "denied" }],
+    ["consent", "update", { analytics_storage: "granted", ad_storage: "denied", ad_user_data: "denied", ad_personalization: "denied" }]
+  ]);
+  expect(commands.find(command => command[0] === "event")[2].page_location).toBe(`${appBase}/`);
+  expect(JSON.stringify(commands)).not.toMatch(/gtm_debug|telegram|#about/);
+  await page.evaluate(() => { location.hash = "navigator"; });
+  await expect.poll(() => page.evaluate(() => window["ga-disable-G-T661WL38LP"])).toBe(false);
+  expect(await page.evaluate(() => window.dataLayer.filter(value => value[0] === "event").length)).toBe(1);
+  await page.goto(`${appBase}/privacy?lang=ru&gtm_debug=1730123456789`);
+  await expect(page.locator("#orken-google-analytics")).toHaveCount(1);
+  for (const query of ["gtm_debug=x&access_token=synthetic-secret", "utm_source=person@example.com", "gtm_debug=x&gtm_debug=x"]) {
+    await page.goto(`${appBase}/privacy?${query}`);
+    await expect(page.getByRole("button", { name: "Настройки аналитики", exact: true })).toBeVisible();
+    await expect(page.locator("#orken-google-analytics")).toHaveCount(0);
+  }
+});
+
 test("decline persists across tabs, privacy signals override opt-in and token UTMs are dropped", async ({ page, context }) => {
   const views = await trafficFixture(page);
   await page.goto(`${appBase}/login?utm_source=user@example.com&utm_campaign=session_secret`);

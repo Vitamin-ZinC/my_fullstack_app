@@ -98,6 +98,103 @@ test("Navigator preserves the combined archive and synchronizes saved Ikigai foc
   expect(program.stats.xp).toBe(originalXp);
 });
 
+test("landing FAQ and footer preserve links, keyboard access and backend pricing in RU and EN", async ({ page }, info) => {
+  let trialDays = 7;
+  await page.addInitScript(() => {
+    sessionStorage.setItem("orken_guide_v1:landing:public", JSON.stringify({ disabled: true, lastShownAt: 0 }));
+  });
+  await page.route(`${apiBase}/api/**`, route => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/api/payments/config") return fulfillJson(route, { priceLabel: "$6" });
+    if (url.pathname === "/api/habits/config") return fulfillJson(route, { ...habitConfig, priceLabel: "$12", trialDays });
+    if (url.pathname === "/api/traffic/config") return fulfillJson(route, { enabled: false });
+    return fulfillJson(route, {});
+  });
+  for (const locale of ["ru", "en"]) {
+    await page.goto(`${appBase}/?lang=${locale}`);
+    const items = page.locator("#faq details");
+    await expect(items).toHaveCount(6);
+    await expect(page.locator("#faq details[open]")).toHaveCount(0);
+    await items.nth(0).locator("summary").focus();
+    await items.nth(0).locator("summary").press("Enter");
+    await expect(items.nth(0)).toHaveAttribute("open", "");
+    await items.nth(0).locator("summary").press("Space");
+    await expect(items.nth(0)).not.toHaveAttribute("open", "");
+    await items.nth(2).locator("summary").click();
+    await expect(items.nth(2).locator(".landing-faq-answer")).toContainText("$6");
+    await items.nth(3).locator("summary").click();
+    await expect(items.nth(2)).not.toHaveAttribute("open", "");
+    await expect(items.nth(3).locator(".landing-faq-answer")).toContainText("$12");
+    await expect(items.nth(3).locator(".landing-faq-answer")).toContainText(locale === "ru" ? "7 дней" : "7 days");
+    const footer = page.locator("#feedback");
+    await expect(footer.locator("h2")).toHaveCount(6);
+    for (const href of ["/flow/voice", "/habits", "/coach", "/privacy", "/offer", "mailto:orken.eco@gmail.com"]) {
+      await expect(footer.locator(`a[href='${href}']`)).toHaveCount(1);
+    }
+    for (const href of ["https://www.instagram.com/orken.ai", "https://www.tiktok.com/@orken_life", "https://t.me/orken_life", "https://t.me/orkenlife"]) {
+      const link = footer.locator(`a[href='${href}']`);
+      await expect(link).toHaveAttribute("target", "_blank");
+      await expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    }
+    await footer.locator("a[href='#privacy-security']").click();
+    await expect(page).toHaveURL(/#privacy-security$/);
+    await expect(page.locator("#privacy-security h2")).toBeVisible();
+    await expect(page.locator("#security")).toHaveCount(1);
+    for (const width of [360, 768, 1024, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.locator("#faq").scrollIntoViewIfNeeded();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await page.screenshot({ path: info.outputPath(`faq-${locale}-${width}.png`) });
+      await footer.scrollIntoViewIfNeeded();
+      await page.screenshot({ path: info.outputPath(`footer-${locale}-${width}.png`) });
+    }
+    expect(await page.locator("body").innerText()).not.toContain("—");
+  }
+  trialDays = 0;
+  await page.goto(`${appBase}/?lang=ru`);
+  await page.locator("#faq details").nth(3).locator("summary").click();
+  await expect(page.locator("#faq")).toContainText("Бесплатный пробный период сейчас не предусмотрен.");
+  await expect(page.locator("#faq")).not.toContainText("14 дней");
+});
+
+test("Journey state labels align without leading icons and still save edited values", async ({ page }) => {
+  let saved = null;
+  await page.addInitScript(() => {
+    localStorage.setItem("levelup_locale", "ru");
+    localStorage.setItem("orken_guide_v1:user:habit-program-1", JSON.stringify({ disabled: true, lastShownAt: 0 }));
+  });
+  await page.route(`${apiBase}/api/**`, route => {
+    const pathname = new URL(route.request().url()).pathname;
+    if (pathname === "/api/auth/guest") return fulfillJson(route, { sessionId: "spacing-session", guestToken: "synthetic" });
+    if (pathname === "/api/habits/me") return fulfillJson(route, { program: createHabitProgram(), config: habitConfig });
+    if (pathname === "/api/habits/metrics") {
+      saved = route.request().postDataJSON();
+      return fulfillJson(route, { program: createHabitProgram({ metrics: [{ id: "spacing-metric", date: "2026-10-30", energy: saved.energy, clarity: saved.clarity, stability: saved.stability }] }), config: habitConfig });
+    }
+    return fulfillJson(route, {});
+  });
+  await page.goto(`${appBase}/habits`);
+  const labels = page.locator(".habits-slider label");
+  await expect(labels).toHaveCount(3);
+  await expect(labels.locator(".habits-inline-icon")).toHaveCount(0);
+  for (const width of [360, 768, 1024, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    const lefts = await labels.evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().left));
+    expect(Math.max(...lefts) - Math.min(...lefts)).toBeLessThan(1);
+    expect(await page.locator(".habits-slider").evaluateAll(nodes => nodes.every(node => {
+      const label = node.querySelector("label").getBoundingClientRect();
+      const status = node.querySelector("em").getBoundingClientRect();
+      return label.bottom <= status.top || label.right <= status.left;
+    }))).toBe(true);
+  }
+  const sliders = page.locator(".habits-slider input");
+  await sliders.nth(0).press("ArrowRight");
+  await sliders.nth(1).press("ArrowLeft");
+  await page.getByRole("button", { name: /Сохранить состояние/ }).click();
+  await expect(page.getByText("Состояние сохранено", { exact: true })).toBeVisible();
+  expect(saved).toMatchObject({ programId: "habit-program-1", energy: 7, clarity: 5, stability: 6 });
+});
+
 test("refreshed landing and Navigator use consistent responsive copy in RU and EN", async ({ page }, info) => {
   await page.addInitScript(() => localStorage.setItem("orken_guide_v1:user:habit-program-1", JSON.stringify({ disabled: true, lastShownAt: 0 })));
   await page.route(`${apiBase}/api/**`, route => {

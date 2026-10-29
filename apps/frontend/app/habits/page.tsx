@@ -20,7 +20,6 @@ import {
   User,
   Target,
   Zap,
-  Brain,
   ShieldCheck,
   Lightbulb,
   Sprout,
@@ -1332,7 +1331,7 @@ function JourneyTab(props: {
     : todayTask?.title ?? props.t.journey.title;
   const focusId = zoneIds.includes(props.program.weakZone as typeof zoneIds[number]) ? props.program.weakZone as typeof zoneIds[number] : "ikigai";
   return (
-    <div className="habits-grid habits-visual-workspace">
+    <div className="habits-grid habits-visual-workspace habits-journey-workspace">
       <section className="habits-panel habits-wide habits-journey-daily">
         <div className="row">
           <div>
@@ -1382,7 +1381,6 @@ function JourneyTab(props: {
         <h2>{props.t.dashboard.metricTitle}<HelpTip label={props.t.habitsUx.tooltips.saveMetric} /></h2>
         <p className="habits-muted">{props.t.dashboard.metricCopy}</p>
         <MetricSlider
-          icon={Zap}
           color="#00d4ff"
           label={props.t.metrics.energy}
           value={props.energy}
@@ -1392,7 +1390,6 @@ function JourneyTab(props: {
           onChange={props.setEnergy}
         />
         <MetricSlider
-          icon={Brain}
           color="#a855f7"
           label={props.t.metrics.clarity}
           value={props.clarity}
@@ -1402,7 +1399,6 @@ function JourneyTab(props: {
           onChange={props.setClarity}
         />
         <MetricSlider
-          icon={ShieldCheck}
           color="#10b981"
           label={props.t.metrics.stability}
           value={props.stability}
@@ -2306,7 +2302,7 @@ function groupWeekSummariesByMonth(summaries: HabitProgramSummary["weekSummaries
   return Array.from(groups.values());
 }
 
-function MetricSlider(props: { icon: LucideIcon; color: string; label: string; value: number; hint: string; scale: readonly string[]; numberHints: readonly string[]; onChange: (value: number) => void }) {
+function MetricSlider(props: { color: string; label: string; value: number; hint: string; scale: readonly string[]; numberHints: readonly string[]; onChange: (value: number) => void }) {
   useUiLocale();
   const progress = Math.max(0, Math.min(100, ((props.value - 1) / 9) * 100));
   const selectedNumberHint = props.numberHints[Math.max(0, props.value - 1)] ?? props.hint;
@@ -2315,7 +2311,6 @@ function MetricSlider(props: { icon: LucideIcon; color: string; label: string; v
   return (
     <div className="habits-slider" style={{ "--metric-color": props.color, "--metric-progress": `${progress}%` } as CSSProperties}>
       <label htmlFor={`metric-${props.label}`}>
-        <span className="habits-inline-icon"><props.icon size={19} aria-hidden="true" /></span>
         {props.label}
         <HelpTip label={helpText} />
       </label>

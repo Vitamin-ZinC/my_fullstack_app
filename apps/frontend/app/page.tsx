@@ -30,6 +30,8 @@ import { SUPPORT_EMAIL } from "@/lib/legal";
 import { useSiteText } from "@/lib/useSiteText";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { OrkenGuide } from "@/components/OrkenGuide";
+import { LandingFaq } from "@/components/landing/LandingFaq";
+import { LandingFooter } from "@/components/landing/LandingFooter";
 
 function cabinetLinks() { return [
   { href: "/account", label: uiText("Кабинет пользователя"), Icon: UserCircle },
@@ -155,7 +157,8 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <section id="security" className="landing-v2-security">
+        <section id="privacy-security" className="landing-v2-security">
+          <span id="security" className="landing-security-anchor" aria-hidden="true" />
           <div className="landing-v2-container landing-v2-security-inner">
             <div className="landing-v2-security-copy">
               <p className="landing-v2-eyebrow"><ShieldCheck size={16} aria-hidden="true" /> {landing.security.eyebrow}</p>
@@ -219,19 +222,16 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <footer id="feedback" className="landing-v2-footer">
-          <div className="landing-v2-container landing-v2-footer-inner">
-            <Link className="landing-v2-footer-brand" href="#about">
-              <img src="/assets/orken-penguin-transparent.png" alt="" />
-              <span>ORKEN.LIFE</span>
-            </Link>
-            <nav aria-label={uiText("Юридические документы и поддержка")}>
-              <Link href="/offer"><FileText size={15} aria-hidden="true" /> {uiText(" Публичная оферта")}</Link>
-              <Link href="/privacy"><ShieldCheck size={15} aria-hidden="true" /> {uiText(" Политика конфиденциальности")}</Link>
-              <a href={`mailto:${SUPPORT_EMAIL}`}><Mail size={15} aria-hidden="true" /> {SUPPORT_EMAIL}</a>
-            </nav>
-          </div>
-        </footer>
+        <LandingFaq
+          eyebrow={landing.faq.eyebrow}
+          title={landing.faq.title}
+          items={landing.faq.items.map(item => ({ ...item, answer: formatTemplate(item.answer, {
+            reportPrice: reportPriceLabel,
+            habitPrice: habitPriceLabel,
+            trial: habitTrialDays > 0 ? formatTemplate(landing.faq.trial, { days: habitTrialDays }) : landing.faq.noTrial
+          }) }))}
+        />
+        <LandingFooter text={landing.footer} />
       </main>
       <OrkenGuide context="landing" scope="public" actions={[{ label: text.guide.diagnose, href: "/flow/voice" }]} />
     </div>

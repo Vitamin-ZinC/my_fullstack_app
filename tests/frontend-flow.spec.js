@@ -146,6 +146,10 @@ test("landing FAQ and footer preserve links, keyboard access and backend pricing
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
       await page.screenshot({ path: info.outputPath(`faq-${locale}-${width}.png`) });
       await footer.scrollIntoViewIfNeeded();
+      if (width <= 1100) {
+        const communityLink = await footer.locator("a[href='https://t.me/orkenlife']").boundingBox();
+        expect(communityLink.y + communityLink.height).toBeLessThan(804);
+      }
       await page.screenshot({ path: info.outputPath(`footer-${locale}-${width}.png`) });
     }
     expect(await page.locator("body").innerText()).not.toContain("—");

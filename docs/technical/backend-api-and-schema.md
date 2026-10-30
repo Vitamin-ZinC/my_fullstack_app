@@ -1,6 +1,6 @@
 # Backend API And Schema Reference
 
-Last updated: 2026-07-12
+Last updated: 2026-10-30
 
 This is the implemented backend reference. Do not invent tables or endpoints beyond this list without implementing them.
 
@@ -73,6 +73,22 @@ Current enums:
 - `PartnerEventType`
 - `PartnerOfferStatus`
 - `PartnerRedemptionStatus`
+
+## Account Email Security
+
+`User.email` is normalized on registration. Migration `202610300001_account_email_security`
+adds a unique SQL index on `lower(btrim(email))` and stops on legacy duplicates rather
+than merging accounts. Existing IDs, reports, habits and XP are preserved.
+
+`User.emailVerifiedAt` remains nullable: new users can use their cabinet immediately.
+New fields `welcomeEmailPendingAt` and `welcomeEmailSentAt` control the verified-only
+welcome email queue. Existing users are not automatically enrolled.
+
+`LoginToken.purpose` supports `MAGIC_LOGIN`, `EMAIL_VERIFY` and `PASSWORD_RESET`.
+Only token hashes are stored; verification/reset tokens are single-use and expire.
+Password reset revokes existing sessions. These are ORKEN B2C accounts, not Partner
+Core partner/expert credentials. See [content and account email](content-and-account-email.md)
+for payloads, retention, deployment and delivery checks.
 
 ## Habits Schema Summary
 
@@ -373,6 +389,10 @@ true). Collection additionally requires browser consent. See
 - `POST /api/auth/login`
 - `POST /api/auth/magic-link/request`
 - `POST /api/auth/magic-link/verify`
+- `POST /api/auth/password/reset/request`
+- `POST /api/auth/password/reset/confirm`
+- `POST /api/auth/email/verification/request`
+- `POST /api/auth/email/verification/confirm`
 - `POST /api/auth/logout`
 
 ### Me / Account

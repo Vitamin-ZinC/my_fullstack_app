@@ -24,6 +24,7 @@ import { paymentRoutes } from "./routes/payments.js";
 import { telegramRoutes } from "./routes/telegram.js";
 import { telegramCommunityRoutes } from "./routes/telegramCommunity.js";
 import { runCoachCommerceMaintenance } from "./services/coachCommerce.js";
+import { sendPendingWelcomeEmails } from "./services/accountEmail.js";
 
 const app = Fastify({
   logger: true,
@@ -91,6 +92,10 @@ const coachMaintenanceTimer = setInterval(() => {
   ]).catch((error) => app.log.error({ error }, "coach platform maintenance failed"));
 }, 30 * 60 * 1000);
 coachMaintenanceTimer.unref();
+const welcomeEmailTimer = setInterval(() => {
+  void sendPendingWelcomeEmails().catch(() => app.log.warn("welcome_email_retry_failed"));
+}, 60 * 1000);
+welcomeEmailTimer.unref();
 
 const trafficCleanupTimer = setInterval(() => {
   void cleanupWebTraffic().catch(() => app.log.warn("Web traffic retention cleanup failed"));

@@ -16,6 +16,9 @@ import { prisma } from "../lib/prisma.js";
 import { sendMagicLinkEmail } from "../services/email.js";
 import { handleReferralSignup, normalizeReferralCode } from "../services/partnerCore.js";
 import { recordTrafficConversion } from "../services/webTraffic.js";
+import { accountSecurityRoutes } from "./accountSecurity.js";
+import { checkEmailDomain, EmailDomainError } from "../services/emailDomain.js";
+import { issueAccountEmail, deliverWelcomeEmail } from "../services/accountEmail.js";
 
 const emailSchema = z.string().trim().email().max(254).transform((value) => value.toLowerCase());
 const passwordSchema = z.string().min(8).max(128);
@@ -39,6 +42,11 @@ const magicLinkVerifySchema = z.object({
 });
 
 export async function authRoutes(app: FastifyInstance) {
+  app.addHook("preHandler", async (request, reply) => {
+    const origin = request.headers.origin;
+    if (request.method !== "GET" && origin && ![env.APP_ORIGIN, env.PARTNER_PORTAL_ORIGIN].includes(origin)) return reply.code(403).send({ error: "Origin not allowed" });
+  });
+  await accountSecurityRoutes(app);
   app.post("/api/auth/guest", async (request) => {
     const body = z.object({ locale: z.string().optional() }).parse(request.body ?? {});
     const session = await createGuestSession(request, body.locale ?? getRequestedLocale(request));
@@ -67,33 +75,34 @@ export async function authRoutes(app: FastifyInstance) {
     return { sessionId: session.id, guestToken: session.guestToken, userId: session.userId, locale: session.locale, user };
   });
 
-  app.post("/api/auth/register", async (request, reply) => {
-    const body = registerSchema.parse(request.body ?? {});
+  app.post("/api/auth/register", { config: { rateLimit: { max: 5, timeWindow: "15 minutes" } } }, async (request, reply) => {
+    const parsed = registerSchema.safeParse(request.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: "Проверьте email и пароль: минимум 8 символов." });
+    const body = parsed.data;
     const session = await getOrCreateAuthSession(request);
     const existing = await prisma.user.findUnique({ where: { email: body.email } });
-    if (existing?.passwordHash) {
-      return reply.code(409).send({ error: "User already has a password" });
+    if (existing) {
+      return reply.code(409).send({ error: "Этот email уже зарегистрирован. Войдите или восстановите пароль." });
     }
-
+    try { await checkEmailDomain(body.email); } catch (error) {
+      if (error instanceof EmailDomainError) return reply.code(error.temporary ? 503 : 400).send({ error: error.temporary ? "Не удалось проверить домен почты. Попробуйте позже." : "Домен почты не принимает письма. Проверьте email." });
+      throw error;
+    }
     const passwordHash = hashPassword(body.password);
-    const user = await prisma.user.upsert({
-      where: { email: body.email },
-      update: {
-        name: body.name ?? existing?.name,
-        passwordHash,
-        emailVerifiedAt: existing?.emailVerifiedAt ?? new Date(),
-        lastLoginAt: new Date(),
-        locale: session.locale
-      },
-      create: {
+    let user;
+    try { user = await prisma.user.create({
+      data: {
         email: body.email,
         name: body.name,
         passwordHash,
-        emailVerifiedAt: new Date(),
+        welcomeEmailPendingAt: new Date(),
         lastLoginAt: new Date(),
         locale: session.locale
       }
-    });
+    }); } catch (error) {
+      if ((error as { code?: string }).code === "P2002") return reply.code(409).send({ error: "Этот email уже зарегистрирован. Войдите или восстановите пароль." });
+      throw error;
+    }
     await attachSessionToUser(session, user.id);
     if (!existing) await recordTrafficConversion(request, "REGISTRATION", `user:${user.id}`);
     await prisma.analyticsEvent.create({
@@ -111,11 +120,14 @@ export async function authRoutes(app: FastifyInstance) {
       referralCode: normalizeReferralCode(body.referralCode),
       request
     }).catch((error) => app.log.error({ error, userId: user.id }, "partner referral signup failed"));
+    await issueAccountEmail(user, "EMAIL_VERIFY").catch(() => app.log.warn("verification_email_request_pending"));
     return buildAuthResponse(session, user);
   });
 
-  app.post("/api/auth/login", async (request, reply) => {
-    const body = loginSchema.parse(request.body ?? {});
+  app.post("/api/auth/login", { config: { rateLimit: { max: 15, timeWindow: "15 minutes" } } }, async (request, reply) => {
+    const parsed = loginSchema.safeParse(request.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: "Проверьте email и пароль: минимум 8 символов." });
+    const body = parsed.data;
     const session = await getOrCreateAuthSession(request);
     const user = await prisma.user.findUnique({ where: { email: body.email } });
     if (!user?.passwordHash || !verifyPassword(body.password, user.passwordHash)) {
@@ -140,8 +152,18 @@ export async function authRoutes(app: FastifyInstance) {
     return buildAuthResponse(session, nextUser);
   });
 
-  app.post("/api/auth/magic-link/request", async (request, reply) => {
-    const body = magicLinkRequestSchema.parse(request.body ?? {});
+  app.post("/api/auth/magic-link/request", { config: { rateLimit: { max: 5, timeWindow: "15 minutes" } } }, async (request, reply) => {
+    const parsed = magicLinkRequestSchema.safeParse(request.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: "Enter a valid email" });
+    const body = parsed.data;
+    const user = await prisma.user.findUnique({ where: { email: body.email } });
+    if (!user) {
+      try { await checkEmailDomain(body.email); } catch (error) {
+        if (error instanceof EmailDomainError) return reply.code(error.temporary ? 503 : 400).send({ error: error.message });
+        throw error;
+      }
+    }
+    if (await prisma.loginToken.count({ where: { email: body.email, purpose: "MAGIC_LOGIN", createdAt: { gt: new Date(Date.now() - 60000) } } })) return { ok: true, emailSent: true };
     const session = await getOrCreateAuthSession(request);
     const token = randomBytes(32).toString("base64url");
     const tokenHash = hashMagicToken(token);
@@ -170,7 +192,7 @@ export async function authRoutes(app: FastifyInstance) {
         locale: session.locale,
         sessionId: session.id,
         userId: session.userId,
-        properties: JSON.parse(JSON.stringify({ emailDomain: body.email.split("@")[1], emailId: emailResult.emailId, error: emailResult.error }))
+        properties: { emailDomain: body.email.split("@")[1], delivered: emailResult.emailSent }
       }
     });
 
@@ -182,12 +204,13 @@ export async function authRoutes(app: FastifyInstance) {
       ok: true,
       emailSent: emailResult.emailSent,
       expiresAt: expiresAt.toISOString(),
-      ...(env.NODE_ENV === "production" ? {} : { debugLoginUrl: loginUrl.toString() })
     };
   });
 
-  app.post("/api/auth/magic-link/verify", async (request, reply) => {
-    const body = magicLinkVerifySchema.parse(request.body ?? {});
+  app.post("/api/auth/magic-link/verify", { config: { rateLimit: { max: 10, timeWindow: "15 minutes" } } }, async (request, reply) => {
+    const parsed = magicLinkVerifySchema.safeParse(request.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: "Magic link is invalid or expired" });
+    const body = parsed.data;
     const session = await getOrCreateAuthSession(request);
     const tokenHash = hashMagicToken(body.token);
     const token = await prisma.loginToken.findFirst({
@@ -201,7 +224,10 @@ export async function authRoutes(app: FastifyInstance) {
     if (!token) return reply.code(400).send({ error: "Magic link is invalid or expired" });
 
     const existingMagicUser = await prisma.user.findUnique({ where: { email: token.email }, select: { id: true } });
-    const user = await prisma.$transaction(async (tx) => {
+    let user;
+    try { user = await prisma.$transaction(async (tx) => {
+      const claimed = await tx.loginToken.updateMany({ where: { id: token.id, consumedAt: null, expiresAt: { gt: new Date() }, purpose: "MAGIC_LOGIN" }, data: { consumedAt: new Date() } });
+      if (claimed.count !== 1) throw new Error("TOKEN_CONSUMED");
       const nextUser = await tx.user.upsert({
         where: { email: token.email },
         update: {
@@ -211,17 +237,18 @@ export async function authRoutes(app: FastifyInstance) {
         },
         create: {
           email: token.email,
+          welcomeEmailPendingAt: new Date(),
           emailVerifiedAt: new Date(),
           lastLoginAt: new Date(),
           locale: session.locale
         }
       });
-      await tx.loginToken.update({
-        where: { id: token.id },
-        data: { consumedAt: new Date() }
-      });
+      if (nextUser.status !== "ACTIVE") throw new Error("TOKEN_CONSUMED");
       return nextUser;
-    });
+    }); } catch (error) {
+      if ((error as Error).message === "TOKEN_CONSUMED") return reply.code(400).send({ error: "Magic link is invalid or expired" });
+      throw error;
+    }
     await attachSessionToUser(session, user.id);
     if (!existingMagicUser) await recordTrafficConversion(request, "REGISTRATION", `user:${user.id}`);
     await prisma.analyticsEvent.create({
@@ -239,6 +266,7 @@ export async function authRoutes(app: FastifyInstance) {
       referralCode: normalizeReferralCode(body.referralCode),
       request
     }).catch((error) => app.log.error({ error, userId: user.id }, "partner referral signup failed"));
+    void deliverWelcomeEmail(user.id).catch(() => app.log.warn("welcome_email_retry_pending"));
     return buildAuthResponse(session, user);
   });
 
@@ -257,7 +285,7 @@ export async function authRoutes(app: FastifyInstance) {
 
 async function getOrCreateAuthSession(request: FastifyRequest) {
   const existing = await getOptionalSession(request);
-  if (existing) return existing;
+    if (existing && !existing.userId) return existing;
   return createGuestSession(request, getRequestedLocale(request));
 }
 

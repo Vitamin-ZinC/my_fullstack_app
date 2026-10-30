@@ -41,6 +41,7 @@ compareShape(ruSiteText, defaultSiteText.en);
 compareShape(privacyPolicyDocument, localizeStaticText(privacyPolicyDocument, "en"), "privacy");
 compareShape(publicOfferDocument, localizeStaticText(publicOfferDocument, "en"), "offer");
 for (const [source, english] of Object.entries(englishCatalog)) {
+  assert.ok(!/\?{4}/.test(source), `Corrupted translation key: ${source}`);
   assert.ok(english.length > 0, source);
   const placeholders = text => [...text.matchAll(/\{+[^{}]+\}+/g)].map(match => match[0]).sort().join("|");
   assert.equal(placeholders(source), placeholders(english), `Catalog placeholders: ${source}`);

@@ -222,7 +222,7 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <LandingFaq
+        {landing.faq.enabled && <LandingFaq
           eyebrow={landing.faq.eyebrow}
           title={landing.faq.title}
           items={landing.faq.items.map(item => ({ ...item, answer: formatTemplate(item.answer, {
@@ -230,7 +230,7 @@ export default function LandingPage() {
             habitPrice: habitPriceLabel,
             trial: habitTrialDays > 0 ? formatTemplate(landing.faq.trial, { days: habitTrialDays }) : landing.faq.noTrial
           }) }))}
-        />
+        />}
         <LandingFooter text={landing.footer} />
       </main>
       <OrkenGuide context="landing" scope="public" actions={[{ label: text.guide.diagnose, href: "/flow/voice" }]} />
@@ -242,6 +242,7 @@ function LandingNav() {
   useUiLocale();
   const { landing: landingText } = useSiteText();
   const landing = landingText.v2;
+  const supportEmail = landing.footer.supportEmail || SUPPORT_EMAIL;
   const [mobileOpen, setMobileOpen] = useState(false);
   const closeMobile = () => setMobileOpen(false);
 
@@ -270,7 +271,7 @@ function LandingNav() {
               <div className="landing-v2-dropdown-menu" role="menu">
                 <Link href="/offer" role="menuitem" onClick={closeMobile}><FileText size={16} aria-hidden="true" /> {uiText(" Публичная оферта")}</Link>
                 <Link href="/privacy" role="menuitem" onClick={closeMobile}><ShieldCheck size={16} aria-hidden="true" /> {uiText(" Политика конфиденциальности")}</Link>
-                <a href={`mailto:${SUPPORT_EMAIL}`} role="menuitem" onClick={closeMobile}><Mail size={16} aria-hidden="true" /> {uiText(" Написать в поддержку")}</a>
+                <a href={`mailto:${supportEmail}`} role="menuitem" onClick={closeMobile}><Mail size={16} aria-hidden="true" /> {uiText(" Написать в поддержку")}</a>
               </div>
             </details>
             <details className="landing-v2-dropdown" name="landing-nav-menu">

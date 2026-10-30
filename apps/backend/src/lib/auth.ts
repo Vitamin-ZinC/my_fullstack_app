@@ -143,6 +143,7 @@ export async function requireUserSession(request: FastifyRequest, reply: Fastify
 }
 
 export async function attachSessionToUser(session: SessionContext, userId: string) {
+  const nextGuestToken = randomUUID();
   const analysisIds = await prisma.analysis.findMany({
     where: {
       sessionId: session.id,
@@ -157,6 +158,7 @@ export async function attachSessionToUser(session: SessionContext, userId: strin
       where: { id: session.id },
       data: {
         userId,
+        guestToken: nextGuestToken,
         expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)
       }
     });
@@ -183,6 +185,7 @@ export async function attachSessionToUser(session: SessionContext, userId: strin
       data: { userId }
     });
   });
+  session.guestToken = nextGuestToken;
 }
 
 export async function requireAnalysisAccess(

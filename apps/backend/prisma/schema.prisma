@@ -13,6 +13,8 @@ model User {
   name        String?
   passwordHash String?
   emailVerifiedAt DateTime?
+  welcomeEmailPendingAt DateTime?
+  welcomeEmailSentAt DateTime?
   lastLoginAt DateTime?
   avatarUrl   String?
   role        UserRole        @default(USER)
@@ -1568,6 +1570,8 @@ enum PromptStatus {
 
 enum AuthTokenPurpose {
   MAGIC_LOGIN
+  EMAIL_VERIFY
+  PASSWORD_RESET
 }
 
 enum HabitProgramStatus {

@@ -11,6 +11,7 @@ import { api } from "@/lib/api";
 import { openTelegramConnectUrl } from "@/lib/telegram";
 import { useSiteText } from "@/lib/useSiteText";
 import { OrkenGuide } from "@/components/OrkenGuide";
+import { EmailVerificationNotice } from "@/components/AccountRecovery";
 
 type ChatMessage = { role: "user" | "assistant"; text: string };
 type TelegramFrequency = "off" | "daily" | "weekdays" | "weekly";
@@ -278,6 +279,7 @@ export default function AccountPage() {
 
   return (
     <article className="account-page stack" data-testid="account-page">
+      <EmailVerificationNotice verifiedAt={me.user.emailVerifiedAt} />
       <OrkenGuide context="user" scope={program?.id ?? me.user.id} message={program ? siteText.guide.user : siteText.guide.userStart} suspended={busy || telegramBusy} actions={[
         { label: program ? siteText.guide.journey : siteText.guide.navigator, href: program ? "/habits?tab=journey" : "/habits" },
         { label: siteText.guide.help, href: "/habits?tab=guide" }

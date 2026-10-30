@@ -27,6 +27,12 @@ For RU/EN web interfaces, locale propagation and data-preservation rules, see [W
 
 ## Current Product Areas
 
+### Editable Landing And Account Email
+
+See [content and account email](content-and-account-email.md) for the structured
+`/admin/content` editor, publication/version checks, email confirmation, password reset,
+welcome retry state and required migration. Partner Core credentials remain external.
+
 ### Web Traffic
 
 Consent-based first-party analytics and `/admin/traffic` are documented in

@@ -1529,3 +1529,79 @@ export function safeAccountReturnPath(value: string | null | undefined): string 
   } catch { return "/account"; }
 }
 export * from "#traffic";
+export type FooterLink = { id: string; label: string; href: string; enabled: boolean; icon: "none" | "mail" | "instagram" | "music" | "telegram" };
+export type FooterSection = { id: string; title: string; enabled: boolean; links: FooterLink[] };
+
+export function safeContentHref(value: unknown): value is string {
+  if (typeof value !== "string" || value.length > 500 || /[\s\\\u0000-\u001f\u007f]/.test(value)) return false;
+  if (/^#[a-zA-Z][a-zA-Z0-9_-]*$/.test(value)) return true;
+  if (/^mailto:[^@?%]+@[^@?%]+\.[a-zA-Z]{2,}$/.test(value)) return true;
+  if (value.startsWith("/") && !value.startsWith("//")) {
+    try { const decoded = decodeURIComponent(value); return !/[\\\u0000-\u0020]/.test(decoded) && !decoded.startsWith("//"); } catch { return false; }
+  }
+  try { const url = new URL(value); return url.protocol === "https:" && Boolean(url.hostname) && !url.username && !url.password; } catch { return false; }
+}
+
+// Check public fields even when they are saved through the legacy JSON editor.
+function validateSiteContentFields(value: unknown): string | null {
+  const root = value as any;
+  if (!root || typeof root !== "object" || Array.isArray(root)) return "Content must be an object";
+  const content = root.landing?.v2;
+  if (!content) return null;
+  const text = (v: unknown, max: number) => typeof v === "string" && v.length <= max && !/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(v);
+  if (content.faq) {
+    const faq = content.faq;
+    if (faq.enabled !== undefined && typeof faq.enabled !== "boolean") return "Invalid FAQ";
+    if (typeof faq !== "object" || Array.isArray(faq)) return "Invalid FAQ";
+    if (faq.title !== undefined && (!text(faq.title, 160) || !faq.title.trim())) return "Invalid FAQ";
+    for (const key of ["eyebrow", "trial", "noTrial"]) if (faq[key] !== undefined && !text(faq[key], 1500)) return "Invalid FAQ";
+    if (faq.items !== undefined && (!Array.isArray(faq.items) || faq.items.length > 30)) return "Invalid FAQ";
+    const ids = new Set();
+    for (const item of faq.items ?? []) {
+      if (!item || !/^[a-zA-Z0-9_-]{1,100}$/.test(item.id) || ids.has(item.id) || !text(item.question, 500) || !item.question.trim() || !text(item.answer, 10000)) return "Invalid FAQ item";
+      ids.add(item.id);
+      if ((item.answer.match(/\{[^{}]+\}/g) ?? []).some((p: string) => !["{reportPrice}", "{habitPrice}", "{trial}"].includes(p))) return "Unknown FAQ placeholder";
+    }
+  }
+  const footer = content.footer;
+  if (footer) {
+    if (typeof footer !== "object" || Array.isArray(footer)) return "Invalid footer sections";
+    for (const key of ["products", "diagnostics", "navigator", "experts", "security", "securityLink", "legal", "privacy", "offer", "contacts", "social", "community", "clientsCommunity", "expertsCommunity", "partners", "partnerPortal"]) if (footer[key] !== undefined && !text(footer[key], 500)) return "Invalid footer sections";
+    if (footer.supportEmail !== undefined && !safeContentHref(`mailto:${footer.supportEmail}`)) return "Invalid contact email";
+    if (footer.legalDetails !== undefined && !text(footer.legalDetails, 1500)) return "Invalid company details";
+    if (footer.sections != null) {
+      if (!Array.isArray(footer.sections) || footer.sections.length > 12) return "Invalid footer sections";
+      const ids = new Set();
+      const publicLinks: string[] = [];
+      for (const group of footer.sections) {
+        if (!group || !/^[a-zA-Z0-9_-]{1,100}$/.test(group.id) || ids.has(group.id) || !text(group.title, 160) || !group.title.trim() || typeof group.enabled !== "boolean" || !Array.isArray(group.links) || group.links.length > 20) return "Invalid footer section";
+        ids.add(group.id);
+        const links = new Set();
+        for (const link of group.links) {
+          if (!link || !/^[a-zA-Z0-9_-]{1,100}$/.test(link.id) || links.has(link.id) || !text(link.label, 200) || !link.label.trim() || typeof link.enabled !== "boolean" || !["none", "mail", "instagram", "music", "telegram"].includes(link.icon) || !safeContentHref(link.href)) return "Invalid footer link";
+          links.add(link.id);
+          if (group.enabled && link.enabled) publicLinks.push(link.href);
+        }
+      }
+      if (!["/privacy", "/offer"].every(href => publicLinks.includes(href))) return "Privacy policy and public offer links must remain visible";
+    }
+  }
+  return null;
+}
+
+export function validateSiteContent(value: unknown): string | null {
+  const error = validateSiteContentFields(value);
+  const messages: Record<string, string> = {
+    "Content must be an object": "Контент должен быть объектом.",
+    "Invalid FAQ": "Проверьте раздел FAQ.",
+    "Invalid FAQ item": "Проверьте вопрос и ответ.",
+    "Unknown FAQ placeholder": "Неизвестная переменная в ответе FAQ.",
+    "Invalid contact email": "Проверьте email поддержки.",
+    "Invalid company details": "Проверьте юридические реквизиты.",
+    "Invalid footer sections": "Проверьте разделы подвала.",
+    "Invalid footer section": "Проверьте раздел подвала.",
+    "Invalid footer link": "Проверьте ссылку в подвале.",
+    "Privacy policy and public offer links must remain visible": "Ссылки на Оферту и Политику должны оставаться видимыми."
+  };
+  return error ? messages[error] ?? error : null;
+}

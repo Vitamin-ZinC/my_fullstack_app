@@ -7,6 +7,7 @@ import { safeAccountReturnPath } from "@levelup/contracts";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { AccountRecovery } from "@/components/AccountRecovery";
 
 type AuthMode = "magic" | "password";
 
@@ -38,6 +39,7 @@ function LoginContent() {
   const params = useSearchParams();
   const returnPath = safeAccountReturnPath(params.get("next"));
   const [mode, setMode] = useState<AuthMode>("magic");
+  const [recovery, setRecovery] = useState<{ mode: "forgot" | "reset" | "verify"; token?: string } | null>(null);
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
@@ -45,6 +47,21 @@ function LoginContent() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    const readRecoveryLink = () => {
+      const fragment = new URLSearchParams(window.location.hash.slice(1));
+      const action = fragment.get("action");
+      if ((action === "reset" || action === "verify") && fragment.has("token")) {
+        setRecovery({ mode: action, token: fragment.get("token") ?? "" });
+        setError(""); setMessage("");
+        window.history.replaceState(null, "", window.location.pathname + window.location.search);
+      }
+    };
+    readRecoveryLink();
+    window.addEventListener("hashchange", readRecoveryLink);
+    return () => window.removeEventListener("hashchange", readRecoveryLink);
+  }, []);
 
   useEffect(() => {
     if (params.get("mode") === "register") {
@@ -113,12 +130,12 @@ function LoginContent() {
         <h1 className="ub auth-title">{uiText("Вход в ORKEN.LIFE")}</h1>
         <p className="muted auth-copy">{uiText("Сохраняйте отчёты диагностики, возвращайтесь к прошлым результатам и продолжайте работу с навигатором привычек.")}</p>
 
-        <div className="auth-tabs" role="tablist" aria-label={uiText("Способ входа")}>
+        {!recovery && <div className="auth-tabs" role="tablist" aria-label={uiText("Способ входа")}>
           <button className={mode === "magic" ? "active" : ""} type="button" onClick={() => setMode("magic")}>{uiText("Ссылка")}</button>
           <button className={mode === "password" ? "active" : ""} type="button" onClick={() => setMode("password")}>{uiText("Пароль")}</button>
-        </div>
+        </div>}
 
-        {mode === "magic" ? (
+        {recovery ? <AccountRecovery key={`${recovery.mode}:${recovery.token ?? ""}`} {...recovery} onBack={() => { setRecovery(null); setMode("password"); setIsRegister(false); }} /> : mode === "magic" ? (
           <form className="auth-form" onSubmit={submitMagicLink}>
             <label>
               <span>Email</span>
@@ -154,6 +171,7 @@ function LoginContent() {
             </button>
           </form>
         )}
+        {!recovery && <button className="auth-switch" type="button" onClick={() => { setRecovery({ mode: "forgot" }); setError(""); setMessage(""); }}>{uiText("Забыли пароль?")}</button>}
 
         <p className="auth-legal-links">
           {uiText(" Продолжая, вы принимаете ")}<Link href="/offer">{uiText("публичную оферту")}</Link> {uiText(" и ")}<Link href="/privacy">{uiText("политику конфиденциальности")}</Link>.

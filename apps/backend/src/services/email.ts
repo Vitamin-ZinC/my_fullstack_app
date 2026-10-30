@@ -193,8 +193,10 @@ async function sendTransactionalEmail(input: {
   idempotencyKey: string;
   kind: string;
 }): Promise<SendReportEmailResult> {
+  if (!env.RESEND_API_KEY) return { emailSent: false, error: "Email delivery unavailable" };
   try {
     const response = await fetch("https://api.resend.com/emails", {
+      signal: AbortSignal.timeout(10000),
       method: "POST",
       headers: {
         Authorization: `Bearer ${env.RESEND_API_KEY}`,
@@ -225,6 +227,26 @@ async function sendTransactionalEmail(input: {
       error: truncateEmailError(error instanceof Error ? error.message : "Email send failed")
     };
   }
+}
+
+export async function sendAccountEmail(input: { email: string; locale: string; kind: "verify" | "reset" | "welcome" | "password_changed"; id: string; url?: string }) {
+  const en = input.locale === "en";
+  const subjects = {
+    verify: en ? "Confirm your ORKEN.LIFE email" : "Подтвердите почту ORKEN.LIFE",
+    reset: en ? "Reset your ORKEN.LIFE password" : "Восстановление пароля ORKEN.LIFE",
+    welcome: en ? "Welcome to ORKEN.LIFE" : "Добро пожаловать в ORKEN.LIFE",
+    password_changed: en ? "Your ORKEN.LIFE password was changed" : "Пароль ORKEN.LIFE изменён"
+  };
+  const messages = {
+    verify: en ? "Confirm your email using this single-use link. It expires in 24 hours. If you did not sign up, ignore this email." : "Подтвердите почту по одноразовой ссылке. Она действует 24 часа. Если вы не регистрировались, проигнорируйте письмо.",
+    reset: en ? "Choose a new password using this single-use link within 30 minutes. If you did not request this, ignore the email: your password has not changed." : "Задайте новый пароль по одноразовой ссылке в течение 30 минут. Если вы не запрашивали восстановление, проигнорируйте письмо: ваш пароль не изменён.",
+    welcome: en ? "Your email is confirmed. Start in My Journey: rate your energy, clarity and resilience, take a small daily step and save an insight. Past reports remain in your account. Connect Telegram from My Journey to use the same progress on the go." : "Ваша почта подтверждена. Начните с «Моего пути»: оцените энергию, ясность и устойчивость, сделайте небольшой шаг и сохраните инсайт. Предыдущие отчёты доступны в кабинете. Подключите Telegram из «Моего пути», чтобы отмечать тот же прогресс на ходу.",
+    password_changed: en ? "Your password was changed and existing sessions were signed out. If this was not you, request another password reset and contact orken.eco@gmail.com." : "Ваш пароль изменён, прежние сессии завершены. Если это были не вы, запросите новое восстановление пароля и свяжитесь с orken.eco@gmail.com."
+  };
+  const url = input.url ?? new URL("/habits?tab=journey", env.APP_ORIGIN).toString();
+  return sendTransactionalEmail({ to: input.email, subject: subjects[input.kind], kind: `account_${input.kind}`, idempotencyKey: `account:${input.kind}:${input.id}`,
+    text: `${subjects[input.kind]}\n\n${messages[input.kind]}\n\n${url}`,
+    html: `<h1>${escapeHtml(subjects[input.kind])}</h1><p>${escapeHtml(messages[input.kind])}</p><p><a href="${escapeHtml(url)}">ORKEN.LIFE</a></p>` });
 }
 
 function buildCoachApplicantEmailHtml(input: SendCoachApplicationEmailsInput, expiresLabel: string) {
@@ -391,6 +413,6 @@ function logEmailFailure(kind: string, email: string, status: number, error?: st
     kind,
     status,
     emailDomain: email.split("@")[1] ?? "unknown",
-    error: error ? truncateEmailError(error) : undefined
+    // Provider bodies can echo credentials or single-use URLs. Never log them.
   });
 }

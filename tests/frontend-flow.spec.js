@@ -27,6 +27,105 @@ const habitConfig = {
   trialDays: 30
 };
 
+test("admin edits and publishes FAQ and footer without JSON, preserves EN and can load the previous version", async ({ page }, info) => {
+  await page.addInitScript(() => { sessionStorage.setItem("levelup_admin_session", "synthetic-content-admin"); localStorage.setItem("levelup_locale", "ru"); sessionStorage.setItem("orken_guide_v1:landing:public", JSON.stringify({ disabled: true, lastShownAt: 0 })); });
+  let stamp = Date.now();
+  const rows = new Map([
+    ["site_texts_ru", { key: "site_texts_ru", value: { landing: { v2: { faq: { title: "Исходный FAQ", items: [{ id: "first", question: "Исходный вопрос", answer: "Цена: {habitPrice}" }] } } } }, updatedAt: new Date(stamp).toISOString() }],
+    ["site_texts_en", { key: "site_texts_en", value: { landing: { v2: { faq: { title: "Unchanged English FAQ" } } } }, updatedAt: new Date(stamp).toISOString() }]
+  ]);
+  const writes = [];
+  await page.route(`${apiBase}/api/**`, async route => {
+    const pathname = new URL(route.request().url()).pathname;
+    if (pathname === "/api/admin/settings") return fulfillJson(route, [...rows.values()]);
+    if (pathname.startsWith("/api/admin/settings/")) {
+      if (route.request().method() === "OPTIONS") return fulfillJson(route, {});
+      const key = pathname.split("/").at(-1); const body = route.request().postDataJSON();
+      expect(body.expectedUpdatedAt).toBe(rows.get(key)?.updatedAt ?? null);
+      writes.push({ key, ...body });
+      const old = rows.get(key); if (old) rows.set(key.replace("site_texts_", "site_texts_previous_"), { ...old, key: key.replace("site_texts_", "site_texts_previous_") });
+      rows.set(key, { key, value: body.value, updatedAt: new Date(++stamp).toISOString() });
+      return fulfillJson(route, rows.get(key));
+    }
+    if (pathname.startsWith("/api/content/")) return fulfillJson(route, { value: rows.get(`site_texts_${pathname.split("/").at(-1)}`)?.value });
+    if (pathname === "/api/payments/config") return fulfillJson(route, { priceLabel: "$3" });
+    if (pathname === "/api/habits/config") return fulfillJson(route, habitConfig);
+    if (pathname === "/api/traffic/config") return fulfillJson(route, { enabled: false });
+    return fulfillJson(route, []);
+  });
+  await page.goto(`${appBase}/admin/content`);
+  await expect(page.getByTestId("landing-content-editor")).toBeVisible();
+  await page.getByLabel("Заголовок FAQ", { exact: true }).fill("Вопросы о платформе");
+  await page.getByLabel("Вопрос", { exact: true }).fill("Обновлённый вопрос");
+  await page.getByLabel("Ответ", { exact: true }).fill("Цена подписки: {habitPrice}. {trial}");
+  await page.getByRole("button", { name: "Добавить вопрос", exact: true }).click();
+  await page.getByLabel("Вопрос", { exact: true }).last().fill("Безопасный текст");
+  await page.getByLabel("Ответ", { exact: true }).last().fill('<img src=x onerror="alert(1)">');
+  await page.getByRole("tab", { name: "Подвал и ссылки", exact: true }).click();
+  await page.getByLabel("URL", { exact: true }).first().fill("javascript:alert(1)");
+  await expect(page.getByRole("button", { name: "Опубликовать изменения", exact: true })).toBeDisabled();
+  await page.getByLabel("URL", { exact: true }).first().fill("/flow/voice");
+  await page.getByRole("tab", { name: "Контакты и реквизиты", exact: true }).click();
+  await page.getByLabel("Email поддержки", { exact: true }).fill("support@orken.life");
+  await page.getByLabel("Юридические реквизиты в подвале", { exact: true }).fill("SYNTHETIC COMPANY\nReview details before publication");
+  await page.getByRole("tab", { name: "Предпросмотр", exact: true }).click();
+  await expect(page.locator('img[src="x"]')).toHaveCount(0);
+  for (const width of [360, 768, 1024, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.evaluate(async () => { scrollTo(0, 0); await document.fonts.ready; await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))); });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: info.outputPath(`content-editor-${width}.png`), fullPage: true, animations: "disabled" });
+  }
+  await page.getByRole("button", { name: "Опубликовать изменения", exact: true }).click();
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes[0].key).toBe("site_texts_ru");
+  expect(rows.get("site_texts_en").value.landing.v2.faq.title).toBe("Unchanged English FAQ");
+  await page.goto(`${appBase}/?lang=ru`);
+  await expect(page.locator("#faq h2")).toHaveText("Вопросы о платформе");
+  await expect(page.locator('#feedback a[href="mailto:support@orken.life"]')).toBeVisible();
+  await expect(page.locator('img[src="x"]')).toHaveCount(0);
+  await page.goto(`${appBase}/admin/content`);
+  await page.getByRole("button", { name: "Загрузить предыдущую версию", exact: true }).click();
+  await page.getByRole("tab", { name: "Вопросы и ответы", exact: true }).click();
+  await expect(page.getByLabel("Заголовок FAQ", { exact: true })).toHaveValue("Исходный FAQ");
+  expect(writes.length).toBe(1);
+});
+
+test("password recovery uses a single-use link without storing tokens and email confirmation requires a click", async ({ page }) => {
+  const requests = [];
+  await page.route(`${apiBase}/api/**`, async route => {
+    const pathname = new URL(route.request().url()).pathname;
+    if (route.request().method() === "POST" && /password\/reset|email\/verification/.test(pathname)) requests.push({ path: pathname, body: route.request().postDataJSON() });
+    return fulfillJson(route, pathname === "/api/traffic/config" ? { enabled: false } : { ok: true });
+  });
+  await page.goto(`${appBase}/login?lang=ru`);
+  await page.getByRole("button", { name: "Забыли пароль?", exact: true }).click();
+  await page.getByLabel("Email", { exact: true }).fill("person@example.com");
+  await page.getByRole("button", { name: "Отправить ссылку восстановления", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("Если этот адрес зарегистрирован");
+  const token = "r".repeat(43);
+  await page.goto(`${appBase}/login?lang=en#action=reset&token=${token}`);
+  await expect(page.getByLabel("New password", { exact: true })).toBeVisible();
+  expect(page.url()).not.toContain(token);
+  await page.getByLabel("New password", { exact: true }).fill("replacement-password");
+  await page.getByLabel("Confirm new password", { exact: true }).fill("different-password");
+  await page.getByRole("button", { name: "Save new password", exact: true }).click();
+  await expect(page.getByRole("alert").filter({ hasText: /Passwords (do not|don't) match/ })).toBeVisible();
+  await page.getByLabel("Confirm new password", { exact: true }).fill("replacement-password");
+  await page.getByRole("button", { name: "Save new password", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("Password changed");
+  expect(requests.at(-1).body).toEqual({ token, password: "replacement-password" });
+  expect(await page.evaluate(() => JSON.stringify(localStorage))).not.toContain(token);
+  const verifyToken = "v".repeat(43);
+  await page.goto(`${appBase}/login?lang=en#action=verify&token=${verifyToken}`);
+  await expect(page.getByRole("button", { name: "Confirm email", exact: true })).toBeVisible();
+  expect(requests.some(request => request.path.includes("verification/confirm"))).toBe(false);
+  await page.getByRole("button", { name: "Confirm email", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("Email confirmed");
+  expect(requests.at(-1).body.token).toBe(verifyToken);
+  expect(page.url()).not.toContain(verifyToken);
+});
+
 test("Navigator preserves the combined archive and synchronizes saved Ikigai focus", async ({ page, context }) => {
   let program = createHabitProgram();
   program.rankHistory = [];
@@ -127,7 +226,7 @@ test("landing FAQ and footer preserve links, keyboard access and backend pricing
     await expect(items.nth(3).locator(".landing-faq-answer")).toContainText("$12");
     await expect(items.nth(3).locator(".landing-faq-answer")).toContainText(locale === "ru" ? "7 дней" : "7 days");
     const footer = page.locator("#feedback");
-    await expect(footer.locator("h2")).toHaveCount(6);
+    await expect(footer.locator("h2")).toHaveCount(7);
     for (const href of ["/flow/voice", "/habits", "/coach", "/privacy", "/offer", "mailto:orken.eco@gmail.com"]) {
       await expect(footer.locator(`a[href='${href}']`)).toHaveCount(1);
     }
@@ -1146,7 +1245,7 @@ test("password registration opens account with report history", async ({ page })
   }));
 
   await page.goto(`${appBase}/login`);
-  await page.getByText("Пароль").click();
+  await page.getByRole("button", { name: "Пароль", exact: true }).click();
   await page.getByText("Нет аккаунта? Создать").click();
   await page.getByPlaceholder("Как к вам обращаться").fill("Client");
   await page.getByPlaceholder("you@email.com").fill("client@orken.life");

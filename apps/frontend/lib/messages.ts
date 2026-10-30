@@ -1,4 +1,5 @@
 import { localizeStaticText } from "@levelup/contracts";
+import type { FooterSection } from "@levelup/contracts";
 export const BRAND_NAME = "ORKEN.LIFE";
 
 export type Locale = "ru" | "en";
@@ -99,6 +100,7 @@ export const ruSiteText = {
         cta: "Открыть кабинет эксперта"
       },
       faq: {
+        enabled: true,
         eyebrow: "Q&A",
         title: "Часто задаваемые вопросы",
         trial: "Первые {days} дней бесплатно, затем действует выбранная подписка.",
@@ -113,6 +115,11 @@ export const ruSiteText = {
         ]
       },
       footer: {
+        supportEmail: "orken.eco@gmail.com",
+        legalDetails: "",
+        sections: null as FooterSection[] | null,
+        partners: "Партнёрская сеть",
+        partnerPortal: "Кабинет партнёра",
         products: "Продукты",
         diagnostics: "Диагностика профориентации",
         navigator: "Навигатор",
@@ -126,7 +133,7 @@ export const ruSiteText = {
         social: "Мы в соцсетях",
         community: "Присоединяйтесь",
         clientsCommunity: "Наше комьюнити",
-        expertsCommunity: "Telegram для экспертов"
+        expertsCommunity: "Сообщество для экспертов"
       },
       partners: {
         eyebrow: "ПАРТНЁРАМ",
@@ -1063,7 +1070,7 @@ export const ruSiteText = {
   }
 } as const;
 
-type Widen<T> = T extends string
+type Widen<T> = T extends boolean ? boolean : T extends string
   ? string
   : T extends readonly (infer U)[]
     ? readonly Widen<U>[]

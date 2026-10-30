@@ -76,6 +76,7 @@ import {
   telegramWebLoginEnabledSettingKey
 } from "@/lib/api";
 import { defaultSiteText } from "@/lib/messages";
+import { LandingContentEditor } from "@/components/admin/LandingContentEditor";
 import { DEFAULT_COACH_PUBLIC_CONTENT, localizeStaticText } from "@levelup/contracts";
 
 export type AdminSection = "overview" | "reports" | "traffic" | "users" | "commercial" | "ai" | "content" | "integrations" | "coaches" | "partners" | "system";
@@ -729,7 +730,7 @@ export function AdminConsole({ section }: { section: AdminSection }) {
     setMessage("");
     try {
       const parsed = JSON.parse(textDrafts[locale] ?? JSON.stringify(defaultTextForLocale(locale)));
-      await adminApi.saveContent(locale, parsed);
+      await adminApi.saveContent(locale, parsed, settings.find(item => item.key === contentSettingKey(locale))?.updatedAt ?? null);
       setMessage(adminText.savedTexts);
       await refresh();
     } catch (reason) {
@@ -1878,7 +1879,7 @@ export function AdminConsole({ section }: { section: AdminSection }) {
           {section === "content" && <section id="admin-texts" className="card stack admin-section-card">
             <div>
               <h2>{adminText.textTitle}</h2>
-              <p className="muted">{adminText.textCopy}</p>
+              <p className="muted">{["Вопросы и ответы", "Подвал и ссылки", "Контакты и реквизиты"].map(label => uiText(label)).join(" · ")}</p>
             </div>
             <div className="row" style={{ justifyContent: "flex-start" }}>
               {Object.keys(textDrafts).map((locale) => (
@@ -1892,7 +1893,12 @@ export function AdminConsole({ section }: { section: AdminSection }) {
                 </button>
               ))}
             </div>
-            <textarea
+            <LandingContentEditor locale={activeTextLocale} draft={textDrafts[activeTextLocale] ?? "{}"}
+              previous={settings.find(item => item.key === `site_texts_previous_${activeTextLocale}`)?.value}
+              onChange={value => setTextDrafts(current => ({ ...current, [activeTextLocale]: JSON.stringify(value, null, 2) }))}
+              onPublish={() => saveTexts(activeTextLocale)}
+              onDiscard={() => setTextDrafts(current => ({ ...current, [activeTextLocale]: JSON.stringify(readTextSetting(settings, activeTextLocale), null, 2) }))} />
+            <details><summary>{uiText("Расширенный JSON-редактор")}</summary><textarea
               className="input text-editor"
               value={textDrafts[activeTextLocale] ?? ""}
               onChange={(event) => setTextDrafts((current) => ({ ...current, [activeTextLocale]: event.target.value }))}
@@ -1902,6 +1908,7 @@ export function AdminConsole({ section }: { section: AdminSection }) {
               <button className="button" onClick={() => saveTexts(activeTextLocale)}>{adminText.saveTexts}</button>
               <button className="button secondary" onClick={() => resetTexts(activeTextLocale)}>{adminText.resetTexts}</button>
             </div>
+            </details>
           </section>}
 
           {section === "commercial" && <section id="admin-promos" className="card stack admin-section-card">

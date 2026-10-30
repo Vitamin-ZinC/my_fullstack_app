@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { validateSiteContent } from "@levelup/contracts";
 import { env } from "../env.js";
 import { createAdminSessionToken, requireAdmin, verifyAdminPassword, writeAdminAudit } from "../lib/auth.js";
 import { prisma } from "../lib/prisma.js";
@@ -24,7 +25,8 @@ const jsonValueSchema: z.ZodType<unknown> = z.lazy(() =>
 );
 
 const settingSchema = z.object({
-  value: jsonValueSchema
+  value: jsonValueSchema,
+  expectedUpdatedAt: z.string().datetime().nullable().optional()
 });
 
 const loginSchema = z.object({
@@ -423,6 +425,26 @@ export async function adminRoutes(app: FastifyInstance) {
   app.put("/api/admin/settings/:key", async (request, reply) => {
     const params = z.object({ key: z.string().min(1).max(120) }).parse(request.params);
     const body = settingSchema.parse(request.body);
+    if (/^site_texts_(ru|en)$/.test(params.key)) {
+      const issue = validateSiteContent(body.value);
+      if (issue) return reply.code(400).send({ error: issue });
+      try {
+        const setting = await prisma.$transaction(async tx => {
+          const previous = await tx.appSetting.findUnique({ where: { key: params.key } });
+          if (body.expectedUpdatedAt !== undefined && (previous?.updatedAt.toISOString() ?? null) !== body.expectedUpdatedAt) throw new Error("CONTENT_CONFLICT");
+          if (previous) {
+            const key = params.key.replace("site_texts_", "site_texts_previous_");
+            await tx.appSetting.upsert({ where: { key }, update: { value: previous.value as any }, create: { key, value: previous.value as any } });
+          }
+          return tx.appSetting.upsert({ where: { key: params.key }, update: { value: body.value as any }, create: { key: params.key, value: body.value as any } });
+        }, { isolationLevel: "Serializable" });
+        await writeAdminAudit("content.publish", "AppSetting", params.key, { locale: params.key.slice(-2) });
+        return setting;
+      } catch (error) {
+        if ((error as Error).message === "CONTENT_CONFLICT" || ["P2034", "P2002"].includes((error as { code?: string }).code ?? "")) return reply.code(409).send({ error: "Контент уже изменён. Обновите страницу перед публикацией." });
+        throw error;
+      }
+    }
     if (params.key === "traffic_analytics_enabled" && typeof body.value !== "boolean") return reply.code(400).send({ error: "Expected a boolean setting" });
     const setting = await prisma.appSetting.upsert({
       where: { key: params.key },

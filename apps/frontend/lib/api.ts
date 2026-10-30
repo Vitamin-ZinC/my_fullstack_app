@@ -323,6 +323,14 @@ export const api = {
       body: JSON.stringify({ email, ...(next ? { next } : {}) })
     });
   },
+  requestPasswordReset: (email: string) => request<{ ok: true }>("/api/auth/password/reset/request", { method: "POST", body: JSON.stringify({ email }) }),
+  confirmPasswordReset: async (token: string, password: string) => {
+    const result = await request<{ ok: true }>("/api/auth/password/reset/confirm", { method: "POST", body: JSON.stringify({ token, password }) });
+    clearSession();
+    return result;
+  },
+  requestEmailVerification: () => request<{ ok: true }>("/api/auth/email/verification/request", { method: "POST", body: "{}" }),
+  confirmEmailVerification: (token: string) => request<{ ok: true }>("/api/auth/email/verification/confirm", { method: "POST", body: JSON.stringify({ token }) }),
   verifyMagicLink: async (token: string) => {
     await ensureGuestSession();
     const result = await request<AuthResult>("/api/auth/magic-link/verify", {
@@ -854,9 +862,9 @@ export const adminApi = {
     body: JSON.stringify(payload)
   }),
   settings: () => adminRequest<AppSetting[]>("/api/admin/settings"),
-  upsertSetting: (key: string, value: unknown) => adminRequest<AppSetting>(`/api/admin/settings/${encodeURIComponent(key)}`, {
+  upsertSetting: (key: string, value: unknown, expectedUpdatedAt?: string | null) => adminRequest<AppSetting>(`/api/admin/settings/${encodeURIComponent(key)}`, {
     method: "PUT",
-    body: JSON.stringify({ value })
+    body: JSON.stringify({ value, ...(expectedUpdatedAt !== undefined ? { expectedUpdatedAt } : {}) })
   }),
   telegramCommunity: () => adminRequest<TelegramCommunityAdminSnapshot>("/api/admin/telegram-community"),
   updateTelegramCommunityChat: (id: string, payload: TelegramCommunityChatUpdate) => adminRequest<{ chat: unknown }>(`/api/admin/telegram-community/chats/${encodeURIComponent(id)}`, {
@@ -954,5 +962,5 @@ export const adminApi = {
     body: JSON.stringify({ status })
   }),
   partnerRedemptions: () => adminRequest<PartnerRedemptionSummary[]>("/api/admin/partner-redemptions"),
-  saveContent: (locale: string, value: unknown) => adminApi.upsertSetting(contentSettingKey(locale), value)
+  saveContent: (locale: string, value: unknown, expectedUpdatedAt?: string | null) => adminApi.upsertSetting(contentSettingKey(locale), value, expectedUpdatedAt)
 };

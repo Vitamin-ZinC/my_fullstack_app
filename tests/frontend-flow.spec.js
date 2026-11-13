@@ -227,7 +227,7 @@ test("landing FAQ and footer preserve links, keyboard access and backend pricing
     await expect(items.nth(3).locator(".landing-faq-answer")).toContainText(locale === "ru" ? "7 дней" : "7 days");
     const footer = page.locator("#feedback");
     await expect(footer.locator("h2")).toHaveCount(7);
-    for (const href of ["/flow/voice", "/habits", "/coach", "/privacy", "/offer", "mailto:orken.eco@gmail.com"]) {
+    for (const href of ["/flow/start", "/habits", "/coach", "/privacy", "/offer", "mailto:orken.eco@gmail.com"]) {
       await expect(footer.locator(`a[href='${href}']`)).toHaveCount(1);
     }
     for (const href of ["https://www.instagram.com/orken.ai", "https://www.tiktok.com/@orken_life", "https://t.me/orken_life", "https://t.me/orkenlife"]) {
@@ -451,6 +451,9 @@ test("partner referral is captured before leaving the landing", async ({ page })
   await expect(page).toHaveURL(`${appBase}/`);
 
   await page.getByRole("link", { name: "Пройти диагностику" }).first().click();
+  await expect(page).toHaveURL(/\/flow\/start$/);
+  await expect.poll(() => page.evaluate(() => window.localStorage.getItem("orken_referral_code"))).toBe("COACH-AUDIT-2026");
+  await page.getByTestId("diagnostic-begin").click();
   await expect(page).toHaveURL(/\/flow\/voice$/);
   await expect.poll(() => page.evaluate(() => window.localStorage.getItem("orken_referral_code"))).toBe("COACH-AUDIT-2026");
 });
@@ -856,6 +859,8 @@ test("ORKEN.LIFE frontend flow works with mocked backend", async ({ page }) => {
   await page.goto(`${appBase}/`);
   await expect(page.getByText("ORKEN.LIFE").first()).toBeVisible();
   await page.getByTestId("landing-start-primary").click();
+  await expect(page).toHaveURL(/\/flow\/start$/);
+  await page.getByTestId("diagnostic-begin").click();
   await expect(page).toHaveURL(/\/flow\/voice$/);
 
   await expect(page.getByTestId("voice-record-button")).toBeDisabled({ timeout: 30000 });

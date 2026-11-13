@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { presentLandingCopy, presentStaticCopy } from "./interfaceCopy";
+import { presentDiagnosticFlow, presentLandingCopy, presentStaticCopy } from "./interfaceCopy";
 import { API_URL } from "@/lib/api";
 import { defaultSiteText, mergeSiteText, parseLocale, type Locale, type SiteText } from "@/lib/messages";
 import { useUiLocale } from "@/lib/locale";
@@ -38,6 +38,7 @@ export function useSiteText(locale?: Locale): SiteText {
     const legacyCoaching = value.landing.v2.coaches.features.some(item => /Переключение|Switch.*Coach|Coach.*Client/i.test(item));
     return {
       ...value,
+      flow: presentDiagnosticFlow(value.flow, defaults.flow),
       landing: presentLandingCopy({ ...value.landing, v2: {
         ...value.landing.v2,
         menu: { ...value.landing.v2.menu, coaches: defaults.landing.v2.menu.coaches },

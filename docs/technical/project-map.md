@@ -41,9 +41,12 @@ from operational business reports and never contain media or private cabinet tex
 
 ### Diagnostic Flow
 
+See [Diagnostic Flow Refresh](diagnostic-refresh.md) for the full-width onboarding,
+evidence-aware prompts, pricing and legacy-report compatibility rules.
+
 Frontend flow pages collect:
 
-- questionnaire answers;
+- optional legacy questionnaire answers (the current media flow skips the form);
 - voice recording;
 - optional face/photo input.
 

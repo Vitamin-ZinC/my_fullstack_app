@@ -269,7 +269,9 @@ export async function analysisRoutes(app: FastifyInstance) {
       }
     });
     const reportMeta = await buildReportGenerationMeta(params.id, analysis.locale);
-    return { reportFree: normalizeFreeReportValue(analysis.reportFree), reportMeta };
+    const answers = ikigaiAnswersSchema.safeParse(analysis.ikigaiAnswers);
+    const questionnairePresent = answers.success && Object.values(answers.data).some(values => values.some(value => value.trim()));
+    return { reportFree: normalizeFreeReportValue(analysis.reportFree, normalizeUiLocale(analysis.locale), questionnairePresent), reportMeta };
   });
 
   app.get("/api/analyses/:id/report/full", async (request, reply) => {

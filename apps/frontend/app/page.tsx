@@ -110,7 +110,7 @@ export default function LandingPage() {
                     <Link
                       className="landing-v2-button"
                       data-testid={index === 0 ? "landing-start-primary" : undefined}
-                      href={index === 0 ? "/flow/voice" : "/habits"}
+                      href={index === 0 ? "/flow/start" : "/habits"}
                     >
                       {tool.cta}
                       <ArrowRight size={17} aria-hidden="true" />
@@ -131,7 +131,7 @@ export default function LandingPage() {
             </div>
             <div className="landing-v2-product-grid">
               <ProductCard
-                ctaHref="/flow/voice"
+                ctaHref="/flow/start"
                 description={landing.diagnosisProduct.copy}
                 Icon={ScanFace}
                 items={landing.diagnosisProduct.items}
@@ -233,7 +233,7 @@ export default function LandingPage() {
         />}
         <LandingFooter text={landing.footer} />
       </main>
-      <OrkenGuide context="landing" scope="public" actions={[{ label: text.guide.diagnose, href: "/flow/voice" }]} />
+      <OrkenGuide context="landing" scope="public" actions={[{ label: text.guide.diagnose, href: "/flow/start" }]} />
     </div>
   );
 }

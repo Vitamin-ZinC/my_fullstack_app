@@ -5,7 +5,7 @@ export function resolveFooterSections(text: SiteText["landing"]["v2"]["footer"])
   if (Array.isArray(text.sections)) return text.sections as FooterSection[];
   const link = (id: string, label: string, href: string, icon: FooterLink["icon"] = "none"): FooterLink => ({ id, label, href, icon, enabled: true });
   return [
-    { id: "products", title: text.products, enabled: true, links: [link("diagnostics", text.diagnostics, "/flow/voice"), link("navigator", text.navigator, "/habits"), link("experts", text.experts, "/coach")] },
+    { id: "products", title: text.products, enabled: true, links: [link("diagnostics", text.diagnostics, "/flow/start"), link("navigator", text.navigator, "/habits"), link("experts", text.experts, "/coach")] },
     { id: "security", title: text.security, enabled: true, links: [link("security", text.securityLink, "#privacy-security")] },
     { id: "legal", title: text.legal, enabled: true, links: [link("privacy", text.privacy, "/privacy"), link("offer", text.offer, "/offer")] },
     { id: "contacts", title: text.contacts, enabled: true, links: [link("email", text.supportEmail, `mailto:${text.supportEmail}`, "mail")] },
@@ -16,5 +16,5 @@ export function resolveFooterSections(text: SiteText["landing"]["v2"]["footer"])
 }
 
 export function publicFooterSections(text: SiteText["landing"]["v2"]["footer"]) {
-  return resolveFooterSections(text).filter(group => group.enabled).map(group => ({ ...group, links: group.links.filter(link => link.enabled && safeContentHref(link.href)) }));
+  return resolveFooterSections(text).filter(group => group.enabled).map(group => ({ ...group, links: group.links.filter(link => link.enabled && safeContentHref(link.href)).map(link => link.href === "/flow/voice" ? { ...link, href: "/flow/start" } : link) }));
 }

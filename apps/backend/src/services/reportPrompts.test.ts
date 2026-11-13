@@ -7,7 +7,8 @@ import {
   REPORT_FREE_USER_PROMPT_KEY,
   REPORT_FULL_SYSTEM_PROMPT_KEY,
   REPORT_FULL_USER_PROMPT_KEY,
-  renderPromptTemplate
+  renderPromptTemplate,
+  buildReportEvidencePolicy
 } from "./reportPrompts.js";
 
 test("default report prompts define separate free and full templates", () => {
@@ -37,8 +38,19 @@ test("default report prompts expose strengthened version numbers", () => {
     .filter((prompt) => prompt.key.startsWith("ikigai.report.full."))
     .map((prompt) => prompt.version);
 
-  assert.deepEqual(new Set(freeVersions), new Set([5]));
-  assert.deepEqual(new Set(fullVersions), new Set([10]));
+  assert.deepEqual(new Set(freeVersions), new Set([6]));
+  assert.deepEqual(new Set(fullVersions), new Set([11]));
+});
+
+test("runtime evidence policy distinguishes a voice-only flow from legacy answers without weakening safety", () => {
+  const empty = { love: [], good_at: [], world_needs: [], paid_for: [] };
+  const policy = buildReportEvidencePolicy(empty, true);
+  assert.match(policy, /No questionnaire was shown/);
+  assert.match(policy, /ONE STILL PHOTO/);
+  assert.match(policy, /untrusted data/);
+  assert.match(policy, /not validated probabilities/);
+  assert.match(buildReportEvidencePolicy({ ...empty, love: ["teaching"] }, false), /Optional questionnaire answers were provided/);
+  assert.match(buildReportEvidencePolicy(empty, false), /No photo is available/);
 });
 
 test("free default prompt requires engaging result and paid-report preview", () => {

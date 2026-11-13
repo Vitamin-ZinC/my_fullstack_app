@@ -261,7 +261,7 @@ function normalizePaidReportPromise(value: string) {
 
 function normalizePaidReportPreviewItem(value: string, locale: UiLocale = "ru") {
   const normalized = normalizePaidReportPromise(value);
-  if (/(?:топ|професси|рол|направлени)/iu.test(normalized)) {
+  if (/(?:топ\s*[-–—]?\s*[35]|\btop\s*[-–—]?\s*[35]\b|профессиональн[а-яё]*\s+направлен|(?:^|\s)рол(?:ей|и)(?:\s|$)|role[- ]?fit)/iu.test(normalized)) {
     return reportCopy("ТОП-5 профессиональных направлений с процентами совпадения, сильными сторонами и рисками", locale);
   }
   if (/(?:маршрут|план).*(?:дн|недел)/iu.test(normalized)) {
@@ -270,12 +270,26 @@ function normalizePaidReportPreviewItem(value: string, locale: UiLocale = "ru") 
   return normalized;
 }
 
-export function normalizeFreeReportValue(value: unknown, locale: UiLocale = "ru"): ReportFree {
+export function normalizeFreeReportValue(value: unknown, locale: UiLocale = "ru", questionnairePresent = true): ReportFree {
   const report = reportFreeSchema.parse(value);
+  const preview = [...new Set(report.paid_report_preview.map(item => normalizePaidReportPreviewItem(item, locale)))];
+  for (const item of ["Расширенный анализ голоса с рабочими проявлениями и рисками", "Персональные ответы по зонам Икигай", "Карьерные риски и точки роста", "30-дневный маршрут внедрения"]) {
+    if (preview.length >= 4) break;
+    const candidate = normalizePaidReportPreviewItem(reportCopy(item, locale), locale);
+    if (!preview.includes(candidate)) preview.push(candidate);
+  }
+  const clean = (text: string) => text.split(/(?<=[.!?…])\s+|\n+/u).filter(sentence => {
+    const formMention = /анкет(?:а|ы|е|у|ой)(?:[^\p{L}]|$)|\b(?:questionnaire|survey)\b/iu.test(sentence);
+    const missingFormClaim = /пуст|не\s+(?:заполн|раскры|позвол|содерж|предостав)|отсутств|недостат|\bempty\b|\bmissing\b|not\s+(?:complete|fill)|lack/iu.test(sentence);
+    if (!questionnairePresent && formMention && missingFormClaim) return false;
+    return !/фотограф.*манер.*реч.*(?:лишь|осторожн).*подсказ/iu.test(sentence);
+  }).join(" ").trim();
   return {
     ...report,
+    summary: clean(report.summary).length >= 20 ? clean(report.summary) : reportCopy("Рекомендуемое направление: {v0}. Проверьте его на практике через небольшой рабочий эксперимент.", locale, report.profession),
+    key_insight: clean(report.key_insight).length >= 20 ? clean(report.key_insight) : reportCopy("Выберите одну задачу в предложенном направлении, выполните её за день и соберите обратную связь о результате.", locale),
     paid_report_teaser: normalizePaidReportPromise(report.paid_report_teaser),
-    paid_report_preview: report.paid_report_preview.map(item => normalizePaidReportPreviewItem(item, locale))
+    paid_report_preview: preview
   };
 }
 
@@ -541,7 +555,7 @@ export async function generateOpenAiReport(context: ReportContext): Promise<Gene
         jsonSchema: reportFreeJsonSchema,
         useAsync: useCompatibleAsync,
         maxTokens: 3000,
-        parseReport: (content) => normalizeFreeReportValue(parseCompletionJson(content), normalizeUiLocale(context.locale))
+        parseReport: (content) => normalizeFreeReportValue(parseCompletionJson(content), normalizeUiLocale(context.locale), [context.answers.love, context.answers.good_at, context.answers.paid_for, context.answers.world_needs].some(values => values.some(value => value.trim())))
       })),
       runPart("Анализ лица и голоса готов...", "Voice and face analysis completed...", () => createReportCompletion({
         context,
@@ -706,7 +720,7 @@ function diagnosticSourceValue(source: UnknownRecord, key: string) {
 function diagnosticFallback(kind: "voice" | "face", key: string, locale: UiLocale = "ru") {
   const parameter = key.replace(/([A-Z])/g, " $1").toLowerCase();
   if (kind === "voice") {
-    return reportCopy("{v0} Параметр \"{v1}\" оценивается осторожно: в записи достаточно данных для рабочей гипотезы, но не для жёсткого вывода. {v2} Основной вывод строится на анкете и содержании речи, а голосовой сигнал используется только как дополнительный признак подачи. {v3} Проверьте это в коротком рабочем выступлении: запишите 60 секунд речи, отметьте темп, паузы и ясность главной мысли.", locale, reportLabels(locale).result, parameter, reportLabels(locale).meaning, reportLabels(locale).recommendation);
+    return reportCopy("{v0} Для параметра \"{v1}\" недостаточно подтверждённых акустических данных. {v2} Содержание рассказа помогает выбрать тему развития, но не заменяет измерение голоса. {v3} Запишите 60 секунд речи в тихом месте и сравните темп, паузы и ясность главной мысли.", locale, reportLabels(locale).result, parameter, reportLabels(locale).meaning, reportLabels(locale).recommendation);
   }
   return reportCopy("{v0} Параметр \"{v1}\" оценивается как мягкий визуальный сигнал по загруженному изображению. {v2} Это не вывод о личности или здоровье, а осторожная гипотеза о том, как может считываться подача в коммуникации. {v3} Проверьте эффект на практике: обновите фото/кадр, попросите нейтральную обратную связь и сравните, стало ли сообщение понятнее.", locale, reportLabels(locale).result, parameter, reportLabels(locale).meaning, reportLabels(locale).recommendation);
 }
@@ -746,7 +760,7 @@ function normalizeTopRoleCandidates(source: unknown, candidate: UnknownRecord, v
   return Array.isArray(source) ? source.filter(isRecord).slice(0, 5).map((role, index) => ({
     name: stringValue(role, "name", "role") ?? reportCopy("Профессиональная роль {v0}", locale, index + 1),
     match: numberValue(role, "match", Math.max(55, 82 - index * 5)),
-    why: safeLongText(role.why, safeLongText(candidate.summary, reportCopy("Роль подходит как рабочая гипотеза по анкете и общему профилю пользователя.", locale))),
+    why: safeLongText(role.why, safeLongText(candidate.summary, reportCopy("Направление предложено как гипотеза для проверки через практическую задачу и обратную связь.", locale))),
     voiceEvidence: safeLongText(stringValue(role, "voiceEvidence", "voice_evidence"), String(voiceAnalysis.communication ?? diagnosticFallback("voice", "communication", locale))),
     faceEvidence: safeLongText(stringValue(role, "faceEvidence", "face_evidence"), String(faceAnalysis.communication ?? diagnosticFallback("face", "communication", locale))),
     strengths: safeLongText(role.strengths, reportCopy("Сильная сторона роли - соединять личный интерес, структуру действий и понятную пользу для других.", locale)),
@@ -780,7 +794,7 @@ function completeTopRoles(source: unknown, candidate: UnknownRecord, voiceAnalys
     roles.push({
       name: fallbackNames[index] ?? reportCopy("Профессиональная роль {v0}", locale, index + 1),
       match: Math.max(55, 78 - index * 5),
-      why: safeLongText(candidate.summary, reportCopy("Роль добавлена как осторожная рабочая гипотеза по анкете и общему профилю.", locale)),
+      why: safeLongText(candidate.summary, reportCopy("Направление предложено как гипотеза для проверки через практическую задачу и обратную связь.", locale)),
       voiceEvidence: String(voiceAnalysis.communication ?? diagnosticFallback("voice", "communication", locale)),
       faceEvidence: String(faceAnalysis.communication ?? diagnosticFallback("face", "communication", locale)),
       strengths: reportCopy("Сильная сторона роли - переводить наблюдения в понятные действия и проверяемые решения.", locale),
@@ -829,7 +843,7 @@ export function mergeFullReportParts(
 
 export function completeFullReportCandidate(value: unknown, locale: UiLocale = "ru") {
   if (!isRecord(value)) return value;
-  const summary = safeLongText(value.summary, reportCopy("Отчёт собран как осторожная рабочая гипотеза на основе анкеты, содержания речи и доступных сигналов подачи.", locale));
+  const summary = safeLongText(value.summary, reportCopy("Предложенные направления стоит проверить через небольшие рабочие эксперименты и обратную связь о результатах.", locale));
   const profession = safeLongText(value.profession, reportCopy("Профессиональный навигатор", locale), 2);
   const voiceSource = value.voice_analysis ?? value.voiceAnalysis ?? value.voice;
   const faceSource = value.face_analysis ?? value.faceAnalysis ?? value.face;

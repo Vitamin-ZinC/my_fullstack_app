@@ -10,12 +10,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   useUiLocale();
   const text = useSiteText();
   const pathname = usePathname();
+  const diagnostic = /^\/(flow|report|pay)(\/|$)/.test(pathname);
 
   return (
     <>
       <div className="glow-tl" />
       <div className="glow-br" />
-      <div id="app" className={pathname === "/account" ? "account-shell" : undefined}>
+      <div id="app" className={diagnostic ? "diagnostic-shell" : pathname === "/account" ? "account-shell" : undefined}>
         <nav className="app-nav">
           <Link className="logo-wrap" href="/">
             <div className="logo-mark" aria-hidden="true">

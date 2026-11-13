@@ -94,3 +94,32 @@ test("English normalization preserves English diagnostics and localizes every ge
   assert.match(report.face_analysis.communication, /What it means:/);
   assert.match(report.face_analysis.communication, /Recommendation:/);
 });
+
+test("legacy free report presentation removes fictional questionnaire references without mutating saved data", async () => {
+  const { normalizeFreeReportValue } = await import("./aiReport.js");
+  const original = {
+    profession: "Исследователь", summary: "Пустая анкета пока не раскрывает ваши интересы. В рассказе вы описали интерес к исследованиям.",
+    key_insight: "Фотография и манера речи дают лишь осторожную подсказку, но не позволяют делать выводы о характере. Проверьте интерес к исследованиям через один небольшой проект.",
+    ikigai_scores: { love: 70, good_at: 70, paid_for: 60, world_needs: 65 },
+    paid_report_teaser: "Полный отчёт содержит пять направлений и маршрут на 30 дней.", paid_report_preview: ["Голос", "Фото", "Икигай", "Маршрут"]
+  };
+  const before = structuredClone(original);
+  const result = normalizeFreeReportValue(original, "ru", false);
+  assert.doesNotMatch(result.summary, /анкет/);
+  assert.match(result.summary, /интерес к исследованиям/);
+  assert.doesNotMatch(result.key_insight || "", /лишь осторожную подсказку/);
+  assert.deepEqual(original, before);
+  const researcher = normalizeFreeReportValue({ ...original, summary: "Вы рассказали о проектировании анкет и исследовании клиентов. Это направление стоит проверить на практике." }, "ru", false);
+  assert.match(researcher.summary, /проектировании анкет/);
+  assert.match(normalizeFreeReportValue(original, "ru", true).summary, /анкета/);
+});
+
+test("premium preview deduplicates role promises without mistaking the role of voice for a profession", async () => {
+  const { normalizeFreeReportValue } = await import("./aiReport.js");
+  const report = normalizeFreeReportValue({ profession: "Исследователь", summary: "Практическое направление для исследования и проверки рабочих интересов.", key_insight: "Проверьте направление через небольшой проект и обратную связь.", ikigai_scores: { love: 70, good_at: 65, world_needs: 65, paid_for: 60 }, paid_report_teaser: "Пять направлений и план на тридцать дней.", paid_report_preview: ["ТОП-5 направлений", "Топ-3 перспективные роли", "Роль голоса в общении", "План на 30 дней"] });
+  const preview = report.paid_report_preview ?? [];
+  assert.equal(preview.filter(item => item.startsWith("ТОП-5")).length, 1);
+  assert.ok(preview.includes("Роль голоса в общении"));
+  assert.equal(new Set(preview).size, preview.length);
+  assert.ok(preview.length >= 4);
+});

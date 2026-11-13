@@ -71,6 +71,7 @@ export function IkigaiPremiumMap({
 
   return (
     <div className={`ikigai-premium-map ${modeClass}`}>
+      <div className="ikigai-map-stage">
       <svg
         className={landingMode ? "ikigai-svg-map" : "ikigai-svg-map has-active"}
         viewBox="0 0 400 430"
@@ -126,6 +127,7 @@ export function IkigaiPremiumMap({
         </div>
       )}
       {freeMode && <div className="ikigai-lock-badge">{text.lockedNote}</div>}
+      </div>
       {showPanel && !allActive && !landingMode && (
         <div className="ikigai-analysis-panel" data-testid="ikigai-zone-panel">
           <h3>{activeZone.title}</h3>

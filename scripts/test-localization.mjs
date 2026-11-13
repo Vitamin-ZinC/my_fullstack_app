@@ -21,6 +21,7 @@ const { englishCatalog } = readModule("packages/contracts/src/localization/engli
 const { ruSiteText, defaultSiteText, mergeSiteText } = readModule("apps/frontend/lib/messages.ts");
 const { privacyPolicyDocument, publicOfferDocument } = readModule("apps/frontend/lib/legal.ts");
 const { localizeStaticText } = readModule("packages/contracts/src/localization/index.ts");
+const { presentDiagnosticFlow } = readModule("apps/frontend/lib/interfaceCopy.ts");
 let strings = 0;
 function compareShape(ru, en, key = "root") {
   assert.equal(typeof ru, typeof en, key);
@@ -50,4 +51,11 @@ const customized = mergeSiteText(defaultSiteText.en, { landing: { v2: { menu: { 
 assert.equal(customized.landing.v2.menu.about, "Our story");
 assert.equal(customized.landing.v2.menu.diagnostics, defaultSiteText.en.landing.v2.menu.diagnostics);
 assert.equal(ruSiteText.landing.v2.menu.about, "О нас");
+const legacyFlow = mergeSiteText(defaultSiteText.en, { flow: { analysis: { subtitle: "Your psychotype", stages: ["Microexpression recognition"], neuralLog: ["500+ professions"] } } }).flow;
+const beforeFlow = JSON.stringify(legacyFlow);
+const correctedFlow = presentDiagnosticFlow(legacyFlow, defaultSiteText.en.flow);
+assert.equal(correctedFlow.analysis.subtitle, defaultSiteText.en.flow.analysis.subtitle);
+assert.deepEqual(correctedFlow.analysis.stages, defaultSiteText.en.flow.analysis.stages);
+assert.equal(JSON.stringify(legacyFlow), beforeFlow);
+assert.equal(correctedFlow.voice.start, legacyFlow.voice.start);
 console.log(`Localization passed: ${strings} dictionary/legal leaves; ${Object.keys(englishCatalog).length} catalog entries; independent overrides`);

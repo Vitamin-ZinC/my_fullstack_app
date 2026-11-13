@@ -4,18 +4,21 @@ import { uiText, getFormatLocale, useUiLocale } from "@/lib/locale";
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { CreditCard, Lock, Percent } from "lucide-react";
+import { CreditCard, Lock, Percent, RefreshCw } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api, restoreSessionFromUrl } from "@/lib/api";
 import { useSiteText } from "@/lib/useSiteText";
 
 export default function PayPage() {
   useUiLocale();
-  const text = useSiteText().report.payment;
+  const siteText = useSiteText();
+  const text = siteText.report.payment;
   const { analysisId } = useParams<{ analysisId: string }>();
   const [promoCode, setPromoCode] = useState("");
   const [message, setMessage] = useState("");
-  const [priceLabel, setPriceLabel] = useState(text.price);
+  const [priceLabel, setPriceLabel] = useState<string | null>(null);
+  const [priceFailed, setPriceFailed] = useState(false);
+  const [priceAttempt, setPriceAttempt] = useState(0);
   const [mounted, setMounted] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -23,17 +26,18 @@ export default function PayPage() {
     restoreSessionFromUrl();
     setMounted(true);
     let cancelled = false;
+    setPriceFailed(false);
     api.getPaymentConfig()
       .then((config) => {
         if (!cancelled) setPriceLabel(config.priceLabel);
       })
       .catch(() => {
-        if (!cancelled) setPriceLabel(text.price);
+        if (!cancelled) { setPriceLabel(null); setPriceFailed(true); }
       });
     return () => {
       cancelled = true;
     };
-  }, [text.price]);
+  }, [priceAttempt]);
 
   async function createCheckout() {
     setBusy(true);
@@ -57,7 +61,8 @@ export default function PayPage() {
       <p className="muted flow-copy">{text.subtitle}</p>
 
       <div className="payment-price-card card cyan-border">
-        <div className="ub cyan">{priceLabel}</div>
+        <div className="ub cyan">{priceLabel ?? (priceFailed ? text.priceUnavailable : text.priceLoading)}</div>
+        {priceFailed && <button type="button" className="button secondary" onClick={() => setPriceAttempt(value => value + 1)}><RefreshCw size={16} />{text.retryPrice}</button>}
         <p className="muted">{text.priceHint}</p>
       </div>
 
@@ -71,7 +76,7 @@ export default function PayPage() {
             </div>
             <div className="compare-col premium">
               <h3 className="cyan">Premium</h3>
-              {text.comparePremium.map((item) => <div key={item}>{item}</div>)}
+              {siteText.report.free.premiumBenefits.map((item) => <div key={item}>{item}</div>)}
             </div>
           </div>
         </div>
@@ -101,7 +106,7 @@ export default function PayPage() {
         </div>
       </div>
 
-      <button className="button" data-testid="checkout-button" onClick={createCheckout} disabled={!mounted || busy}>
+      <button className="button" data-testid="checkout-button" onClick={createCheckout} disabled={!mounted || busy || !priceLabel}>
         <CreditCard size={18} /> {busy ? text.busy : text.checkoutExternal}
       </button>
       <p className="legal-inline-links">

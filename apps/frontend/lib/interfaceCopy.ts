@@ -1,3 +1,5 @@
+import type { SiteText } from "./messages";
+
 // Apply only to system/interface copy, never to profiles, reports or messages.
 export function presentInterfaceCopy(source: string) {
   return source
@@ -14,6 +16,15 @@ export function presentStaticCopy<T>(value: T): T {
   if (Array.isArray(value)) return value.map(presentStaticCopy) as T;
   if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, presentStaticCopy(item)])) as T;
   return value;
+}
+
+export function presentDiagnosticFlow(flow: SiteText["flow"], defaults: SiteText["flow"]): SiteText["flow"] {
+  const oldVisualClaim = /микромим|micro.?expression|500\+/i;
+  return { ...flow, analysis: { ...flow.analysis,
+    subtitle: /психотип|psychotype/i.test(flow.analysis.subtitle) ? defaults.analysis.subtitle : flow.analysis.subtitle,
+    stages: flow.analysis.stages.some(item => oldVisualClaim.test(item)) ? defaults.analysis.stages : flow.analysis.stages,
+    neuralLog: flow.analysis.neuralLog.some(item => oldVisualClaim.test(item)) ? defaults.analysis.neuralLog : flow.analysis.neuralLog
+  } };
 }
 
 export function presentLandingCopy<T>(value: T): T {

@@ -8,6 +8,7 @@ import type { ReportFree } from "@levelup/contracts";
 import { IkigaiPremiumMap } from "@/components/IkigaiPremiumMap";
 import { api, restoreSessionFromUrl } from "@/lib/api";
 import { useSiteText } from "@/lib/useSiteText";
+import { Check } from "lucide-react";
 
 export default function FreeReportPage() {
   useUiLocale();
@@ -15,25 +16,26 @@ export default function FreeReportPage() {
   const { analysisId } = useParams<{ analysisId: string }>();
   const [report, setReport] = useState<ReportFree | null>(null);
   const [error, setError] = useState("");
+  const [priceLabel, setPriceLabel] = useState<string | null>(null);
 
   useEffect(() => {
     restoreSessionFromUrl();
     api.getFreeReport(analysisId)
       .then((result) => setReport(result.reportFree))
       .catch((reason) => setError(reason instanceof Error ? reason.message : text.loadError));
+    let active = true;
+    api.getPaymentConfig().then(config => { if (active) setPriceLabel(config.priceLabel); }).catch(() => undefined);
+    return () => { active = false; };
   }, [analysisId, text.loadError]);
 
   return (
-    <article className="stack" data-testid="free-report-page">
+    <article className="stack free-report-layout" data-testid="free-report-page">
       <div className="free-report-intro">
         <div className="eyebrow">{text.eyebrow}</div>
         <h1 className="ub">{report ? text.title : text.loading}</h1>
         <p className="muted">{report ? text.subtitle : text.pending}</p>
       </div>
       {error && <div className="card" style={{ borderColor: "var(--danger)" }}>{error}</div>}
-      <div className="card free-report-map-card">
-        <IkigaiPremiumMap freeMode />
-      </div>
       {report && (
         <div className="card cyan-border free-status-card">
           <div className="ub">{text.statusTitle}</div>
@@ -48,20 +50,17 @@ export default function FreeReportPage() {
           )}
         </div>
       )}
+      {report && <div className="free-report-map-card">
+        <h2>{text.intersectionsTitle}</h2>
+        <IkigaiPremiumMap freeMode showPanel={false} />
+        <p className="muted">{text.mapMeaning}</p>
+      </div>}
       {report && (
         <div className="card cyan-border free-upgrade-card">
-          {report.paid_report_teaser && <p>{report.paid_report_teaser}</p>}
-          {report.paid_report_preview && report.paid_report_preview.length > 0 && (
-            <div className="free-paid-preview">
-              <div className="ub cyan">{text.paidPreviewTitle}</div>
-              {report.paid_report_preview.map((item) => (
-                <div className="free-paid-preview-item" key={item}>{item}</div>
-              ))}
-            </div>
-          )}
-          <p>{text.upgradeCopy}</p>
+          <h2>{text.premiumTitle}{priceLabel && <span className="cyan"> · {priceLabel}</span>}</h2>
+          <ul className="premium-benefits" data-testid="premium-benefits">{text.premiumBenefits.map((item, index) => <li key={index}><Check size={18} aria-hidden="true" /><span>{item}</span></li>)}</ul>
           <button className="button" data-testid="open-pro-report-link" onClick={() => window.location.assign(`/pay/${analysisId}`)}>
-            {text.unlock}
+            {priceLabel ? text.premiumButton.replace("{price}", priceLabel) : text.openPremium}
           </button>
           <div className="very-muted free-upgrade-note">{text.upgradeNote}</div>
         </div>

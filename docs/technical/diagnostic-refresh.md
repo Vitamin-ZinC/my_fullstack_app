@@ -47,6 +47,12 @@ overwriting saved administrator content or personal reports.
 
 ## Verification And Release
 
+The release audit found GHSA-474x-hrwr-fgx4 in the AWS SDK XML dependency.
+The root override pins `fast-xml-parser` to 5.12.1 (first fixed: 5.12.0), without
+upgrading the framework or AWS clients. Keep the lockfile synchronized and audit
+both production images before switching. Revisit the override when AWS updates
+its own pinned parser dependency.
+
 - Focused stage checks: frontend build/typecheck, evidence-policy and saved-report
   tests, localization, adaptive layout/onboarding checks.
 - Final suite includes `tests/diagnostic-refresh.spec.js`: breakpoints from 360 to

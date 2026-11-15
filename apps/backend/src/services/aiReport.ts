@@ -1,5 +1,6 @@
 import { normalizeUiLocale, translateSystemText, type UiLocale, type IkigaiAnswers, type ReportFree, type ReportFull, type ReportTier } from "@levelup/contracts";
 import type { MediaAsset } from "@prisma/client";
+import { randomUUID } from "node:crypto";
 import type {
   ChatCompletion,
   ChatCompletionContentPart,
@@ -30,6 +31,8 @@ type ReportContext = {
   locale: string;
   answers: IkigaiAnswers;
   mediaAssets: MediaAsset[];
+  serialCompletions?: { spacingMs?: number; retryDelayMs?: number };
+  completionAttemptNonce?: string;
   onProgress?: (event: { progress: number; stage: string; log: string }) => void;
 };
 
@@ -491,6 +494,7 @@ function reportProgress(context: ReportContext, progress: number, ru: string, en
 
 export async function generateOpenAiReport(context: ReportContext): Promise<GeneratedReport | null> {
   if (!hasOpenAiClient()) return null;
+  if (context.serialCompletions) context = { ...context };
 
   const audioAsset = getAsset(context.mediaAssets, "AUDIO");
   assertReportPhotoReady(context.mediaAssets);
@@ -517,6 +521,9 @@ export async function generateOpenAiReport(context: ReportContext): Promise<Gene
   let generationProgress = 42;
   let completedParts = 0;
   const telemetry: ReportCompletionTelemetry[] = [];
+  let serialTail = Promise.resolve();
+  let serialFailure: unknown;
+  let nextSerialStart = 0;
   const heartbeat = setInterval(() => {
     generationProgress = Math.min(72, generationProgress + 2);
     reportProgress(context, generationProgress, "Нейросеть продолжает анализ, данные сохранены...", "AI analysis is still running; your data is saved...");
@@ -524,7 +531,27 @@ export async function generateOpenAiReport(context: ReportContext): Promise<Gene
   heartbeat.unref?.();
 
   const runPart = async <TReport>(labelRu: string, labelEn: string, factory: () => Promise<CompletionResult<TReport>>) => {
-    const completion = await factory();
+    const execute = async () => {
+      if (serialFailure) throw serialFailure;
+      if (context.serialCompletions && nextSerialStart > Date.now()) await sleep(nextSerialStart - Date.now());
+      for (let attempt = 0; ; attempt += 1) {
+        try {
+          if (context.serialCompletions) context.completionAttemptNonce = randomUUID();
+          const result = await factory();
+          if (context.serialCompletions) nextSerialStart = Date.now() + Math.max(0, Math.min(120000, context.serialCompletions.spacingMs ?? 60000));
+          return result;
+        } catch (error) {
+          if (!context.serialCompletions || attempt >= 2 || !/\b429\b|rate.?limit|too many requests/i.test(error instanceof Error ? error.message : String(error))) {
+            serialFailure = error;
+            throw error;
+          }
+          await sleep(Math.max(0, Math.min(120000, context.serialCompletions.retryDelayMs ?? 60000)));
+        }
+      }
+    };
+    const pending = context.serialCompletions ? serialTail.then(execute) : execute();
+    if (context.serialCompletions) serialTail = pending.then(() => undefined, () => undefined);
+    const completion = await pending;
     telemetry.push(completion.telemetry);
     completedParts += 1;
     generationProgress = Math.max(generationProgress, 72 + completedParts * 6);
@@ -949,6 +976,7 @@ async function buildCompletionInput(
     userContent,
     systemPrompt: prompts.systemPrompt,
     analysisId: context.analysisId,
+    completionAttemptNonce: context.completionAttemptNonce,
     tier,
     promptVersion: prompts.promptVersion
   };
@@ -1077,6 +1105,7 @@ function buildAsyncIdempotencyKey(
     schemaName,
     `v${input.promptVersion}`,
     photoInputUsed ? "photo" : "no-photo",
+    ...(input.completionAttemptNonce ? [input.completionAttemptNonce] : []),
     stableRequestFingerprint(params)
   ].join("-");
 }

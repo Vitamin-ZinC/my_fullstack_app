@@ -42,7 +42,13 @@ any generation. Use the backend compose service so original upload volumes and
 backend-only provider configuration remain available. Mount only the private
 backup directory additionally; do not export secrets or user content to a client.
 
-Regeneration is sequential and bounded. A successful result must actually include
+Regeneration is sequential and bounded, both across reports and between report
+segments. Operator repairs wait 60 seconds between segments and retry a 429 at
+most twice with the same image and a 60-second pause; ordinary interactive
+diagnostics retain their parallel execution. Each authorized repair attempt uses
+a fresh completion namespace, so a cached failed async job is not replayed forever;
+retries within one async attempt retain their existing idempotency behavior.
+A successful result must actually include
 photo evidence and pass the contradiction guard. The utility then replaces
 Analysis report fields and matching FREE/FULL Report rows in one transaction,
 using updatedAt as a compare-and-swap guard. It does not enqueue the ordinary

@@ -63,6 +63,9 @@ test("report completion and JSON repair retain the photo; provider errors never 
   const originalFetch = globalThis.fetch;
   const calls: { image: boolean; repair: boolean }[] = [];
   let reject = false;
+  let rateLimitResponses = 0;
+  let activeRequests = 0;
+  let maxActiveRequests = 0;
   const { buildFallbackReport, buildFallbackFreeReport } = await import("./report.js");
   const answers = { love: ["research"], good_at: ["explaining"], world_needs: [], paid_for: [] };
   const full = buildFallbackReport(answers, "en");
@@ -73,6 +76,14 @@ test("report completion and JSON repair retain the photo; provider errors never 
     const repair = String(body.messages[0].content).includes("You repair report-generation JSON");
     const image = body.messages.some((message: any) => Array.isArray(message.content) && message.content.some((part: any) => part.type === "image_url" && part.image_url.url.startsWith("data:image/jpeg;base64,")));
     calls.push({ image, repair });
+    activeRequests += 1;
+    maxActiveRequests = Math.max(maxActiveRequests, activeRequests);
+    await new Promise(resolve => setTimeout(resolve, 5));
+    activeRequests -= 1;
+    if (rateLimitResponses > 0) {
+      rateLimitResponses -= 1;
+      return new Response(JSON.stringify({ error: { message: "429 rate limit" } }), { status: 429, headers: { "Content-Type": "application/json", "retry-after-ms": "1" } });
+    }
     if (reject) return new Response(JSON.stringify({ error: { message: "invalid_image provider_unavailable" } }), { status: 400, headers: { "Content-Type": "application/json" } });
     const output = structuredClone(result);
     if (!repair) output.face_analysis.emotionality = "Your result: The photo was not provided. What it means: No visual input. Recommendation: Upload a photo.";
@@ -94,6 +105,14 @@ test("report completion and JSON repair retain the photo; provider errors never 
     const { photoRepairAnalysisData } = await import("../scripts/repairReportPhotos.js");
     assert.deepEqual(Object.keys(photoRepairAnalysisData(generated!)).sort(), ["reportFree", "reportFull", "reportVersion"]);
     assert.throws(() => photoRepairAnalysisData({ ...generated!, mediaSignals: { ...generated!.mediaSignals, photoInput: false } }), /REQUIRES_IMAGE/);
+    calls.length = 0;
+    maxActiveRequests = 0;
+    rateLimitResponses = 3;
+    const serial = await generateOpenAiReport({ ...context, serialCompletions: { spacingMs: 0, retryDelayMs: 0 } });
+    assert.ok(serial?.mediaSignals.photoInput);
+    assert.equal(maxActiveRequests, 1);
+    assert.ok(calls.every(call => call.image));
+    assert.equal(rateLimitResponses, 0);
     calls.length = 0;
     reject = true;
     await assert.rejects(generateOpenAiReport(context), /invalid_image|provider_unavailable/);

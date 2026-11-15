@@ -29,7 +29,7 @@ async function main() {
   const uploads = resolve(env.LOCAL_UPLOAD_DIR);
   if (backupDirectory && (backupDirectory === uploads || backupDirectory.startsWith(`${uploads}${sep}`))) throw new Error("Backup directory must not be served as uploads");
   if (backupDirectory) await mkdir(backupDirectory, { recursive: true, mode: 0o700 });
-  const stats = { scanned: 0, matching: 0, eligible: 0, noConsent: 0, missingMedia: 0, repaired: 0, failed: 0, conflicts: 0, limitReached: false };
+  const stats = { scanned: 0, matching: 0, eligible: 0, noConsent: 0, missingMedia: 0, repaired: 0, failed: 0, conflicts: 0, rateLimited: 0, photoConflicts: 0, limitReached: false };
   let cursor: string | undefined;
   let processed = 0;
   for (;;) {
@@ -66,7 +66,8 @@ async function main() {
         const generated = await generateOpenAiReport({
           analysisId: analysis.id, locale: analysis.locale,
           answers: (analysis.ikigaiAnswers ?? { love: [], good_at: [], world_needs: [], paid_for: [] }) as IkigaiAnswers,
-          mediaAssets: analysis.mediaAssets
+          mediaAssets: analysis.mediaAssets,
+          serialCompletions: { spacingMs: 60000, retryDelayMs: 60000 }
         });
         if (!generated) throw new Error("AI generation unavailable");
         const data = photoRepairAnalysisData(generated);
@@ -87,6 +88,8 @@ async function main() {
         });
         stats.repaired += 1;
       } catch (error) {
+        if (error instanceof Error && /\b429\b|rate.?limit/i.test(error.message)) stats.rateLimited += 1;
+        if (error instanceof Error && /PHOTO_EVIDENCE_CONFLICT/.test(error.message)) stats.photoConflicts += 1;
         if (error instanceof Error && error.message === "PHOTO_REPAIR_CONCURRENT_CHANGE") stats.conflicts += 1;
         else stats.failed += 1;
       }

@@ -61,6 +61,9 @@ speech-only dBFS, five-second dynamics and per-measurement eligibility.
 
 Report prompt templates are defined in `apps/backend/src/services/reportPrompts.ts` and can be overridden through the admin prompt system using `PromptTemplate`.
 
+See [Report Photo Delivery](report-photo-delivery.md) for inline image evidence,
+failure handling, and safe operator-only repair of affected completed reports.
+
 ### Habits Cabinet
 
 The habits cabinet is backend-driven. The active UI is `apps/frontend/app/habits/page.tsx`.

@@ -8,7 +8,8 @@ import type {
 } from "openai/resources/chat/completions";
 import { z } from "zod";
 import { env } from "../env.js";
-import { getMediaAssetPublicUrl, readMediaAssetBuffer } from "./media.js";
+import { readMediaAssetBuffer } from "./media.js";
+import { inlineReportPhoto, assertReportPhotoReady, assertPhotoEvidence, redactPhotoPayload } from "./reportPhoto.js";
 import { buildReportPromptMessages } from "./reportPrompts.js";
 import { analyzeAudioMetrics, type AudioTranscription, type VoiceSignalMetrics } from "./audioMetrics.js";
 import { audioSignalSchema } from "./audioSignalSchema.js";
@@ -446,13 +447,6 @@ function textMapSchema(keys: string[]) {
   };
 }
 
-function isLikelyImage(buffer: Buffer) {
-  if (buffer.length < 8) return false;
-  const isJpeg = buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
-  const isPng = buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
-  return isJpeg || isPng;
-}
-
 function getAsset(assets: MediaAsset[], type: "AUDIO" | "PHOTO") {
   return assets.find((asset) => asset.type === type && (asset.status === "UPLOADED" || asset.status === "VERIFIED")) ?? null;
 }
@@ -468,9 +462,7 @@ async function buildVoiceMetrics(asset: MediaAsset | null, transcription: AudioT
 async function buildPhotoInput(asset: MediaAsset | null) {
   if (!asset) return null;
   const buffer = await readMediaAssetBuffer(asset.key);
-  if (!buffer) return null;
-  if (!isLikelyImage(buffer)) return null;
-  return getMediaAssetPublicUrl(asset.key);
+  return inlineReportPhoto(buffer);
 }
 
 const fullDiagnosticsSegmentInstruction = [
@@ -501,6 +493,7 @@ export async function generateOpenAiReport(context: ReportContext): Promise<Gene
   if (!hasOpenAiClient()) return null;
 
   const audioAsset = getAsset(context.mediaAssets, "AUDIO");
+  assertReportPhotoReady(context.mediaAssets);
   const photoAsset = getAsset(context.mediaAssets, "PHOTO");
 
   reportProgress(context, 8, "Подготавливаем аудио и изображение...", "Preparing audio and image...");
@@ -515,7 +508,7 @@ export async function generateOpenAiReport(context: ReportContext): Promise<Gene
   const clientDurationSeconds = extractClientVoiceDuration(context.answers);
   const [voiceMetrics, photoInput] = await Promise.all([
     buildVoiceMetrics(audioAsset, transcription, clientDurationSeconds).catch(() => null),
-    buildPhotoInput(photoAsset).catch(() => null)
+    buildPhotoInput(photoAsset)
   ]);
   const transcript = transcription?.text ?? null;
   const useCompatibleAsync = env.OPENAI_ASYNC_REPORTS_ENABLED && supportsCompatibleAsyncCompletions();
@@ -672,7 +665,7 @@ export async function generateOpenAiReport(context: ReportContext): Promise<Gene
     mediaSignals: {
       audioTranscript: Boolean(transcript),
       audioMetrics: Boolean(voiceMetrics),
-      photoInput: freeCompletion.photoInputUsed || diagnosticsCompletion.photoInputUsed || directionsCompletion.photoInputUsed
+      photoInput: diagnosticsCompletion.photoInputUsed
     },
     telemetry,
     roleGeneration: {
@@ -961,10 +954,6 @@ async function buildCompletionInput(
   };
 }
 
-function isImageInputError(body: string) {
-  return /image_parse_error|unsupported image|invalid image|invalid_image|provider_unavailable|provider request failed|400 status code \(no body\)|status code 400|timed out|gateway time-out|gateway timeout|status code 504|504 /i.test(body);
-}
-
 function getReportMaxTokens(tier: ReportTier) {
   const tierBudget = tier === "FREE" ? 3000 : 8000;
   return Math.min(env.OPENAI_MAX_OUTPUT_TOKENS, tierBudget);
@@ -1222,12 +1211,14 @@ async function requestReportJsonRepair(
   jsonSchema: Record<string, unknown>,
   invalidContent: string,
   validationError: string,
-  responseFormat: ResponseFormat | null
+  responseFormat: ResponseFormat | null,
+  input: Awaited<ReturnType<typeof buildCompletionInput>>
 ) {
   const repairMessages: ChatCompletionMessageParam[] = [
     {
       role: "system",
       content: [
+        input.systemPrompt,
         "You repair report-generation JSON.",
         "Return only one raw JSON object.",
         "Do not include markdown, comments, explanations, or hidden reasoning.",
@@ -1236,7 +1227,7 @@ async function requestReportJsonRepair(
     },
     {
       role: "user",
-      content: [
+      content: [...input.userContent, { type: "text", text: [
         `Schema name: ${schemaName}`,
         "JSON Schema:",
         JSON.stringify(jsonSchema),
@@ -1244,7 +1235,7 @@ async function requestReportJsonRepair(
         validationError,
         "Invalid report content:",
         invalidContent
-      ].join("\n\n")
+      ].join("\n\n") }]
     }
   ];
 
@@ -1274,40 +1265,20 @@ async function createReportCompletion<TReport>(request: ReportCompletionRequest<
     request.photoInput,
     request.segmentInstruction
   );
-  try {
-    return await requestReportCompletion(
-      input,
-      Boolean(request.photoInput),
-      request.part,
-      request.schemaName,
-      request.jsonSchema,
-      request.useAsync,
-      request.maxTokens,
-      request.parseReport
-    );
-  } catch (error) {
-    if (!request.photoInput || !(error instanceof Error) || !isImageInputError(error.message)) {
-      throw error;
+  return requestReportCompletion(
+    input,
+    Boolean(request.photoInput),
+    request.part,
+    request.schemaName,
+    request.jsonSchema,
+    request.useAsync,
+    request.maxTokens,
+    (content) => {
+      const report = request.parseReport(content);
+      assertPhotoEvidence(report, Boolean(request.photoInput));
+      return report;
     }
-
-    return requestReportCompletion(
-      await buildCompletionInput(
-        request.context,
-        request.tier,
-        request.transcript,
-        request.voiceMetrics,
-        null,
-        request.segmentInstruction
-      ),
-      false,
-      request.part,
-      request.schemaName,
-      request.jsonSchema,
-      request.useAsync,
-      request.maxTokens,
-      request.parseReport
-    );
-  }
+  );
 }
 
 async function requestReportCompletion<TReport>(
@@ -1360,7 +1331,8 @@ async function requestReportCompletion<TReport>(
       jsonSchema,
       message.content,
       responseFormat,
-      parseReport
+      parseReport,
+      input
     );
 
     return {
@@ -1379,7 +1351,7 @@ async function requestReportCompletion<TReport>(
       }
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = redactPhotoPayload(error instanceof Error ? error.message : String(error));
     throw new Error(`OpenAI-compatible report generation failed: ${message.slice(0, 240)}`);
   }
 }
@@ -1390,7 +1362,8 @@ async function parseReportWithRepair<TReport>(
   jsonSchema: Record<string, unknown>,
   content: string,
   responseFormat: ResponseFormat | null,
-  parseReport: (content: string) => TReport
+  parseReport: (content: string) => TReport,
+  input: Awaited<ReturnType<typeof buildCompletionInput>>
 ) {
   let candidate = content;
   let lastError: unknown = null;
@@ -1409,7 +1382,8 @@ async function parseReportWithRepair<TReport>(
         jsonSchema,
         candidate,
         error instanceof Error ? error.message : String(error),
-        responseFormat
+        responseFormat,
+        input
       );
     }
   }

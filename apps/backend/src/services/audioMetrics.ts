@@ -1,4 +1,6 @@
 import { spawn } from "node:child_process";
+import type { AudioSignalAnalysis } from "@levelup/contracts";
+import { analyzeSignalPcm, MAX_SIGNAL_SECONDS, SIGNAL_SAMPLE_RATE } from "./audioSignal.js";
 
 export type TranscriptionSegment = {
   start?: number;
@@ -15,6 +17,8 @@ export type AudioTranscription = {
 };
 
 export type VoiceSignalMetrics = {
+  acoustics?: AudioSignalAnalysis | null;
+  pauseSource?: "webrtc-vad" | "unavailable";
   durationSeconds: number | null;
   transcriptWordCount: number | null;
   speechRateWpm: number | null;
@@ -33,7 +37,7 @@ export type VoiceSignalMetrics = {
   notes: string[];
 };
 
-const PCM_SAMPLE_RATE = 16000;
+const PCM_SAMPLE_RATE = SIGNAL_SAMPLE_RATE;
 const PCM_BYTES_PER_SAMPLE = 2;
 const FRAME_MS = 100;
 const FRAME_SIZE = Math.round((PCM_SAMPLE_RATE * FRAME_MS) / 1000);
@@ -48,27 +52,49 @@ export async function analyzeAudioMetrics(
   if (!pcm) {
     return {
       ...transcriptMetrics,
+      speechRateLabel: null,
+      activeSpeechSeconds: null, articulationRateWpm: null, silenceRatio: null,
+      pauseCount: null, averagePauseMs: null, longestPauseMs: null,
+      acoustics: null, pauseSource: "unavailable",
       rmsDb: null,
       peakDb: null,
       loudnessVariationDb: null,
       clippingRatio: null,
-      quality: scoreMetricQuality(transcriptMetrics, null),
+      quality: "unknown",
       notes: ["Акустические метрики недоступны: ffmpeg не смог декодировать запись."]
     };
   }
 
   const acousticMetrics = analyzePcm16le(pcm);
+  const acoustics = await analyzeSignalPcm(pcm).catch(() => null);
+  const durationSeconds = acousticMetrics.durationSeconds;
+  const intervals = acoustics?.pauses.intervals ?? [];
+  const measuredPauses = acoustics && acoustics.pauses.status !== "unavailable";
   const merged = {
     ...transcriptMetrics,
-    durationSeconds: transcriptMetrics.durationSeconds ?? acousticMetrics.durationSeconds,
+    durationSeconds,
+    speechRateWpm: durationSeconds && transcriptMetrics.transcriptWordCount
+      ? Math.round(transcriptMetrics.transcriptWordCount * 60 / durationSeconds) : null,
+    // WPM is descriptive and language-dependent, not a universal personality norm.
+    speechRateLabel: null,
+    activeSpeechSeconds: measuredPauses ? acoustics.speechSeconds : null,
+    articulationRateWpm: measuredPauses && acoustics.speechSeconds && transcriptMetrics.transcriptWordCount
+      ? Math.round(transcriptMetrics.transcriptWordCount * 60 / acoustics.speechSeconds) : null,
+    silenceRatio: measuredPauses ? roundTo(1 - acoustics.speechCoverage, 3) : null,
+    pauseCount: measuredPauses ? acoustics.pauses.count : null,
+    averagePauseMs: measuredPauses && intervals.length ? Math.round(intervals.reduce((sum, interval) => sum + (interval.endSeconds - interval.startSeconds) * 1000, 0) / intervals.length) : null,
+    longestPauseMs: measuredPauses ? acoustics.pauses.longestMs : null,
+    acoustics,
+    pauseSource: acoustics ? "webrtc-vad" as const : "unavailable" as const,
     rmsDb: acousticMetrics.rmsDb,
     peakDb: acousticMetrics.peakDb,
     loudnessVariationDb: acousticMetrics.loudnessVariationDb,
     clippingRatio: acousticMetrics.clippingRatio,
     quality: "unknown" as VoiceSignalMetrics["quality"],
-    notes: acousticMetrics.notes
+    notes: [...acousticMetrics.notes, ...(!acoustics ? ["Detailed acoustic measurements unavailable; do not infer pauses or pitch from ASR segments."] : [])]
   };
   merged.quality = scoreMetricQuality(merged, acousticMetrics);
+  if (acoustics && (acoustics.speechSeconds < 10 || acoustics.loudness.status !== "usable")) merged.quality = "weak";
   return merged;
 }
 
@@ -160,8 +186,12 @@ function decodeAudioToPcm(buffer: Buffer): Promise<Buffer | null> {
       "-hide_banner",
       "-loglevel",
       "error",
+      "-protocol_whitelist",
+      "pipe",
       "-i",
       "pipe:0",
+      "-t",
+      String(MAX_SIGNAL_SECONDS + 1),
       "-ac",
       "1",
       "-ar",
@@ -172,12 +202,21 @@ function decodeAudioToPcm(buffer: Buffer): Promise<Buffer | null> {
     ], { stdio: ["pipe", "pipe", "pipe"] });
 
     const stdout: Buffer[] = [];
+    let totalBytes = 0;
     let settled = false;
     const timeout = setTimeout(() => {
       if (!settled) child.kill("SIGKILL");
     }, 15000);
 
-    child.stdout.on("data", (chunk: Buffer) => stdout.push(chunk));
+    child.stderr.resume();
+    child.stdout.on("data", (chunk: Buffer) => {
+      totalBytes += chunk.length;
+      if (totalBytes > (MAX_SIGNAL_SECONDS + 1) * PCM_SAMPLE_RATE * PCM_BYTES_PER_SAMPLE) {
+        child.kill("SIGKILL");
+        return;
+      }
+      stdout.push(chunk);
+    });
     child.stdin.on("error", () => {
       // ffmpeg can close stdin early for malformed input; close handling below converts it to null metrics.
     });
@@ -190,7 +229,7 @@ function decodeAudioToPcm(buffer: Buffer): Promise<Buffer | null> {
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
-      if (code !== 0 || !stdout.length) {
+      if (code !== 0 || !stdout.length || totalBytes > MAX_SIGNAL_SECONDS * PCM_SAMPLE_RATE * PCM_BYTES_PER_SAMPLE) {
         resolve(null);
         return;
       }
@@ -244,7 +283,7 @@ function analyzePcm16le(buffer: Buffer) {
   const loudnessVariationDb = frameDbValues.length >= 2 ? standardDeviation(frameDbValues) : null;
   const clippingRatio = clipped / sampleCount;
   const notes: string[] = [];
-  if (rmsDb < -42) notes.push("Запись очень тихая: выводы по энергии и уверенности нужно считать слабыми.");
+  if (rmsDb < -42) notes.push("Запись очень тихая: уровень сигнала зависит от микрофона и не измеряет энергию или уверенность человека.");
   if (clippingRatio > 0.01) notes.push("В записи есть клиппинг: микрофон мог перегружаться.");
 
   return {

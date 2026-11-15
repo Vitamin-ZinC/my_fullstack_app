@@ -82,6 +82,7 @@ export type ReportFree = {
 };
 
 export type ReportFull = {
+  audio_analysis?: import("./audio.js").AudioSignalAnalysis;
   profession: string;
   summary: string;
   ikigai_scores: IkigaiScores;
@@ -1605,3 +1606,4 @@ export function validateSiteContent(value: unknown): string | null {
   };
   return error ? messages[error] ?? error : null;
 }
+export type { AudioSignalAnalysis, AudioMeasurementStatus } from "./audio.js";

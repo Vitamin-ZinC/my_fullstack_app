@@ -38,8 +38,8 @@ test("default report prompts expose strengthened version numbers", () => {
     .filter((prompt) => prompt.key.startsWith("ikigai.report.full."))
     .map((prompt) => prompt.version);
 
-  assert.deepEqual(new Set(freeVersions), new Set([6]));
-  assert.deepEqual(new Set(fullVersions), new Set([11]));
+  assert.deepEqual(new Set(freeVersions), new Set([7]));
+  assert.deepEqual(new Set(fullVersions), new Set([12]));
 });
 
 test("runtime evidence policy distinguishes a voice-only flow from legacy answers without weakening safety", () => {
@@ -49,6 +49,10 @@ test("runtime evidence policy distinguishes a voice-only flow from legacy answer
   assert.match(policy, /ONE STILL PHOTO/);
   assert.match(policy, /untrusted data/);
   assert.match(policy, /not validated probabilities/);
+  assert.match(policy, /usable\/limited\/unavailable/);
+  assert.match(policy, /not calibrated probabilities/);
+  assert.match(policy, /Never infer pauses from ASR segments/);
+  assert.match(policy, /not calibrated sound pressure/);
   assert.match(buildReportEvidencePolicy({ ...empty, love: ["teaching"] }, false), /Optional questionnaire answers were provided/);
   assert.match(buildReportEvidencePolicy(empty, false), /No photo is available/);
 });

@@ -4,12 +4,12 @@ const cors = { 'access-control-allow-origin': base, 'access-control-allow-creden
 const freeReport = { profession: 'Research lead', summary: 'You described research projects and explaining complex ideas to others.', key_insight: 'Try a short research brief and ask one colleague for feedback on clarity.', ikigai_scores: { love: 70, good_at: 75, world_needs: 65, paid_for: 60 }, paid_report_teaser: 'SENTINEL duplicate five roles', paid_report_preview: ['SENTINEL duplicate five roles', 'SENTINEL duplicate five roles', 'SENTINEL duplicate five roles', '30-day plan'] };
 const diagnosticValue = 'Your result: Clear presentation. What it means: Useful for explaining an idea. Recommendation: Test a short work presentation and ask for feedback.';
 const fullReport = { ...freeReport, voice_analysis: { pace: diagnosticValue }, face_analysis: { communication: diagnosticValue }, top_roles: Array.from({ length: 5 }, (_, i) => ({ name: `Research direction ${i + 1}`, match: 85 - i * 5, why: 'Explore this practical direction through a small work experiment.', strengths: 'Explaining complex information.', risks: 'Validate the context before committing.', voiceEvidence: diagnosticValue, faceEvidence: diagnosticValue })), ikigai_zones: Object.fromEntries(['passion', 'mission', 'profession', 'vocation', 'ikigai'].map(id => [id, { title: id, insight: 'Your story connects research with practical explanations.', recommendation: 'Test one short project.' }])), career_action: 'Week 1: prepare a brief. Week 2: gather feedback. Week 3: test a second task. Week 4: review the outcome.', final_insight: 'Compare your experience with feedback from the practical experiments.' };
-async function mockReports(page, { priceFails = false } = {}) {
+async function mockReports(page, { priceFails = false, acoustics } = {}) {
   await page.route('**/api/**', async route => {
     const path = new URL(route.request().url()).pathname;
     if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });
     if (path.endsWith('/payments/config')) return route.fulfill({ status: priceFails ? 503 : 200, headers: cors, json: priceFails ? { error: 'Unavailable' } : { priceLabel: '$7' } });
-    const body = path.endsWith('/report/free') ? { reportFree: freeReport } : path.endsWith('/report/full') ? { reportFull: fullReport } : path.endsWith('/habits/config') ? { trialDays: 14, priceLabel: '$8' } : { locale: 'ru', value: null, enabled: false };
+    const body = path.endsWith('/report/free') ? { reportFree: freeReport } : path.endsWith('/report/full') ? { reportFull: { ...fullReport, ...(acoustics ? { audio_analysis: acoustics } : {}) } } : path.endsWith('/habits/config') ? { trialDays: 14, priceLabel: '$8' } : { locale: 'ru', value: null, enabled: false };
     return route.fulfill({ json: body, headers: cors });
   });
 }
@@ -45,6 +45,7 @@ test('free and full reports retain personal content, show one premium promise an
     }
     await page.goto(base + '/report/visual/full?lang=' + lang);
     await expect(page.locator('.role-card')).toHaveCount(5);
+    await expect(page.getByTestId('audio-signal-panel')).toHaveCount(0);
     await expect(page.getByTestId('full-report-page')).toContainText('Your story connects research');
     for (const width of [360, 768, 1024, 1440]) {
       await page.setViewportSize({ width, height: 900 });
@@ -53,6 +54,42 @@ test('free and full reports retain personal content, show one premium promise an
     }
     await page.getByTestId('ikigai-hotspot-passion').click();
     await expect(page.getByTestId('ikigai-zone-panel').locator('h3')).toHaveText('passion');
+  }
+});
+
+test('measured audio panel is localized, preserves unavailable intervals and fits all breakpoints', async ({ page }, info) => {
+  const acoustics = {
+    version: 'acoustics-v1', method: { vad: 'webrtc-vad', pitch: 'mcleod', frameMs: 20, pitchFrameMs: 64 },
+    durationSeconds: 15, speechSeconds: 8, speechCoverage: 0.533,
+    pauses: { status: 'limited', count: 1, medianMs: 5000, p90Ms: 5000, longestMs: 5000, perMinute: 4, leadingSilenceMs: 0, trailingSilenceMs: 2000, intervals: [{ startSeconds: 5, endSeconds: 10 }] },
+    pitch: { status: 'limited', medianHz: 190, p10Hz: 160, p90Hz: 220, rangeSemitones: 5.5, reliableSeconds: 4, speechCoverage: 0.5, medianClarity: 0.97, rejectedJumpFrames: 0 },
+    loudness: { status: 'limited', medianDbfs: -27, p10Dbfs: -32, p90Dbfs: -22, rangeDb: 10, clippingRatio: 0 },
+    timeline: [
+      { startSeconds: 0, endSeconds: 5, speechSeconds: 5, pitchMedianHz: 180, pitchRangeSemitones: 2, loudnessMedianDbfs: -25, pauseCount: 0, status: 'usable' },
+      { startSeconds: 5, endSeconds: 10, speechSeconds: 0, pitchMedianHz: null, pitchRangeSemitones: null, loudnessMedianDbfs: null, pauseCount: 1, status: 'unavailable' },
+      { startSeconds: 10, endSeconds: 15, speechSeconds: 3, pitchMedianHz: 210, pitchRangeSemitones: 3, loudnessMedianDbfs: -30, pauseCount: 0, status: 'usable' }
+    ], warnings: ['short_speech']
+  };
+  await mockReports(page, { acoustics });
+  for (const lang of ['ru', 'en']) {
+    await page.goto(base + '/report/acoustic/full?lang=' + lang);
+    const panel = page.getByTestId('audio-signal-panel');
+    await expect(panel).toBeVisible();
+    await expect(panel).toContainText(lang === 'en' ? 'Audio measurements' : 'Измерения аудиозаписи');
+    await expect(panel).toContainText(lang === 'en' ? 'Limited data' : 'Ограниченные данные');
+    await expect(panel.locator('figure')).toHaveCount(2);
+    for (const width of [360, 768, 1024, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(panel.locator('.recharts-surface')).toHaveCount(2);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      expect(await panel.evaluate(element => [...element.querySelectorAll('h3,h4,dt,dd,small,figcaption')]
+        .filter(item => item.scrollWidth > item.clientWidth + 1).map(item => item.textContent))).toEqual([]);
+      await panel.screenshot({ path: info.outputPath(`audio-${lang}-${width}.png`), animations: 'disabled' });
+    }
+    await panel.locator('summary').click();
+    await expect(panel.locator('tbody tr')).toHaveCount(3);
+    await expect(panel.locator('tbody tr').nth(1)).toContainText(lang === 'en' ? 'Cannot measure reliably' : 'Не удалось надёжно измерить');
+    await expect(panel.locator('tbody tr').nth(1)).not.toContainText('0 Hz');
   }
 });
 

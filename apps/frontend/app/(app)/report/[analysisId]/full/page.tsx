@@ -7,6 +7,7 @@ import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { HabitConfigResponse, IkigaiScores, ReportFull } from "@levelup/contracts";
 import { IkigaiPremiumMap } from "@/components/IkigaiPremiumMap";
+import { AudioSignalPanel } from "@/components/AudioSignalPanel";
 import { api, restoreSessionFromUrl } from "@/lib/api";
 import { useSiteText } from "@/lib/useSiteText";
 
@@ -74,6 +75,7 @@ export default function FullReportPage() {
           <section id="section-2" className="report-section">
             <h2>{visibleSections[2]}</h2>
             <p className="report-section-note">{text.voiceIntro}</p>
+            {report.audio_analysis && <AudioSignalPanel value={report.audio_analysis} />}
             <div className="metric-grid">
               {Object.entries(report.voice_analysis).map(([key, value]) => {
                 const label = getMetricLabel(text.voiceLabels, key);

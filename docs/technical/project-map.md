@@ -56,6 +56,9 @@ Backend creates `Analysis`, media assets, reports, payment state, and report out
 
 Reports are generated backend-side by `apps/backend/src/services/aiReport.ts`.
 
+See [Audio Signal Analysis](audio-signal-analysis.md) for VAD pauses, F0,
+speech-only dBFS, five-second dynamics and per-measurement eligibility.
+
 Report prompt templates are defined in `apps/backend/src/services/reportPrompts.ts` and can be overridden through the admin prompt system using `PromptTemplate`.
 
 ### Habits Cabinet

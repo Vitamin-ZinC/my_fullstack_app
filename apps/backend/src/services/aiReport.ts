@@ -11,6 +11,7 @@ import { env } from "../env.js";
 import { getMediaAssetPublicUrl, readMediaAssetBuffer } from "./media.js";
 import { buildReportPromptMessages } from "./reportPrompts.js";
 import { analyzeAudioMetrics, type AudioTranscription, type VoiceSignalMetrics } from "./audioMetrics.js";
+import { audioSignalSchema } from "./audioSignalSchema.js";
 import { parseCompletionJson, parseGatewayJson } from "./completionJson.js";
 import { getOpenAiApiKey, getOpenAiClient, hasOpenAiClient } from "./openaiClient.js";
 import { isLikelyAudio, transcribeAudioAsset } from "./audioTranscription.js";
@@ -652,6 +653,8 @@ export async function generateOpenAiReport(context: ReportContext): Promise<Gene
   const aiRoleCount = uniqueTopRoles([...initialRoles, ...supplementedRoles]).length;
   const fallbackRoleCount = Math.max(0, 5 - aiRoleCount);
   const report = mergeFullReportParts(diagnostics, { ...directions, top_roles: initialRoles }, supplementedRoles, normalizeUiLocale(context.locale));
+  // Only trusted DSP output is attached here, after parsing all model responses.
+  if (voiceMetrics?.acoustics) report.audio_analysis = voiceMetrics.acoustics;
   const fullPromptVersion = Math.max(diagnosticsCompletion.promptVersion, directionsCompletion.promptVersion, supplementPromptVersion);
   const promptVersion = Math.max(freeCompletion.promptVersion, fullPromptVersion);
   reportProgress(context, 96, "Собираем итоговый отчёт...", "Assembling the final report...");
@@ -870,7 +873,9 @@ export function completeFullReportCandidate(value: unknown, locale: UiLocale = "
 }
 
 export function normalizeFullReportValue(value: unknown, locale: UiLocale = "ru"): ReportFull {
-  const report = reportFullSchema.parse(completeFullReportCandidate(value, locale));
+  const report: ReportFull = reportFullSchema.parse(completeFullReportCandidate(value, locale));
+  const measured = audioSignalSchema.safeParse(isRecord(value) ? value.audio_analysis : undefined);
+  if (measured.success) report.audio_analysis = measured.data;
   const seenRoleNames = new Set<string>();
   const sortedRoles = [...report.top_roles]
     .sort((left, right) => right.match - left.match)

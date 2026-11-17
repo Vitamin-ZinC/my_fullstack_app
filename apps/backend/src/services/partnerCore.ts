@@ -14,11 +14,13 @@ import { env } from "../env.js";
 import { prisma } from "../lib/prisma.js";
 import type { SessionContext } from "../lib/auth.js";
 import { calculateGiftedTrialEnd } from "./adminUsers.js";
-import type { PartnerCoreAdminSnapshot } from "@levelup/contracts";
+import type { PartnerCoreAdminSnapshot, PartnerCommissionTarget, PartnerCommissionTerm, PartnerCommissionTerms, PartnerCommissionUpdate } from "@levelup/contracts";
+import { partnerCommissionTerms, partnerCommissionTermSchema } from "./partnerCommissionTerms.js";
 
 type DbClient = typeof prisma | Prisma.TransactionClient;
 
 type PartnerCoreConversionRequest = {
+  occurredAt?: string;
   programId: string;
   externalId: string;
   actor?: string;
@@ -89,6 +91,7 @@ type PartnerCorePlacement = {
 };
 
 type PartnerCoreBootstrapResponse = {
+  commissionTerms?: PartnerCommissionTerms;
   project?: Record<string, unknown> | null;
   programs?: Array<Record<string, unknown>>;
   referralLinks?: Array<Record<string, unknown>>;
@@ -175,8 +178,20 @@ export class PartnerCoreServiceClient {
     this.baseUrl = new URL(config.baseUrl);
   }
 
-  createEmbeddedSession(input: { projectId: string; actor: string; origin: string; ttlSeconds?: number }) {
+  createEmbeddedSession(input: { projectId: string; actor: string; origin: string; ttlSeconds?: number; commissionManagement?: boolean }) {
     return this.request<EmbeddedSessionResponse>("POST", "/api/embedded-sessions", input);
+  }
+
+  getEmbeddedCommissionTerms(input: PartnerCommissionTarget & { sessionToken: string; origin: string }) {
+    return this.request<{ commissionTerms: PartnerCommissionTerm }>("GET", embeddedCommissionPath(input), undefined, {
+      ...portalAuthorization(input.sessionToken), "x-embed-origin": input.origin
+    });
+  }
+
+  updateEmbeddedCommissionTerms(input: PartnerCommissionUpdate & { sessionToken: string; origin: string }) {
+    return this.request<{ commissionTerms: PartnerCommissionTerm }>("POST", embeddedCommissionPath(input), {
+      commissionRateBps: input.commissionRateBps, reason: input.reason
+    }, { ...portalAuthorization(input.sessionToken), "x-embed-origin": input.origin, "Idempotency-Key": input.idempotencyKey });
   }
 
   recordConversion(input: PartnerCoreConversionRequest) {
@@ -206,7 +221,7 @@ export class PartnerCoreServiceClient {
       origin: partnerCoreEmbedOrigin(),
       ttlSeconds: 300
     });
-    return this.publicRequest<PartnerCoreBootstrapResponse>("GET", "/api/embedded/bootstrap", undefined, {
+    return this.request<PartnerCoreBootstrapResponse>("GET", "/api/embedded/bootstrap", undefined, {
       Authorization: `Bearer ${session.token}`,
       "x-embed-origin": partnerCoreEmbedOrigin()
     });
@@ -484,8 +499,8 @@ async function readJsonResponse(response: Response) {
   }
 }
 
-function partnerCoreClient() {
-  const credentials = partnerCoreCredentials();
+function partnerCoreClient(requiredScopes?: string[]) {
+  const credentials = partnerCoreCredentials(requiredScopes);
   if (!env.PARTNER_CORE_URL || !credentials) return null;
   return new PartnerCoreServiceClient({
     baseUrl: env.PARTNER_CORE_URL,
@@ -505,6 +520,7 @@ export async function getPartnerCoreAdminSnapshot(actor = "orken-admin"): Promis
   return {
     configured: true,
     project: safeJson(snapshot.project ?? null),
+    commissionTerms: partnerCommissionTerms(snapshot),
     programs: safeJson(snapshot.programs ?? []),
     referralLinks: safeJson(snapshot.referralLinks ?? []),
     placements: safeJson(snapshot.placements ?? []),
@@ -514,6 +530,29 @@ export async function getPartnerCoreAdminSnapshot(actor = "orken-admin"): Promis
     ledgerEntries: safeJson(snapshot.ledgerEntries ?? []),
     reviewTasks: safeJson(snapshot.reviewTasks ?? [])
   };
+}
+
+export async function managePartnerCoreCommissionTerms(adminId: string, target: PartnerCommissionTarget, update?: PartnerCommissionUpdate) {
+  const client = partnerCoreClient(["sessions:write", "commissions:write"]);
+  if (!client) throw new PartnerCoreServiceError(503, { error: { code: "commission_service_not_configured" } });
+  const origin = partnerCoreEmbedOrigin();
+  const session = await client.createEmbeddedSession({
+    projectId: "orken-life", actor: `orken-admin:${adminId}`, origin,
+    commissionManagement: true, ttlSeconds: 300
+  });
+  if (!session.scopes?.includes("commissions:write")) {
+    throw new PartnerCoreServiceError(403, { error: { code: "scope_missing" } });
+  }
+  const input = { ...target, sessionToken: session.token, origin };
+  const response = update
+    ? await client.updateEmbeddedCommissionTerms({ ...update, ...input })
+    : await client.getEmbeddedCommissionTerms(input);
+  const parsed = partnerCommissionTermSchema.safeParse(response.commissionTerms);
+  if (!parsed.success || parsed.data.programId !== target.programId ||
+      parsed.data.partnerAccountId !== target.partnerAccountId || parsed.data.referralLinkId !== target.referralLinkId) {
+    throw new PartnerCoreServiceError(502, { error: { code: "commission_response_invalid" } });
+  }
+  return { commissionTerms: parsed.data };
 }
 
 export async function updatePartnerCoreAdminPartnerStatus(input: { partnerAccountId: string; status: "approved" | "suspended"; actor?: string }) {
@@ -628,14 +667,22 @@ function portalAuthorization(sessionToken: string) {
   return { Authorization: `Bearer ${sessionToken}` };
 }
 
-function partnerCoreCredentials(): PartnerCoreServiceCredentials | null {
-  const jsonCredentials = parsePartnerCoreServiceKeys(env.PARTNER_CORE_SERVICE_KEYS_JSON);
+function embeddedCommissionPath(input: PartnerCommissionTarget) {
+  let path = `/api/embedded/programs/${encodeURIComponent(input.programId)}`;
+  if (input.referralLinkId && !input.partnerAccountId) throw new Error("A link requires its Core partner account");
+  if (input.partnerAccountId) path += `/partners/${encodeURIComponent(input.partnerAccountId)}`;
+  if (input.referralLinkId) path += `/referral-links/${encodeURIComponent(input.referralLinkId)}`;
+  return `${path}/commission-terms`;
+}
+
+function partnerCoreCredentials(requiredScopes?: string[]): PartnerCoreServiceCredentials | null {
+  const jsonCredentials = parsePartnerCoreServiceKeys(env.PARTNER_CORE_SERVICE_KEYS_JSON, requiredScopes);
   if (jsonCredentials) return jsonCredentials;
   if (!env.PARTNER_CORE_KEY_ID || !env.PARTNER_CORE_SERVICE_SECRET) return null;
   return { keyId: env.PARTNER_CORE_KEY_ID, secret: env.PARTNER_CORE_SERVICE_SECRET };
 }
 
-function parsePartnerCoreServiceKeys(raw: string | undefined): PartnerCoreServiceCredentials | null {
+function parsePartnerCoreServiceKeys(raw: string | undefined, requiredScopes = ["sessions:write", "partners:read", "partners:write", "events:write"]): PartnerCoreServiceCredentials | null {
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as unknown;
@@ -654,9 +701,9 @@ function parsePartnerCoreServiceKeys(raw: string | undefined): PartnerCoreServic
       const secret = readString(entry.secret) ?? readString(entry.serviceSecret);
       const scopes = Array.isArray(entry.scopes) ? entry.scopes.filter((value): value is string => typeof value === "string") : [];
       const projectIds = Array.isArray(entry.projectIds) ? entry.projectIds.filter((value): value is string => typeof value === "string") : [];
-      const hasRequiredScopes = scopes.length === 0 || ["sessions:write", "partners:read", "partners:write", "events:write"].every((scope) => scopes.includes(scope));
+      const hasRequiredScopes = scopes.length === 0 || requiredScopes.every((scope) => scopes.includes(scope));
       const hasOrkenProject = projectIds.length === 0 || projectIds.includes(env.PARTNER_CORE_PROJECT_ID) || projectIds.includes("orken");
-      if (keyId && secret && hasRequiredScopes && hasOrkenProject) return { keyId, secret };
+      if (keyId && secret && entry.status !== "retired" && hasRequiredScopes && hasOrkenProject) return { keyId, secret };
     }
   } catch {
     return null;
@@ -1231,6 +1278,7 @@ export async function recordPaymentConversionForPayment(paymentId: string) {
     referralCode: attribution.referralCode,
     customerRef: hashSubject(payment.userId),
     paymentAmountCents: payment.amount,
+    occurredAt: payment.paidAt?.toISOString(),
     idempotencyKey: `orken:invoice:${externalInvoiceId}:affiliate`
   };
 
@@ -1249,6 +1297,7 @@ export async function recordSubscriptionInvoiceConversion(input: {
   userId?: string | null;
   customerId?: string | null;
   amountPaidCents: number;
+  occurredAt?: string;
 }) {
   if (!input.userId || input.amountPaidCents <= 0) return "SKIPPED";
   const attribution = await prisma.partnerAttribution.findUnique({ where: { userId: input.userId } });
@@ -1267,6 +1316,7 @@ export async function recordSubscriptionInvoiceConversion(input: {
     referralCode: attribution.referralCode,
     customerRef: hashSubject(input.customerId || input.userId),
     paymentAmountCents: input.amountPaidCents,
+    occurredAt: input.occurredAt,
     idempotencyKey: `orken:invoice:${input.invoiceId}:affiliate`
   };
   return (await recordPartnerConversionEvent({
@@ -1285,6 +1335,7 @@ export async function recordCoachCommerceConversion(input: {
   programId?: string | null;
   customerRef?: string;
   amountPaidCents: number;
+  occurredAt?: string;
   eventType: "coach_signup" | "coach_package_payment" | "coach_service_payment" | "coach_site_payment";
   idempotencyKey: string;
 }) {
@@ -1299,6 +1350,7 @@ export async function recordCoachCommerceConversion(input: {
     ...(input.referralCode ? { referralCode: input.referralCode } : {}),
     customerRef: input.customerRef ?? hashSubject(`coach:${input.partnerCorePartnerId ?? "unknown"}`),
     paymentAmountCents: input.amountPaidCents,
+    occurredAt: input.occurredAt,
     actor: "Orken coach commerce",
     idempotencyKey: input.idempotencyKey
   };

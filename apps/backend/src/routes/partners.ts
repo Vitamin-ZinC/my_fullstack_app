@@ -3,6 +3,8 @@ import { z } from "zod";
 import { env } from "../env.js";
 import { requireAdmin, requireSession, writeAdminAudit } from "../lib/auth.js";
 import { prisma } from "../lib/prisma.js";
+import { partnerCommissionRoutes } from "./partnerCommissions.js";
+import { partnerCommissionTerms } from "../services/partnerCommissionTerms.js";
 import {
   PartnerCoreServiceError,
   createPartnerCorePortalOffer,
@@ -154,6 +156,7 @@ const partnerPortalReviewSchema = z.object({
 });
 
 export async function partnerRoutes(app: FastifyInstance) {
+  await app.register(partnerCommissionRoutes);
   app.post("/api/partners/portal/register", async (request, reply) => {
     if (!isPartnerCoreConfigured()) return reply.code(503).send({ error: "Partner portal is temporarily unavailable" });
     const parsed = partnerPortalRegisterSchema.safeParse(request.body ?? {});
@@ -225,7 +228,7 @@ export async function partnerRoutes(app: FastifyInstance) {
       const coreMe = await getPartnerCorePortalMe(session.coreSessionToken);
       const identity = partnerPortalIdentity(coreMe, sessionIdentity(session)) ?? sessionIdentity(session);
       await refreshPartnerPortalIdentity(session.id, identity);
-      return { partner: identity, expiresAt: session.expiresAt.toISOString() };
+      return { partner: identity, expiresAt: session.expiresAt.toISOString(), commissionTerms: partnerCommissionTerms(coreMe, identity.partnerCorePartnerId) };
     } catch (error) {
       return handlePartnerPortalCoreError(request, reply, session.id, error);
     }

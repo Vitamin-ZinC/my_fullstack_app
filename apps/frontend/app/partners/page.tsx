@@ -35,6 +35,7 @@ import type {
 } from "@levelup/contracts";
 import { partnerPortalApi } from "@/lib/api";
 import { OrkenGuide } from "@/components/OrkenGuide";
+import { PartnerCommissionTerms, CommissionSummary } from "@/components/PartnerCommissionTerms";
 import { useSiteText } from "@/lib/useSiteText";
 
 type Tab = "overview" | "links" | "offers" | "results" | "finances" | "profile";
@@ -554,8 +555,9 @@ export default function PartnersPage() {
         {notice && <p className="partner-notice"><CheckCircle2 size={17} />{notice}</p>}
         {identity && status.tone !== "approved" && <section className={`partner-review-banner ${status.tone}`}><ShieldCheck size={20} /><div><strong>{status.label}</strong><span>{status.tone === "rejected" ? uiText("Проверьте комментарии модератора и обновите предложение перед повторной отправкой.") : uiText("Доступ к данным сохранён. Публикация ссылок и предложений станет доступна после одобрения.")}</span></div></section>}
 
+        {(tab === "overview" || tab === "profile") && <PartnerCommissionTerms terms={dashboard?.commissionTerms ?? portalSession?.commissionTerms} partnerAccountId={identity?.partnerCorePartnerId} />}
         {tab === "overview" && <Overview metrics={metrics} dashboard={dashboard} onNavigate={navigate} />}
-        {tab === "links" && <LinksSection links={dashboard?.referralLinks ?? []} linkName={linkName} setLinkName={setLinkName} submitting={submitting} onCreate={createLink} onCopy={copyLink} />}
+        {tab === "links" && <LinksSection links={dashboard?.referralLinks ?? []} commissionTerms={dashboard?.commissionTerms} linkName={linkName} setLinkName={setLinkName} submitting={submitting} onCreate={createLink} onCopy={copyLink} />}
         {tab === "offers" && <OffersSection offers={dashboard?.offers ?? []} form={offerForm} setForm={setOfferForm} editingOfferId={editingOfferId} submitting={submitting} onSave={saveOffer} onEdit={editOffer} onCancelEdit={cancelOfferEdit} onReview={submitOfferReview} />}
         {tab === "results" && <ActivitySection dashboard={dashboard} />}
         {tab === "finances" && <FinancesSection ledger={asRows(ledger)} payouts={asRows(payouts)} dashboard={dashboard} />}
@@ -625,7 +627,7 @@ function Overview({ metrics, dashboard, onNavigate }: {
   </div>;
 }
 
-function LinksSection({ links, linkName, setLinkName, submitting, onCreate, onCopy }: { links: DataRecord[]; linkName: string; setLinkName: (value: string) => void; submitting: boolean; onCreate: (event: React.FormEvent) => Promise<void>; onCopy: (value: unknown) => Promise<void> }) {
+function LinksSection({ links, commissionTerms, linkName, setLinkName, submitting, onCreate, onCopy }: { links: DataRecord[]; commissionTerms?: PartnerPortalDashboard["commissionTerms"]; linkName: string; setLinkName: (value: string) => void; submitting: boolean; onCreate: (event: React.FormEvent) => Promise<void>; onCopy: (value: unknown) => Promise<void> }) {
   useUiLocale();
   return <div className="partner-section-stack">
     <section className="partner-panel partner-link-create-panel">
@@ -646,8 +648,9 @@ function LinksSection({ links, linkName, setLinkName, submitting, onCreate, onCo
       <div className="partner-row-list">{links.length === 0 ? <EmptyState text={uiText("Пока нет ссылок. Создайте первую ссылку выше.")} /> : links.map((link, index) => {
         const url = readValue(link, ["url", "href", "referralUrl", "referral_url"]);
         const status = statusCopy(rowStatus(link));
+        const terms = commissionTerms?.referralLinks.filter(term => term.referralLinkId === rowId(link));
         return <article className="partner-row" key={rowId(link) ?? index}>
-          <div><strong>{referralSourceTitle(link)}</strong><span>{typeof url === "string" ? url : uiText("Ссылка готовится")}</span></div>
+          <div><strong>{referralSourceTitle(link)}</strong><span>{typeof url === "string" ? url : uiText("Ссылка готовится")}</span>{terms?.map(term => <CommissionSummary term={term} key={term.programId} />)}</div>
           <div className="partner-row-actions">
             <span className={`partner-status ${status.tone}`}>{status.label}</span>
             {typeof url === "string" && <button className="partner-secondary-button" onClick={() => void onCopy(url)} type="button"><Copy size={16} />{uiText("Скопировать")}</button>}

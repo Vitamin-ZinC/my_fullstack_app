@@ -4,6 +4,7 @@ import { env } from "../env.js";
 import { prisma } from "../lib/prisma.js";
 import type { PartnerPortalDashboard, PartnerPortalIdentity } from "@levelup/contracts";
 import type { PartnerCorePortalSessionResponse } from "./partnerCore.js";
+import { partnerCommissionTerms } from "./partnerCommissionTerms.js";
 
 export const PARTNER_PORTAL_SESSION_COOKIE = "orken_partner_session";
 export const PARTNER_PORTAL_CSRF_COOKIE = "orken_partner_csrf";
@@ -311,6 +312,7 @@ export function partnerPortalDashboard(value: unknown, fallback: PartnerPortalId
   const payments = arrayAt(sanitized, "payments", "paidConversions", "paid_conversions", "conversions");
   return {
     partner: identity,
+    commissionTerms: partnerCommissionTerms(sanitized, identity.partnerCorePartnerId),
     metrics: recordAt(sanitized, "metrics", "summary", "stats"),
     referralLinks: arrayAt(sanitized, "referralLinks", "referral_links", "links").map(partnerPortalReferralLink),
     offers: arrayAt(sanitized, "offers", "placements", "rewardPlacements"),

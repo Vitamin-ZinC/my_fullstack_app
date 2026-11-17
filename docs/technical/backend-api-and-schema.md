@@ -74,6 +74,14 @@ Current enums:
 - `PartnerOfferStatus`
 - `PartnerRedemptionStatus`
 
+## Partner Commission Management
+
+`GET` and `POST /api/admin/partner-core/commission-terms` proxy versioned
+program/partner/link terms to Partner Core after authenticating the ORKEN
+administrator. Bootstrap and partner me/dashboard expose sanitized read-only
+`commissionTerms` arrays. No local commission schema or migration is added.
+See [Partner Commissions](partner-commissions.md) for scopes, payloads and smoke checks.
+
 ## Account Email Security
 
 `User.email` is normalized on registration. Migration `202610300001_account_email_security`

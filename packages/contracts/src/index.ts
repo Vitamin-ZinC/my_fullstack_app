@@ -603,10 +603,42 @@ export type PartnerPortalIdentity = {
 export type PartnerPortalSessionResponse = {
   partner: PartnerPortalIdentity;
   expiresAt: string;
+  commissionTerms?: PartnerCommissionTerms;
+};
+
+export type PartnerCommissionTarget = {
+  programId: string;
+  partnerAccountId?: string;
+  referralLinkId?: string;
+};
+
+export type PartnerCommissionTerm = PartnerCommissionTarget & {
+  projectId: string;
+  standardRateBps: number;
+  partnerRateBps: number | null;
+  referralLinkRateBps: number | null;
+  effectiveRateBps: number;
+  source: "program" | "partner" | "referral_link";
+  effectiveAt: string;
+  termsVersion: string;
+  evaluatedAt: string;
+};
+
+export type PartnerCommissionTerms = {
+  programs: PartnerCommissionTerm[];
+  partners: PartnerCommissionTerm[];
+  referralLinks: PartnerCommissionTerm[];
+};
+
+export type PartnerCommissionUpdate = PartnerCommissionTarget & {
+  commissionRateBps: number | null;
+  reason: string;
+  idempotencyKey: string;
 };
 
 export type PartnerPortalDashboard = {
   partner: PartnerPortalIdentity;
+  commissionTerms?: PartnerCommissionTerms;
   metrics: Record<string, unknown>;
   referralLinks: Array<Record<string, unknown>>;
   offers: Array<Record<string, unknown>>;
@@ -1064,6 +1096,7 @@ export type PartnerCoreAdminPartner = {
 
 export type PartnerCoreAdminSnapshot = {
   configured: boolean;
+  commissionTerms?: PartnerCommissionTerms;
   error?: string | null;
   project: Record<string, unknown> | null;
   programs: Array<Record<string, unknown>>;

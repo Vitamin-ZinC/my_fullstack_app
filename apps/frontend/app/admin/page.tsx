@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import CoachModeration from "@/components/admin/CoachModeration";
 import TrafficReport from "@/components/admin/TrafficReport";
+import { AdminPartnerCommissions, AdminProgramCommissions } from "@/components/admin/PartnerCommissions";
 import {
   BarChart3,
   BadgeDollarSign,
@@ -123,7 +124,7 @@ function emptyPartnerProgramForm() { return {
   customerBonusValue: "14",
   customerBonusEntitlement: "",
   commissionModel: "PERCENT",
-  commissionRateBps: "1000",
+  commissionRateBps: "1500",
   fixedPayoutCents: "",
   commissionWindowType: "LIFETIME",
   commissionWindowMonths: "",
@@ -2046,6 +2047,7 @@ export function AdminConsole({ section }: { section: AdminSection }) {
                       <button className={`button ${suspended ? "" : "secondary"}`} onClick={() => void setPartnerAccess(partner.id, suspended ? "approved" : "suspended")}>
                         {suspended ? uiText("Восстановить доступ") : uiText("Приостановить")}
                       </button>
+                      <AdminPartnerCommissions snapshot={partnerCoreSnapshot} partnerAccountId={partner.id} onSaved={async () => setPartnerCoreSnapshot(await adminApi.partnerCore())} />
                     </div>
                   );
                 })}
@@ -2054,6 +2056,7 @@ export function AdminConsole({ section }: { section: AdminSection }) {
 
             <div className="admin-partner-workspace">
               {partnerAdminView === "program" && <div className="stack admin-partner-view">
+                <AdminProgramCommissions snapshot={partnerCoreSnapshot} onSaved={async () => setPartnerCoreSnapshot(await adminApi.partnerCore())} />
                 <div className="admin-partner-view-heading">
                   <h3>{uiText("Условия партнёрской программы")}</h3>
                   <p className="muted">{uiText("Определите, что получит новый пользователь и как рассчитывается вознаграждение партнёра.")}</p>
@@ -2065,7 +2068,7 @@ export function AdminConsole({ section }: { section: AdminSection }) {
                   <label className="admin-field"><span>{uiText("Бонус новому пользователю")}</span><select className="input" value={partnerProgramForm.customerBonusType} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, customerBonusType: event.target.value })}><option value="NONE">{uiText("Без бонуса")}</option><option value="FREE_DAYS">{uiText("Бесплатные дни")}</option><option value="DISCOUNT">{uiText("Скидка")}</option><option value="CREDITS">{uiText("Баллы")}</option><option value="CUSTOM_ENTITLEMENT">{uiText("Особое право доступа")}</option></select></label>
                   <label className="admin-field"><span>{uiText("Размер бонуса")}</span><input className="input" value={partnerProgramForm.customerBonusValue} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, customerBonusValue: event.target.value })} inputMode="numeric" /></label>
                   <label className="admin-field"><span>{uiText("Как платим партнёру")}</span><select className="input" value={partnerProgramForm.commissionModel} onChange={(event) => setPartnerProgramForm({ ...partnerProgramForm, commissionModel: event.target.value })}><option value="PERCENT">{uiText("Процент от выручки")}</option><option value="FIXED">{uiText("Фиксированная выплата")}</option><option value="HYBRID">{uiText("Процент и фиксированная выплата")}</option></select></label>
-                  {partnerProgramForm.commissionModel !== "FIXED" && <label className="admin-field"><span>{uiText("Комиссия с оплат Orken, %")}</span><input className="input" value={partnerProgramForm.commissionRateBps ? String(Number(partnerProgramForm.commissionRateBps) / 100) : ""} onChange={(event) => {
+                  {partnerProgramForm.commissionModel !== "FIXED" && !partnerProgramForm.partnerCoreProgramId && <label className="admin-field"><span>{uiText("Комиссия с оплат Orken, %")}</span><input className="input" value={partnerProgramForm.commissionRateBps ? String(Number(partnerProgramForm.commissionRateBps) / 100) : ""} onChange={(event) => {
                     const percent = Number(event.target.value.replace(",", "."));
                     setPartnerProgramForm({ ...partnerProgramForm, commissionRateBps: event.target.value && Number.isFinite(percent) ? String(Math.round(percent * 100)) : "" });
                   }} inputMode="decimal" /><small>{uiText("Начисляется с платежей пользователей, пришедших по реферальной ссылке.")}</small></label>}
@@ -2124,7 +2127,7 @@ export function AdminConsole({ section }: { section: AdminSection }) {
                 <div className="admin-program-row" key={program.id}>
                   <div>
                     <strong>{program.name} · {partnerAdminStatusLabel(program.status)}</strong>
-                    <span>{uiText("Бонус пользователю: ")}{partnerBonusLabel(program.customerBonusType, program.customerBonusValue)} {uiText(" · партнёру: ")}{partnerCommissionLabel(program)}</span>
+                    <span>{uiText("Бонус пользователю: ")}{partnerBonusLabel(program.customerBonusType, program.customerBonusValue)} {uiText(" · партнёру: ")}{partnerCommissionLabel(program, partnerCoreSnapshot.commissionTerms?.programs.find(term => term.programId === program.partnerCoreProgramId)?.standardRateBps)}</span>
                     <span>{uiText("Связь с общей системой: ")}{program.partnerCoreProgramId ? uiText("настроена") : uiText("не настроена")} {uiText(" · версия условий: ")}{program.termsVersion}</span>
                     {program.referralLinks.map((link) => <span key={link.id}>{link.channel}: {link.url ?? link.referralCode ?? link.status}</span>)}
                   </div>
@@ -2320,8 +2323,8 @@ function partnerBonusLabel(type: string, value?: number | null) {
   return labels[type] ?? type;
 }
 
-function partnerCommissionLabel(program: PartnerAffiliateProgramSummary) {
-  if (program.commissionModel === "PERCENT") return uiText("{v0}% от выручки", { v0: Number(program.commissionRateBps ?? 0) / 100 });
+function partnerCommissionLabel(program: PartnerAffiliateProgramSummary, coreStandardRateBps?: number) {
+  if (program.commissionModel === "PERCENT") return uiText("{v0}% от выручки", { v0: Number(coreStandardRateBps ?? program.commissionRateBps ?? 0) / 100 });
   if (program.commissionModel === "FIXED") return uiText("{v0} за конверсию", { v0: formatPartnerMoney(program.fixedPayoutCents ?? 0) });
   return `${Number(program.commissionRateBps ?? 0) / 100}% + ${formatPartnerMoney(program.fixedPayoutCents ?? 0)}`;
 }

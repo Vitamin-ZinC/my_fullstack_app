@@ -49,6 +49,9 @@ import type {
   PartnerAffiliateProgramInput,
   PartnerAffiliateProgramSummary,
   PartnerCoreAdminSnapshot,
+  PartnerCommissionTarget,
+  PartnerCommissionTerm,
+  PartnerCommissionUpdate,
   PartnerMarketplaceResponse,
   PartnerOfferInput,
   PartnerOfferRedemptionResponse,
@@ -936,6 +939,15 @@ export const adminApi = {
     body: JSON.stringify({ status })
   }),
   partnerCore: () => adminRequest<PartnerCoreAdminSnapshot>("/api/admin/partner-core"),
+  partnerCommissionTerms: (target: PartnerCommissionTarget) => {
+    const query = new URLSearchParams({ programId: target.programId });
+    if (target.partnerAccountId) query.set("partnerAccountId", target.partnerAccountId);
+    if (target.referralLinkId) query.set("referralLinkId", target.referralLinkId);
+    return adminRequest<{ commissionTerms: PartnerCommissionTerm }>(`/api/admin/partner-core/commission-terms?${query}`);
+  },
+  updatePartnerCommissionTerms: (input: PartnerCommissionUpdate) => adminRequest<{ commissionTerms: PartnerCommissionTerm }>("/api/admin/partner-core/commission-terms", {
+    method: "POST", body: JSON.stringify(input)
+  }),
   setPartnerCorePartnerStatus: (id: string, status: "approved" | "suspended") => adminRequest<{ changed?: boolean }>(`/api/admin/partner-core/partners/${encodeURIComponent(id)}/status`, {
     method: "PATCH",
     body: JSON.stringify({ status })

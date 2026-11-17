@@ -25,7 +25,8 @@
     "prisma:migrate": "npm --workspace apps/backend run prisma:migrate"
   },
   "overrides": {
-    "fast-xml-parser": "5.12.1"
+    "fast-xml-parser": "5.12.1",
+    "glob": "14.0.2"
   },
   "devDependencies": {
     "@playwright/test": "^1.51.1"

@@ -128,10 +128,35 @@ test('onboarding shows backend price, requests no devices and keeps consent sepa
     await expect(page.locator('.diagnostic-start-results h3')).toContainText('$7');
     await expect(page.locator('.diagnostic-start-steps li')).toHaveCount(3);
     await expect(page.locator('a[href="/privacy"]')).toBeVisible();
+    const consent = page.getByTestId('diagnostic-consent-note');
+    await expect(consent).toHaveText(lang === 'ru'
+      ? 'Перед записью голоса и загрузкой фото потребуется отдельное согласие с Офертой и Политикой конфиденциальности.'
+      : 'Separate consent to the Terms and Privacy Policy is required before recording audio and uploading a photo.');
+    await expect(consent.getByRole('link')).toHaveCount(2);
+    await expect(consent.locator('a[href="/offer"]')).toHaveText(lang === 'ru' ? 'Офертой' : 'Terms');
+    await expect(consent.locator('a[href="/privacy"]')).toHaveText(lang === 'ru' ? 'Политикой конфиденциальности' : 'Privacy Policy');
     expect(writes).toEqual([]);
     await page.getByTestId('diagnostic-begin').click();
     await expect(page).toHaveURL(/\/flow\/voice/);
     await expect(page.getByTestId('voice-consent').locator('input')).not.toBeChecked();
     await expect(page.getByTestId('voice-record-button')).toBeDisabled();
+  }
+});
+
+test('onboarding links legal names in admin-edited consent copy without appending duplicates', async ({ page }) => {
+  const consentCopy = 'Согласие с Офертой и Политикой конфиденциальности нужно до загрузки.';
+  await page.route('**/api/**', route => {
+    const path = new URL(route.request().url()).pathname;
+    return route.fulfill({ headers: cors, json: path.endsWith('/content/ru')
+      ? { locale: 'ru', value: { flow: { start: { consent: consentCopy } } } }
+      : { priceLabel: '$7', locale: 'ru', value: null, enabled: false } });
+  });
+  await page.goto(base + '/flow/start?lang=ru');
+  const consent = page.getByTestId('diagnostic-consent-note');
+  await expect(consent).toHaveText(consentCopy);
+  await expect(consent.getByRole('link')).toHaveCount(2);
+  for (const width of [360, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   }
 });

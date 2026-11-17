@@ -134,6 +134,10 @@ Not implemented yet: full Telegram Mini App UI inside Telegram WebView. Telegram
 
 ### Partner Core / Rewards
 
+Versioned program, partner and referral-link commission management is documented
+in [Partner Commissions](partner-commissions.md). Rates and financial history
+remain in Core; ORKEN supplies authenticated admin UI and read-only partner UI.
+
 ORKEN is a project slice inside Partner Core, not an independent affiliate system.
 
 Partner Core is the backend of record for:

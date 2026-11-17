@@ -26,6 +26,7 @@ export default function DiagnosticStartPage() {
     return () => { active = false; };
   }, []);
   const icons = [AudioLines, ScanFace, Sparkles];
+  const consentParts = copy.consent.split(/(Оферт[а-яё]*|Политик[а-яё]*\s+конфиденциальности|\bTerms(?:\s+of\s+Service)?\b|\bPrivacy\s+Policy\b)/giu);
   return <article className="diagnostic-start stack" data-testid="diagnostic-start-page">
     <header className="diagnostic-start-header">
       <div><div className="eyebrow">{copy.eyebrow}</div><h1 className="ub">{copy.title}</h1><p className="muted">{copy.copy}</p></div>
@@ -44,7 +45,9 @@ export default function DiagnosticStartPage() {
       <h3>{price ? copy.premium.replace("{price}", price) : text.report.payment.title}</h3>
       <p>{copy.premiumCopy}</p>
     </section>
-    <p className="muted">{copy.consent} <Link href="/offer">{text.flow.voice.consentOffer}</Link> · <Link href="/privacy">{text.flow.voice.consentPrivacy}</Link></p>
+    <p className="muted" data-testid="diagnostic-consent-note">{consentParts.map((part, index) => index % 2
+      ? <Link key={index} href={/^(Оферт|Terms)/iu.test(part) ? "/offer" : "/privacy"}>{part}</Link>
+      : part)}</p>
     <Link className="button" data-testid="diagnostic-begin" href="/flow/voice">{copy.begin}</Link>
     {resume && <Link className="button secondary" href={resume}>{copy.resume}</Link>}
   </article>;

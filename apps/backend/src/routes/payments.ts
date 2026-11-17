@@ -437,7 +437,7 @@ export async function paymentRoutes(app: FastifyInstance) {
         if (!current) throw new Error(`Payment record not found for PaymentIntent ${intent.id}`);
         const nextPayment = await tx.payment.update({
           where: { id: current.id },
-          data: { stripePaymentIntentId: intent.id, status: "SUCCEEDED", paidAt: new Date() }
+          data: { stripePaymentIntentId: intent.id, status: "SUCCEEDED", paidAt: current.paidAt ?? new Date(event.created * 1000) }
         });
         if (current?.status !== "SUCCEEDED" && nextPayment.promoCodeId) {
           await tx.promoCode.update({
@@ -467,7 +467,7 @@ export async function paymentRoutes(app: FastifyInstance) {
     }
     if (event.type === "checkout.session.completed") {
       const session = event.data.object as Stripe.Checkout.Session;
-      if (await handleCoachCheckoutCompleted(session)) return { received: true };
+      if (await handleCoachCheckoutCompleted(session, new Date(event.created * 1000))) return { received: true };
       if (session.metadata?.kind === "habit_subscription" && session.metadata.programId) {
         const subscriptionId = typeof session.subscription === "string" ? session.subscription : session.subscription?.id;
         const subscription = subscriptionId && stripe ? await stripe.subscriptions.retrieve(subscriptionId) : null;
@@ -514,7 +514,7 @@ export async function paymentRoutes(app: FastifyInstance) {
             ...(paymentIntentId ? { stripePaymentIntentId: paymentIntentId } : {}),
             stripeCheckoutSessionId: session.id,
             status: "SUCCEEDED",
-            paidAt: new Date()
+            paidAt: current.paidAt ?? new Date(event.created * 1000)
           }
         });
         if (current.status !== "SUCCEEDED" && nextPayment.promoCodeId) {
@@ -546,7 +546,7 @@ export async function paymentRoutes(app: FastifyInstance) {
     }
     if (event.type === "invoice.paid" || event.type === "invoice.payment_succeeded") {
       const invoice = event.data.object as Stripe.Invoice;
-      if (await handleCoachInvoicePaid(invoice)) return { received: true };
+      if (await handleCoachInvoicePaid(invoice, new Date(event.created * 1000))) return { received: true };
       const invoiceAny = invoice as any;
       const subscriptionId = typeof invoiceAny.subscription === "string" ? invoiceAny.subscription : invoiceAny.subscription?.id;
       const subscription = subscriptionId && stripe ? await stripe.subscriptions.retrieve(subscriptionId).catch(() => null) : null;
@@ -556,7 +556,8 @@ export async function paymentRoutes(app: FastifyInstance) {
         invoiceId: invoice.id,
         userId,
         customerId,
-        amountPaidCents: Number(invoice.amount_paid ?? invoiceAny.amountPaid ?? 0)
+        amountPaidCents: Number(invoice.amount_paid ?? invoiceAny.amountPaid ?? 0),
+        occurredAt: new Date((invoice.status_transitions?.paid_at ?? event.created) * 1000).toISOString()
       }).catch((error) => app.log.error({ error, invoiceId: invoice.id }, "partner subscription invoice conversion failed"));
     }
     if (event.type === "charge.refunded") {

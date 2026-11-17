@@ -311,7 +311,7 @@ async function activateCoachServiceOrder(orderId: string, paymentIntentId: strin
   });
 }
 
-export async function handleCoachCheckoutCompleted(session: Stripe.Checkout.Session) {
+export async function handleCoachCheckoutCompleted(session: Stripe.Checkout.Session, paidAt?: Date) {
   const kind = session.metadata?.kind;
   if (kind === "coach_subscription" && session.metadata?.coachSubscriptionId) {
     const subscriptionId = typeof session.subscription === "string" ? session.subscription : session.subscription?.id ?? null;
@@ -349,6 +349,7 @@ export async function handleCoachCheckoutCompleted(session: Stripe.Checkout.Sess
         programId: env.COACH_PAYOUT_PARTNER_CORE_PROGRAM_ID,
         customerRef: coachCustomerRef(details.userId),
         amountPaidCents: coachShare,
+        occurredAt: paidAt?.toISOString(),
         eventType: "coach_service_payment",
         idempotencyKey: `orken:coach-service:${session.id}`
       });
@@ -398,8 +399,9 @@ export async function handleCoachSubscriptionLifecycle(subscription: Stripe.Subs
   return false;
 }
 
-export async function handleCoachInvoicePaid(invoice: Stripe.Invoice) {
+export async function handleCoachInvoicePaid(invoice: Stripe.Invoice, eventAt?: Date) {
   const invoiceAny = invoice as any;
+  const paidAt = invoice.status_transitions?.paid_at ? new Date(invoice.status_transitions.paid_at * 1000) : eventAt;
   const subscriptionId = typeof invoiceAny.subscription === "string" ? invoiceAny.subscription : invoiceAny.subscription?.id;
   if (!subscriptionId || !coachStripe) return false;
   const subscription = await coachStripe.subscriptions.retrieve(subscriptionId).catch(() => null);
@@ -418,6 +420,7 @@ export async function handleCoachInvoicePaid(invoice: Stripe.Invoice) {
       programId: env.COACH_PAYOUT_PARTNER_CORE_PROGRAM_ID,
       customerRef: coachCustomerRef(order.userId),
       amountPaidCents: coachShare,
+      occurredAt: paidAt?.toISOString(),
       eventType: "coach_service_payment",
       idempotencyKey: `orken:coach-service-invoice:${invoice.id}`
     });
@@ -432,6 +435,7 @@ export async function handleCoachInvoicePaid(invoice: Stripe.Invoice) {
         partnerCorePartnerId: current.coachProfile.partnerCorePartnerId,
         referralCode: current.coachProfile.referredByReferralCode,
         amountPaidCents: Number(invoice.amount_paid ?? 0),
+        occurredAt: paidAt?.toISOString(),
         eventType: "coach_package_payment",
         idempotencyKey: `orken:coach-package-invoice:${invoice.id}`
       });

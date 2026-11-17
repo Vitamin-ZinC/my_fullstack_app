@@ -1,0 +1,17 @@
+.manager { min-width: 0; width: 100%; grid-column: 1 / -1; border-top: 1px solid #294151; padding-top: 12px; }
+.manager summary { cursor: pointer; color: #61e3db; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.body { padding: 16px 0 4px; display: grid; gap: 14px; min-width: 0; }
+.editor { display: grid; gap: 14px; min-width: 0; }
+.heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.heading h4 { margin: 0; font-size: 15px; overflow-wrap: anywhere; }
+.heading button { width: 40px; height: 40px; min-width: 40px; padding: 0; flex: 0 0 40px; }
+.editor > button { justify-self: start; min-height: 40px; }
+.editor input, .editor select, .body select { min-width: 0; width: 100%; }
+.note, .error, .notice { margin: 0; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.note { color: #b7c7d4; }
+.error { color: #ff9eac; }
+.notice { color: #68dfab; }
+.standards { display: grid; gap: 16px; margin-bottom: 20px; }
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin { animation: none; } }

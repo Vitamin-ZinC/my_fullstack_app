@@ -223,11 +223,11 @@ export async function requireAdmin(request: FastifyRequest, reply: FastifyReply)
   const session = readHeader(request, "x-admin-session");
 
   if (env.ADMIN_API_TOKEN && token === env.ADMIN_API_TOKEN) {
-    return { token };
+    return { id: "admin-api", token };
   }
 
   if (await verifyAdminSessionToken(session)) {
-    return { token: "admin-session" };
+    return { id: "admin", token: "admin-session" };
   }
 
   reply.code(403).send({ error: "Admin access required" });

@@ -114,9 +114,13 @@ model Payment {
   user                  User?         @relation(fields: [userId], references: [id])
   promoCodeId           String?
   promoCode             PromoCode?    @relation(fields: [promoCodeId], references: [id])
-  stripePaymentIntentId String        @unique
+  stripePaymentIntentId String?       @unique
   stripeCheckoutSessionId String?     @unique
   stripeCustomerId      String?
+  viaPaymentGate        Boolean       @default(false)
+  gateCheckoutId        String?       @unique
+  gateCheckoutUrl       String?
+  gateProvider          String?
   originalAmount        Int?
   discountAmount        Int           @default(0)
   amount                Int

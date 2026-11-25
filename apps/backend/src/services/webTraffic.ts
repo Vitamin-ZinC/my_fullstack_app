@@ -76,9 +76,9 @@ export async function recordTrafficConversion(request: FastifyRequest, kind: Con
   }
 }
 
-export async function recordTrafficReportPaid(request: FastifyRequest, analysisId: string, payment: { amount: number; paidAt: Date | null; stripePaymentIntentId: string }) {
+export async function recordTrafficReportPaid(request: FastifyRequest, analysisId: string, payment: { amount: number; paidAt: Date | null; stripePaymentIntentId: string | null }) {
   try {
-    if (payment.amount <= 0 || !payment.paidAt || payment.stripePaymentIntentId.startsWith("dev_")) return;
+    if (payment.amount <= 0 || !payment.paidAt || payment.stripePaymentIntentId?.startsWith("dev_")) return;
     if (!conversionOriginAllowed(request) || request.headers["sec-gpc"] === "1" || request.headers.dnt === "1") return;
     const visitor = uuid.safeParse(request.headers["x-traffic-visitor"]);
     const visit = uuid.safeParse(request.headers["x-traffic-visit"]);

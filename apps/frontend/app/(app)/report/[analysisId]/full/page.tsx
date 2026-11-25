@@ -8,7 +8,7 @@ import { useEffect, useState } from "react";
 import type { HabitConfigResponse, IkigaiScores, ReportFull } from "@levelup/contracts";
 import { IkigaiPremiumMap } from "@/components/IkigaiPremiumMap";
 import { AudioSignalPanel } from "@/components/AudioSignalPanel";
-import { api, restoreSessionFromUrl } from "@/lib/api";
+import { api, ApiRequestError, restoreSessionFromUrl } from "@/lib/api";
 import { useSiteText } from "@/lib/useSiteText";
 
 type DiagnosticMapKey = keyof Pick<IkigaiScores, "love" | "good_at" | "paid_for" | "world_needs">;
@@ -27,12 +27,30 @@ export default function FullReportPage() {
 
   useEffect(() => {
     restoreSessionFromUrl();
-    api.getFullReport(analysisId)
-      .then((result) => setReport(result.reportFull))
-      .catch((reason) => setError(reason instanceof Error ? reason.message : uiText("Не удалось загрузить отчет")));
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const returningFromGate = new URLSearchParams(window.location.search).get("payment") === "processing";
+    const deadline = Date.now() + 45_000;
+    const loadReport = () => {
+      api.getFullReport(analysisId)
+        .then((result) => { if (!cancelled) setReport(result.reportFull); })
+        .catch((reason) => {
+          if (cancelled) return;
+          if (returningFromGate && reason instanceof ApiRequestError && reason.status === 402 && Date.now() < deadline) {
+            timer = setTimeout(loadReport, 2000);
+            return;
+          }
+          setError(reason instanceof Error ? reason.message : uiText("Не удалось загрузить отчет"));
+        });
+    };
+    loadReport();
     api.habitConfig()
       .then((config) => setHabitConfig(config))
       .catch(() => setHabitConfig(null));
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   }, [analysisId]);
 
   if (error) {

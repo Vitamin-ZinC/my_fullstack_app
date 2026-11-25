@@ -7,6 +7,7 @@ import { prisma } from "../lib/prisma.js";
 import { calculatePromoDiscount, normalizePromoCode, validatePromoCode } from "../services/promoCodes.js";
 import { getReportPriceConfig } from "../services/pricing.js";
 import { recordTrafficConversion } from "../services/webTraffic.js";
+import { createReportGateCheckout, isReportGatePaid, parseReportGateCallback, verifyReportGateCallback } from "../services/reportPaymentGate.js";
 import { handleCoachCheckoutCompleted, handleCoachInvoicePaid, handleCoachRefund, handleCoachSubscriptionLifecycle } from "../services/coachCommerce.js";
 import {
   recordPaymentConversionForPayment,
@@ -46,6 +47,9 @@ export async function paymentRoutes(app: FastifyInstance) {
     if (!access) return;
     const analysis = access.analysis;
     if (!analysis || analysis.status !== "DONE") return reply.code(400).send({ error: "Analysis not ready" });
+    if (env.REPORT_PAYMENT_GATE_ENABLED || analysis.payment?.viaPaymentGate) {
+      return reply.code(409).send({ error: "Use the report checkout to complete payment" });
+    }
     if (analysis.payment?.status === "SUCCEEDED") {
       return {
         clientSecret: null,
@@ -252,7 +256,7 @@ export async function paymentRoutes(app: FastifyInstance) {
     if (analysis.payment?.status === "SUCCEEDED") {
       return {
         url: `${env.APP_ORIGIN}/report/${analysis.id}/full`,
-        sessionId: analysis.payment.stripeCheckoutSessionId ?? analysis.payment.stripePaymentIntentId,
+        sessionId: analysis.payment.gateCheckoutId ?? analysis.payment.stripeCheckoutSessionId ?? analysis.payment.stripePaymentIntentId ?? analysis.payment.id,
         amount: analysis.payment.amount,
         originalAmount: analysis.payment.originalAmount ?? analysis.payment.amount,
         discountAmount: analysis.payment.discountAmount,
@@ -261,23 +265,61 @@ export async function paymentRoutes(app: FastifyInstance) {
       };
     }
 
+    const gateRequested = (env.REPORT_PAYMENT_GATE_ENABLED && !analysis.payment) || analysis.payment?.viaPaymentGate;
+    const existingGatePayment = analysis.payment?.viaPaymentGate ? analysis.payment : null;
+    let expiredStripeCheckoutId: string | undefined;
+    if (existingGatePayment && !env.REPORT_PAYMENT_GATE_ENABLED && !existingGatePayment.gateCheckoutUrl) {
+      return reply.code(503).send({ error: "Payment checkout is temporarily unavailable" });
+    }
+    if (env.REPORT_PAYMENT_GATE_ENABLED && analysis.payment && !analysis.payment.viaPaymentGate) {
+      // Do not create another charge for a report with an outstanding legacy checkout.
+      const payment = analysis.payment;
+      if (!stripe || !payment.stripeCheckoutSessionId) return reply.code(409).send({ error: "Check the existing Stripe payment before starting a new checkout" });
+      const existing = await stripe.checkout.sessions.retrieve(payment.stripeCheckoutSessionId);
+      if (existing.status === "open" && existing.url) {
+        return {
+          url: existing.url, sessionId: existing.id, amount: payment.amount,
+          originalAmount: payment.originalAmount ?? payment.amount, discountAmount: payment.discountAmount, currency: payment.currency
+        };
+      }
+      if (existing.status !== "expired" || existing.payment_status !== "unpaid") {
+        return reply.code(409).send({ error: "Check the existing Stripe payment before starting a new checkout" });
+      }
+      expiredStripeCheckoutId = existing.id;
+    }
+
     await recordTrafficConversion(request, "REPORT_CHECKOUT", `report:${analysis.id}`);
     const price = await getReportPriceConfig();
     let promoResult: Awaited<ReturnType<typeof resolvePromoDiscount>>;
     try {
-      promoResult = await resolvePromoDiscount(body.promoCode, price.amount, price.currency);
+      promoResult = existingGatePayment ? { promo: null, discountAmount: 0 } : await resolvePromoDiscount(body.promoCode, price.amount, price.currency);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Invalid promo code";
       return reply.code(400).send({ error: message });
     }
     const finalAmount = price.amount - promoResult.discountAmount;
-    if (price.currency.toLowerCase() === "usd" && finalAmount > 0 && finalAmount < 50) {
+    if (!existingGatePayment && price.currency.toLowerCase() === "usd" && finalAmount > 0 && finalAmount < 50) {
       return reply.code(400).send({ error: "Discounted amount is below Stripe minimum charge" });
     }
 
-    if (finalAmount === 0) {
+    if (finalAmount === 0 && !existingGatePayment) {
       const payment = await prisma.$transaction(async (tx) => {
         const paymentIntentId = `promo_${analysis.id}_${Date.now()}`;
+        if (gateRequested) {
+          const inserted = await tx.payment.createMany({
+            data: {
+              analysisId: analysis.id, userId: analysis.userId, stripePaymentIntentId: paymentIntentId,
+              status: "SUCCEEDED", amount: 0, originalAmount: price.amount, discountAmount: promoResult.discountAmount,
+              currency: price.currency, promoCodeId: promoResult.promo?.id ?? null, paidAt: new Date()
+            },
+            skipDuplicates: true
+          });
+          if (!inserted.count) return null;
+          if (promoResult.promo) {
+            await tx.promoCode.update({ where: { id: promoResult.promo.id }, data: { redemptions: { increment: 1 } } });
+          }
+          return tx.payment.findUniqueOrThrow({ where: { analysisId: analysis.id } });
+        }
         const nextPayment = await tx.payment.upsert({
           where: { analysisId: analysis.id },
           update: {
@@ -312,16 +354,64 @@ export async function paymentRoutes(app: FastifyInstance) {
         }
         return nextPayment;
       });
+      if (!payment) return reply.code(409).send({ error: "This report already has a payment" });
       await recordPaymentConversionForPayment(payment.id)
         .catch((error) => app.log.error({ error, paymentId: payment.id }, "partner checkout conversion failed"));
       return {
         url: `${env.APP_ORIGIN}/report/${analysis.id}/full`,
-        sessionId: payment.stripePaymentIntentId,
+        sessionId: payment.stripePaymentIntentId ?? payment.id,
         amount: payment.amount,
         originalAmount: payment.originalAmount ?? price.amount,
         discountAmount: payment.discountAmount,
         currency: payment.currency,
         promoCode: promoResult.promo?.code ?? null
+      };
+    }
+
+    if (gateRequested) {
+      if (!env.REPORT_PAYMENT_GATE_KEY || Buffer.byteLength(env.REPORT_PAYMENT_GATE_CALLBACK_SECRET ?? "", "utf8") < 32) {
+        return reply.code(503).send({ error: "Payment checkout is temporarily unavailable" });
+      }
+      // A single persisted order also makes concurrent POSTs and upstream timeouts retry the same Gate checkout.
+      const payment = existingGatePayment ?? await prisma.$transaction(async (tx) => {
+        await tx.payment.createMany({
+          data: {
+            analysisId: analysis.id, userId: analysis.userId, viaPaymentGate: true,
+            amount: finalAmount, originalAmount: price.amount, discountAmount: promoResult.discountAmount,
+            currency: price.currency, promoCodeId: promoResult.promo?.id ?? null
+          },
+          skipDuplicates: true
+        });
+        return tx.payment.findUniqueOrThrow({ where: { analysisId: analysis.id } });
+      });
+      if (!payment.viaPaymentGate || payment.status !== "PENDING") {
+        return reply.code(409).send({ error: "This report already has a payment" });
+      }
+      let checkoutId = payment.gateCheckoutId;
+      let checkoutUrl = payment.gateCheckoutUrl;
+      if (!checkoutId || !checkoutUrl) {
+        try {
+          const checkout = await createReportGateCheckout(payment, env.REPORT_PAYMENT_GATE_KEY);
+          await prisma.$transaction(async (tx) => {
+            const updated = await tx.payment.updateMany({ where: { id: payment.id, gateCheckoutId: null }, data: checkout });
+            if (updated.count) {
+              await tx.analyticsEvent.create({ data: {
+                name: "checkout_started", locale: analysis.locale, sessionId: access.session.id,
+                userId: access.session.userId, analysisId: analysis.id,
+                properties: { checkoutSessionId: checkout.gateCheckoutId, amount: payment.amount, flow: "payment_gate" }
+              } });
+            }
+          });
+          checkoutId = checkout.gateCheckoutId;
+          checkoutUrl = checkout.gateCheckoutUrl;
+        } catch {
+          request.log.warn({ paymentId: payment.id }, "report payment checkout unavailable");
+          return reply.code(502).send({ error: "Payment checkout is temporarily unavailable" });
+        }
+      }
+      return {
+        url: checkoutUrl, sessionId: checkoutId, amount: payment.amount,
+        originalAmount: payment.originalAmount ?? payment.amount, discountAmount: payment.discountAmount, currency: payment.currency
       };
     }
 
@@ -353,7 +443,7 @@ export async function paymentRoutes(app: FastifyInstance) {
       }],
       metadata,
       payment_intent_data: { metadata }
-    });
+    }, expiredStripeCheckoutId ? { idempotencyKey: `orken-report-retry:${expiredStripeCheckoutId}` } : undefined);
     const paymentIntentId = typeof session.payment_intent === "string" ? session.payment_intent : `checkout_${session.id}`;
     await prisma.payment.upsert({
       where: { analysisId: analysis.id },
@@ -407,6 +497,47 @@ export async function paymentRoutes(app: FastifyInstance) {
       currency: price.currency,
       promoCode: promoResult.promo?.code ?? null
     };
+  });
+
+  app.post("/api/webhooks/payment-gate", { config: { rawBody: true }, bodyLimit: 65536 }, async (request, reply) => {
+    const secret = env.REPORT_PAYMENT_GATE_CALLBACK_SECRET;
+    if (!secret) return reply.code(503).send({ error: "Payment callback is not configured" });
+    if (!verifyReportGateCallback(request.rawBody, request.headers, secret)) {
+      return reply.code(401).send({ error: "Invalid payment callback signature" });
+    }
+    const parsed = parseReportGateCallback(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: "Invalid payment callback" });
+    const event = parsed.data;
+    if (!isReportGatePaid(event)) return { ok: true };
+    const payment = await prisma.payment.findUnique({ where: { id: event.metadata.orken_report_order } });
+    if (!payment?.viaPaymentGate) return reply.code(404).send({ error: "Payment not found" });
+    if (!payment.gateCheckoutId) return reply.code(503).send({ error: "Payment checkout is not recorded yet" });
+    if (payment.gateCheckoutId !== event.payment_session_id || event.amount !== payment.amount ||
+        event.currency?.toLowerCase() !== payment.currency.toLowerCase() || (payment.gateProvider && payment.gateProvider !== event.provider)) {
+      return reply.code(409).send({ error: "Payment callback does not match the report order" });
+    }
+
+    const confirmed = await prisma.$transaction(async (tx) => {
+      const updated = await tx.payment.updateMany({
+        where: { id: payment.id, status: "PENDING" },
+        data: { status: "SUCCEEDED", paidAt: new Date(), gateProvider: event.provider }
+      });
+      if (updated.count === 0) return false;
+      if (payment.promoCodeId) {
+        await tx.promoCode.update({ where: { id: payment.promoCodeId }, data: { redemptions: { increment: 1 } } });
+      }
+      const analysis = await tx.analysis.findUniqueOrThrow({ where: { id: payment.analysisId }, select: { locale: true, sessionId: true } });
+      await tx.analyticsEvent.create({ data: {
+        name: "payment_succeeded", locale: analysis.locale, sessionId: analysis.sessionId,
+        userId: payment.userId, analysisId: payment.analysisId,
+        properties: { checkoutSessionId: event.payment_session_id, amount: payment.amount, provider: event.provider, flow: "payment_gate" }
+      } });
+      return true;
+    });
+    if (confirmed || payment.status === "SUCCEEDED") {
+      await recordPaymentConversionForPayment(payment.id);
+    }
+    return { ok: true };
   });
 
   app.post("/api/webhooks/stripe", { config: { rawBody: true } }, async (request, reply) => {

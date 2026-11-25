@@ -518,6 +518,15 @@ record.
 - `POST /api/payments/create-intent`
 - `POST /api/payments/create-checkout-session`
 - `POST /api/webhooks/stripe`
+- `POST /api/webhooks/payment-gate` - signed settlement for Gate-routed report orders only.
+
+With `REPORT_PAYMENT_GATE_ENABLED=true`, new one-time report orders use a
+server-only Gate checkout key and one stable local `Payment` order with its own
+Gate checkout ID. Returning from the hosted checkout only waits for the
+verified callback; it never unlocks a report. Partial or unpaid events cannot
+fulfill an order. Existing Stripe attempts and subscriptions keep the legacy
+webhook. Set a separate `REPORT_PAYMENT_GATE_CALLBACK_SECRET`; turning the flag
+off stops new Gate orders but existing attempts still need the callback.
 
 ### Content / Events
 
